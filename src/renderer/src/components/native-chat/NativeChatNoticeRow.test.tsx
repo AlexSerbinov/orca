@@ -76,6 +76,27 @@ describe('the row an Orca stop leaves', () => {
     ).toBeInTheDocument()
   })
 
+  // A client that re-words unnamed host rows keeps this row's presentation and cause, neutral.
+  it('stays neutral, naming the cause, as a reader that re-presented it neutral hands it on', () => {
+    const represented: AgentJournalStatusItem = {
+      ...orcaStopRow('crash'),
+      text: 'This response was interrupted. You can continue in this conversation.',
+      tone: 'notice'
+    }
+    renderStatus(represented, 'studio-mac', true)
+    expect(
+      screen.getByText(
+        'Orca on studio-mac stopped unexpectedly while this response was in progress.'
+      ).parentElement?.parentElement
+    ).toHaveClass('text-muted-foreground')
+    cleanup()
+    renderStatus(represented, null, true)
+    expect(
+      screen.getByText('This response was interrupted. You can continue in this conversation.')
+        .parentElement?.parentElement
+    ).toHaveClass('text-muted-foreground')
+  })
+
   it('keeps the host words for a cause this build does not know', () => {
     renderStatus(orcaStopRow('power-loss'), 'studio-mac')
     expect(screen.getByText(LEGACY_TEXT)).toBeInTheDocument()

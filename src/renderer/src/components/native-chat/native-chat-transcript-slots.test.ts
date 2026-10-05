@@ -287,6 +287,22 @@ describe('a turn no message opened', () => {
       ['a1', false],
       ['orca-stop', false]
     ])
+    // The same, once a reader re-presented it neutral.
+    const neutral: NativeChatMessage = {
+      ...orcaStop,
+      blocks: orcaStop.blocks.map((block) =>
+        block.type === 'text' ? { ...block, tone: 'notice' } : block
+      )
+    }
+    expect(
+      build([...messages.slice(0, 3), neutral], {
+        turnStatuses: { active: settled(3), completedByTurn: { u1: settled(3) } }
+      }).map((slot) => [slot.message.id, slot.folded])
+    ).toEqual([
+      ['u1', false],
+      ['a1', false],
+      ['orca-stop', false]
+    ])
   })
 
   it('folds an error the agent recovered from behind the answer that followed it', () => {
