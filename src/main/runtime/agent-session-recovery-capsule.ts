@@ -51,6 +51,19 @@ export class AgentSessionRecoveryCapsule {
     })
   }
 
+  /** Whether the file holds anything at all — any entry in any state, any failure — read raw so a
+   *  reservation or replacement counts too. Unreadable bytes count: only provable emptiness is no. */
+  holdsAnyRecord(): Promise<boolean> {
+    return withFileTransactionLock(this.filePath, async () => {
+      try {
+        const { entries, failed } = await this.readState()
+        return entries.length > 0 || failed.length > 0
+      } catch {
+        return true
+      }
+    })
+  }
+
   /** Offers that were acted on and did not end with the agent carrying on. Read-only, like `list`. */
   listFailed(now: number): Promise<AgentSessionResumeFailureRecord[]> {
     return withFileTransactionLock(

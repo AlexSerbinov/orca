@@ -629,3 +629,29 @@ it('does not retain lock timers after reads, writes, or failed publications', as
     vi.useRealTimers()
   }
 })
+
+describe('whether the capsule holds anything', () => {
+  it('is no for a missing file and for one every record left', async () => {
+    expect(await capsule.holdsAnyRecord()).toBe(false)
+    await capsule.record([marker()], NOW)
+    await capsule.dismiss([SESSION], NOW)
+    expect(await capsule.holdsAnyRecord()).toBe(false)
+  })
+
+  it('counts a pending offer, a reservation, and a filed failure alike', async () => {
+    await capsule.record([marker()], NOW)
+    expect(await capsule.holdsAnyRecord()).toBe(true)
+    await capsule.beginResume([SESSION], 'operation-a', NOW)
+    // Reserved, so the listing no longer shows it — the file still holds it.
+    expect(await capsule.list(NOW)).toEqual([])
+    expect(await capsule.holdsAnyRecord()).toBe(true)
+    await capsule.failResume('operation-a', [failure()], NOW)
+    expect(await capsule.list(NOW)).toEqual([])
+    expect(await capsule.holdsAnyRecord()).toBe(true)
+  })
+
+  it('counts unreadable bytes as holding something', async () => {
+    await writeFile(filePath, '{not json')
+    expect(await capsule.holdsAnyRecord()).toBe(true)
+  })
+})

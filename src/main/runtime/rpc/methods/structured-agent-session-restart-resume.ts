@@ -8,9 +8,11 @@
 import { defineMethod } from '../core'
 import {
   ensureStructuredHostInstalled,
+  requireStructuredCapability,
   requireStructuredHost,
   structuredCallerFor
 } from './structured-agent-session-gate'
+import { restartOffersProvablyEmpty } from './structured-agent-session-restart-offer-read'
 import { RestartResumableParams, RestartResumeParams } from './structured-agent-session-schemas'
 
 export const STRUCTURED_AGENT_SESSION_RESTART_RESUME_METHODS = [
@@ -18,6 +20,12 @@ export const STRUCTURED_AGENT_SESSION_RESTART_RESUME_METHODS = [
     name: 'agentSession.restartResumable',
     params: RestartResumableParams,
     handler: async (_params, ctx) => {
+      requireStructuredCapability(ctx)
+      // A paired desktop asks on every connect; a server that never ran a chat must not build a
+      // host to say it has nothing.
+      if (await restartOffersProvablyEmpty()) {
+        return { sessions: [], failed: [] }
+      }
       await ensureStructuredHostInstalled(ctx)
       const host = requireStructuredHost(ctx)
       return {
