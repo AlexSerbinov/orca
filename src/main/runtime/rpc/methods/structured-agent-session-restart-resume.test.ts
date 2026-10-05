@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import type { RpcContext } from '../core'
-import { STRUCTURED_AGENT_SESSION_RESTART_RESUME_METHODS } from './structured-agent-session-restart-resume'
+import { beforeEach, expect, it, vi } from 'vitest'
+import { call } from './structured-agent-session-rpc.test-fixture'
 
 const shortcut = vi.hoisted(() => ({ empty: vi.fn(async () => true) }))
 vi.mock('./structured-agent-session-restart-offer-read', () => ({
@@ -8,19 +7,17 @@ vi.mock('./structured-agent-session-restart-offer-read', () => ({
 }))
 
 const ensureHost = vi.fn(async () => undefined)
+const HOST_BUILDER = { ensureStructuredAgentSessionHost: ensureHost }
 
-function context(clientCapabilities?: string[]): RpcContext {
-  // A paired desktop is a remote client; in-process callers carry no client kind at all.
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the listing reads only the client's identity and the runtime's host builder; the rest of the context is never touched.
-  return {
-    runtime: { ensureStructuredAgentSessionHost: ensureHost },
-    ...(clientCapabilities ? { clientKind: 'runtime', clientCapabilities } : {})
-  } satisfies Partial<RpcContext> as RpcContext
+// A paired desktop is a remote client; in-process callers carry no client kind at all.
+function listRestartOffers(clientCapabilities?: string[]) {
+  return call(
+    'agentSession.restartResumable',
+    {},
+    clientCapabilities ? { clientKind: 'runtime', clientCapabilities } : undefined,
+    HOST_BUILDER
+  )
 }
-
-const listing = STRUCTURED_AGENT_SESSION_RESTART_RESUME_METHODS.find(
-  (method) => method.name === 'agentSession.restartResumable'
-)!
 
 beforeEach(() => {
   ensureHost.mockClear()
@@ -28,19 +25,19 @@ beforeEach(() => {
   shortcut.empty.mockResolvedValue(true)
 })
 
-afterEach(() => {
-  vi.restoreAllMocks()
-})
-
 it('answers an empty capsule without building the chat host', async () => {
-  await expect(listing.handler({}, context())).resolves.toEqual({ sessions: [], failed: [] })
+  await expect(listRestartOffers()).resolves.toMatchObject({
+    ok: true,
+    result: { sessions: [], failed: [] }
+  })
   expect(ensureHost).not.toHaveBeenCalled()
 })
 
 it('still refuses a client that cannot read structured sessions, before looking at the file', async () => {
-  await expect(listing.handler({}, context(['terminal.v1']))).rejects.toThrow(
-    'structured_agent_session_unsupported'
-  )
+  await expect(listRestartOffers(['terminal.v1'])).resolves.toMatchObject({
+    ok: false,
+    error: { message: expect.stringContaining('structured_agent_session_unsupported') }
+  })
   expect(shortcut.empty).not.toHaveBeenCalled()
   expect(ensureHost).not.toHaveBeenCalled()
 })
@@ -48,6 +45,6 @@ it('still refuses a client that cannot read structured sessions, before looking 
 it('builds the host when the capsule may hold an offer', async () => {
   shortcut.empty.mockResolvedValue(false)
   // No host comes up in this test, so the build is followed by the usual refusal.
-  await expect(listing.handler({}, context())).rejects.toThrow()
+  await expect(listRestartOffers()).resolves.toMatchObject({ ok: false })
   expect(ensureHost).toHaveBeenCalledTimes(1)
 })
