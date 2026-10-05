@@ -120,26 +120,24 @@ function useMachineViews(
           return [machine, { name, ownership }] as const
         })
     )
-    return orderedOffers(offers, (machine) => parsed.get(machine)?.name ?? machine).map(
-      (offer) => {
-        const rows = [...offer.candidates, ...offer.failed]
-        const facts = parsed.get(offer.machine)
-        const ownershipById = new Map(
-          rows.map((row, index) => [row.sessionId, parseResumeOwnership(facts?.ownership[index])])
-        )
-        const failureById = new Map<string, ResumeFailure>(
-          offer.failed.map((failure) => [failure.sessionId, failure])
-        )
-        return {
-          machine: offer.machine,
-          offer,
-          name: facts?.name ?? offer.machine,
-          rows,
-          failureFor: (sessionId: string) => failureById.get(sessionId),
-          ownershipFor: (sessionId: string) => ownershipById.get(sessionId) ?? 'unknown'
-        }
+    return orderedOffers(offers, (machine) => parsed.get(machine)?.name ?? machine).map((offer) => {
+      const rows = [...offer.candidates, ...offer.failed]
+      const facts = parsed.get(offer.machine)
+      const ownershipById = new Map(
+        rows.map((row, index) => [row.sessionId, parseResumeOwnership(facts?.ownership[index])])
+      )
+      const failureById = new Map<string, ResumeFailure>(
+        offer.failed.map((failure) => [failure.sessionId, failure])
+      )
+      return {
+        machine: offer.machine,
+        offer,
+        name: facts?.name ?? offer.machine,
+        rows,
+        failureFor: (sessionId: string) => failureById.get(sessionId),
+        ownershipFor: (sessionId: string) => ownershipById.get(sessionId) ?? 'unknown'
       }
-    )
+    })
   }, [joined, offers])
 }
 

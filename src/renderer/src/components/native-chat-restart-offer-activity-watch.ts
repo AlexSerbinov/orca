@@ -130,7 +130,7 @@ function releaseWatch(machine: RestartMachineKey): void {
 }
 
 export function releaseOfferedChatWatches(): void {
-  for (const machine of [...watches.keys()]) {
+  for (const machine of watches.keys()) {
     releaseWatch(machine)
   }
 }

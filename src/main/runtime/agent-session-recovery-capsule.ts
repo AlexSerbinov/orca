@@ -1,7 +1,6 @@
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { AgentSessionResumeMarker } from '../../shared/agent-session-resume-marker'
-import { readNodeFileWithinLimit } from '../../shared/node-bounded-file-reader'
 import { stringifyJsonWithinByteLimit } from '../../shared/node-bounded-json-stringify'
 import {
   durableWriteTempPath,
@@ -13,7 +12,6 @@ import { withFileTransactionLock } from '../file-transaction-lock'
 import {
   MAX_FAILURE_FIELD_LENGTH,
   normalizeState,
-  parseState,
   shouldReplaceMarker,
   splitDismissedAll,
   type AgentSessionResumeFailureInput,
@@ -22,6 +20,10 @@ import {
   type RecoveryCapsuleState,
   type RecoveryEntry
 } from './agent-session-recovery-capsule-entries'
+import {
+  MAX_RECOVERY_CAPSULE_BYTES,
+  readRecoveryCapsuleState
+} from './agent-session-recovery-capsule-read'
 
 export type {
   AgentSessionResumeFailureInput,
@@ -29,7 +31,6 @@ export type {
 } from './agent-session-recovery-capsule-entries'
 
 export const AGENT_SESSION_RECOVERY_CAPSULE_FILE = 'agent-session-recovery.json'
-const MAX_CAPSULE_BYTES = 4 * 1024 * 1024
 
 /** Crash-leftover temp files only; offers themselves have no expiry. */
 const STALE_WRITE_TEMP_FILE_AGE_MS = 24 * 60 * 60 * 1000
@@ -317,19 +318,8 @@ export class AgentSessionRecoveryCapsule {
     return entry.state === 'in-progress' && entry.operationId === operationId
   }
 
-  private async readState(): Promise<RecoveryCapsuleState> {
-    let raw: string
-    try {
-      raw = (await readNodeFileWithinLimit(this.filePath, MAX_CAPSULE_BYTES)).buffer.toString(
-        'utf8'
-      )
-    } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-        return { entries: [], failed: [] }
-      }
-      throw error
-    }
-    return parseState(raw)
+  private readState(): Promise<RecoveryCapsuleState> {
+    return readRecoveryCapsuleState(this.filePath)
   }
 
   private async publish(
@@ -345,7 +335,7 @@ export class AgentSessionRecoveryCapsule {
         ...(dismissedAt === undefined ? {} : { dismissedAt }),
         ...(failed.length === 0 ? {} : { failed })
       },
-      MAX_CAPSULE_BYTES
+      MAX_RECOVERY_CAPSULE_BYTES
     )
     await removeStaleDurableWriteTempFiles(this.filePath, {
       minimumAgeMs: STALE_WRITE_TEMP_FILE_AGE_MS

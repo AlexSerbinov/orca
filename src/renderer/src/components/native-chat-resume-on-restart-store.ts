@@ -3,7 +3,6 @@ import {
   callStructuredAgentSession,
   supportsStructuredAgentSessionPairedRestartOffers
 } from '@/runtime/structured-agent-session-client'
-import { hasRuntimeRpcErrorCode } from '@/runtime/runtime-rpc-client'
 import type { RuntimeClientTarget } from '@/runtime/runtime-client-target'
 import {
   announceRestartDismissNeedsUpdate,
@@ -13,6 +12,11 @@ import {
   type RestartContinuationOutcome
 } from './native-chat-restart-action-notifications'
 import type { ResumeCandidate, ResumeFailure } from './native-chat-resume-on-restart-grouping'
+import {
+  failedFrom,
+  hostCannotOffer,
+  type HostOfferPayload
+} from './native-chat-restart-offer-payload'
 import {
   consumeNativeChatResumeOnRestartDialogRequest,
   requestNativeChatResumeOnRestartDialog
@@ -157,25 +161,6 @@ export function subscribeNativeChatRestartOffers(listener: () => void): () => vo
   return () => {
     listeners.delete(listener)
   }
-}
-
-/** The host's answer as this side understands it. `failed` is optional on the wire: an older host
- *  never sends it, and its absence means nothing to show, not an invalid answer. */
-type HostOfferPayload = { sessions?: unknown; failed?: unknown }
-
-function failedFrom(payload: HostOfferPayload): ResumeFailure[] {
-  // SAFETY: the host is the single writer of this shape; a malformed row is a host bug, not input.
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: see above.
-  return Array.isArray(payload.failed) ? (payload.failed as ResumeFailure[]) : []
-}
-
-/** A host that cannot hold restart offers at all: it predates the method, or has no structured
- *  chat surface for this client. Distinct from a read that failed, which proves nothing. */
-function hostCannotOffer(error: unknown): boolean {
-  return (
-    hasRuntimeRpcErrorCode(error, 'method_not_found') ||
-    (error instanceof Error && error.message.includes('structured_agent_session_unsupported'))
-  )
 }
 
 /**
@@ -336,7 +321,10 @@ export async function dismissNativeChatRestartOffer(
 ): Promise<void> {
   const target = restartMachineTarget(machine)
   if (target.kind === 'environment') {
-    const named = sessionIds ?? allListedSessionIds(machine)
+    const listed = offers.get(machine)
+    const named =
+      sessionIds ??
+      [...(listed?.candidates ?? []), ...(listed?.failed ?? [])].map((row) => row.sessionId)
     if (named.length === 0) {
       return
     }
@@ -364,11 +352,6 @@ export async function dismissNativeChatRestartOffer(
   } finally {
     settleAction(machine)
   }
-}
-
-function allListedSessionIds(machine: RestartMachineKey): string[] {
-  const offer = offers.get(machine)
-  return offer ? [...offer.candidates, ...offer.failed].map((row) => row.sessionId) : []
 }
 
 export function useNativeChatRestartOffers(): NativeChatRestartOffers {

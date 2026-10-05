@@ -62,7 +62,10 @@ export function announceReconnectRestartOffer(args: {
       onClick: () => args.resume(sessionIds)
     },
     cancel: {
-      label: translate('auto.components.NativeChatResumeOnRestartModal.reconnectShow', 'Show chats'),
+      label: translate(
+        'auto.components.NativeChatResumeOnRestartModal.reconnectShow',
+        'Show chats'
+      ),
       onClick: args.show
     }
   })

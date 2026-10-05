@@ -4001,7 +4001,11 @@
             "label": "{{value0}} chats para reanudar",
             "ariaLabelOne": "1 chat disponible para reanudar",
             "ariaLabel": "{{value0}} chats disponibles para reanudar",
-            "tooltip": "Abrir chats interrumpidos disponibles para reanudar"
+            "tooltip": "Abrir chats interrumpidos disponibles para reanudar",
+            "labelOneOnMachine": "1 chat por reanudar en {{value0}}",
+            "labelOnMachine": "{{value0}} chats por reanudar en {{value1}}",
+            "tooltipByMachine": "{{value0}} chats por reanudar: {{value1}}. Haz clic para elegir.",
+            "tooltipMachinePart": "{{value0}} en {{value1}}"
           },
           "RuntimeHostStatusRow": {
             "previous_connection_closed": "La conexión anterior cerrada.",
@@ -17304,7 +17308,26 @@
         "continueUnconfirmed_one": "La entrega de la continuación no está confirmada para {{value0}} chat. Ábrelo para comprobarlo antes de enviar otro mensaje.",
         "continueUnconfirmed_other": "La entrega de la continuación no está confirmada para {{value0}} chats. Ábrelos para comprobarlo antes de enviar otro mensaje.",
         "dismissAll": "Descartar todo",
-        "dismissUnconfirmed": "No se confirmó el descarte de la oferta de reanudación; es posible que siga en la barra de estado."
+        "dismissUnconfirmed": "No se confirmó el descarte de la oferta de reanudación; es posible que siga en la barra de estado.",
+        "machineCauseUpdate": "Instaló una actualización",
+        "machineCauseQuit": "Se cerró",
+        "machineChatsOne": "1 chat",
+        "machineChatsMany": "{{value0}} chats",
+        "machineSelected": "{{value0}} de {{value1}} chats seleccionados",
+        "selectMachine": "Reanudar todos los chats en {{value0}}",
+        "machinesBody": "Estos chats estaban trabajando cuando Orca se cerró o instaló una actualización en su máquina. Al reanudarlos, cada uno se restaura donde se detuvo, con todo su contexto, y se pide al agente que revise lo que estaba haciendo antes de continuar. Tu propio prompt no se vuelve a enviar.",
+        "continuedOneOnMachine": "Se reanudó 1 chat en {{value0}} y se le pidió que continuara",
+        "continuedManyOnMachine": "Se reanudaron {{value0}} chats en {{value1}} y se les pidió que continuaran",
+        "dismissNeedsUpdate": "Actualiza Orca en {{value0}} para descartar sus chats desde aquí.",
+        "reconnectUpdateTitle": "{{value0}} se reinició por una actualización",
+        "reconnectQuitTitle": "Orca en {{value0}} se reinició",
+        "reconnectBodyOne": "1 de tus chats allí se detuvo a mitad de una respuesta. Muestra dónde se detuvo y no se perdió nada.",
+        "reconnectBodyMany": "{{value0}} de tus chats allí se detuvieron a mitad de una respuesta. Cada uno muestra dónde se detuvo y no se perdió nada.",
+        "reconnectShow": "Mostrar chats",
+        "originAutomation": "Automatización",
+        "originOtherDevice": "Otro dispositivo",
+        "originServer": "Creado en {{value0}}",
+        "originUnknown": "Origen desconocido"
       },
       "NativeChatResumeOutcomeRow": {
         "openChat": "Abrir chat",

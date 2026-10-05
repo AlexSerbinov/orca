@@ -25,6 +25,7 @@ const rpc = vi.hoisted(() => vi.fn())
 const activate = vi.hoisted(() => vi.fn(async () => true))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: rpc,
+  supportsStructuredAgentSessionPairedRestartOffers: async () => true,
   // A failed row opens the status feed; these cases never drive it.
   subscribeStructuredAgentSessionStatus: () => new Promise(() => {})
 }))

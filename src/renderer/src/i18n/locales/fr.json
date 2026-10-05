@@ -4116,7 +4116,11 @@
             "resumingLabel": "Reprise de {{value0}} conversations",
             "resumingAriaOne": "Reprise d’1 conversation. Cliquez pour voir les détails.",
             "resumingAria": "Reprise de {{value0}} conversations. Cliquez pour voir les détails.",
-            "resumingTooltip": "Restauration des conversations interrompues et demande de poursuite…"
+            "resumingTooltip": "Restauration des conversations interrompues et demande de poursuite…",
+            "labelOneOnMachine": "1 discussion à reprendre sur {{value0}}",
+            "labelOnMachine": "{{value0}} discussions à reprendre sur {{value1}}",
+            "tooltipByMachine": "{{value0}} discussions à reprendre : {{value1}}. Cliquez pour choisir.",
+            "tooltipMachinePart": "{{value0}} sur {{value1}}"
           }
         }
       },
@@ -17422,7 +17426,26 @@
         "activitySubagentOne": "Sous-agent en cours : {{value0}}",
         "activitySubagentMany": "{{value0}} sous-agents en cours",
         "activityMonitorOne": "Surveillance : {{value0}}",
-        "activityMonitorMany": "Surveillance de {{value0}} tâches en arrière-plan"
+        "activityMonitorMany": "Surveillance de {{value0}} tâches en arrière-plan",
+        "machineCauseUpdate": "A installé une mise à jour",
+        "machineCauseQuit": "A été quitté",
+        "machineChatsOne": "1 discussion",
+        "machineChatsMany": "{{value0}} discussions",
+        "machineSelected": "{{value0}} discussions sur {{value1}} sélectionnées",
+        "selectMachine": "Reprendre toutes les discussions sur {{value0}}",
+        "machinesBody": "Ces discussions étaient en cours quand Orca s'est fermé ou a installé une mise à jour sur leur machine. Les reprendre restaure chacune là où elle s'est arrêtée, avec tout son contexte, et demande à l'agent de vérifier ce qu'il faisait avant de continuer. Votre propre prompt n'est pas renvoyé.",
+        "continuedOneOnMachine": "1 discussion reprise sur {{value0}}, avec la demande de continuer",
+        "continuedManyOnMachine": "{{value0}} discussions reprises sur {{value1}}, avec la demande de continuer",
+        "dismissNeedsUpdate": "Mettez à jour Orca sur {{value0}} pour ignorer ses discussions d'ici.",
+        "reconnectUpdateTitle": "{{value0}} a redémarré pour une mise à jour",
+        "reconnectQuitTitle": "Orca sur {{value0}} a été redémarré",
+        "reconnectBodyOne": "1 de vos discussions là-bas a été interrompue en pleine réponse. Elle indique où elle s'est arrêtée, et rien n'a été perdu.",
+        "reconnectBodyMany": "{{value0}} de vos discussions là-bas ont été interrompues en pleine réponse. Chacune indique où elle s'est arrêtée, et rien n'a été perdu.",
+        "reconnectShow": "Afficher les discussions",
+        "originAutomation": "Automatisation",
+        "originOtherDevice": "Un autre appareil",
+        "originServer": "Créé sur {{value0}}",
+        "originUnknown": "Origine inconnue"
       },
       "linear-issue-attribute-filter-coverage-notice": {
         "statusPartialTeamCoverage": "Filtrage des statuts des équipes {{value0}} sur {{value1}} : les problèmes des équipes restantes ne sont pas inclus.",

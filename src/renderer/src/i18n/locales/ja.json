@@ -4013,7 +4013,11 @@
             "resumingLabel": "{{value0}} 件のチャットを再開中",
             "resumingAriaOne": "1 件のチャットを再開中。詳細はクリックしてください。",
             "resumingAria": "{{value0}} 件のチャットを再開中。詳細はクリックしてください。",
-            "resumingTooltip": "中断されたチャットを復元し、続行を依頼しています…"
+            "resumingTooltip": "中断されたチャットを復元し、続行を依頼しています…",
+            "labelOneOnMachine": "{{value0}} で再開する 1 チャット",
+            "labelOnMachine": "{{value1}} で再開する {{value0}} チャット",
+            "tooltipByMachine": "再開する {{value0}} チャット: {{value1}}。クリックして選択。",
+            "tooltipMachinePart": "{{value1}} に {{value0}}"
           }
         }
       },
@@ -17308,7 +17312,26 @@
         "activitySubagentOne": "サブ Agent 実行中: {{value0}}",
         "activitySubagentMany": "{{value0}} 個のサブ Agent が実行中",
         "activityMonitorOne": "監視中: {{value0}}",
-        "activityMonitorMany": "{{value0}} 個のバックグラウンドタスクを監視中"
+        "activityMonitorMany": "{{value0}} 個のバックグラウンドタスクを監視中",
+        "machineCauseUpdate": "アップデートをインストールしました",
+        "machineCauseQuit": "終了しました",
+        "machineChatsOne": "1 チャット",
+        "machineChatsMany": "{{value0}} チャット",
+        "machineSelected": "{{value1}} チャット中 {{value0}} 件を選択",
+        "selectMachine": "{{value0}} のすべてのチャットを再開",
+        "machinesBody": "これらのチャットは、各マシンの Orca が終了したかアップデートをインストールしたときに作業中でした。再開すると、各チャットが完全なコンテキストとともに停止した場所から復元され、続行する前に何をしていたかを確認するよう Agent に要求されます。自分自身のプロンプトは再送信されません。",
+        "continuedOneOnMachine": "{{value0}} の 1 チャットを再開し、続行するよう依頼しました",
+        "continuedManyOnMachine": "{{value1}} の {{value0}} チャットを再開し、続行するよう依頼しました",
+        "dismissNeedsUpdate": "ここからチャットを破棄するには、{{value0}} の Orca をアップデートしてください。",
+        "reconnectUpdateTitle": "{{value0}} がアップデートのために再起動しました",
+        "reconnectQuitTitle": "{{value0}} の Orca が再起動されました",
+        "reconnectBodyOne": "そこでのあなたのチャット 1 件が返信の途中で停止しました。停止した場所が表示され、何も失われていません。",
+        "reconnectBodyMany": "そこでのあなたのチャット {{value0}} 件が返信の途中で停止しました。それぞれ停止した場所が表示され、何も失われていません。",
+        "reconnectShow": "チャットを表示",
+        "originAutomation": "オートメーション",
+        "originOtherDevice": "別のデバイス",
+        "originServer": "{{value0}} で作成",
+        "originUnknown": "作成元不明"
       },
       "linear-issue-attribute-filter-coverage-notice": {
         "statusPartialTeamCoverage": "{{value0}}/{{value1}} チームステータスをフィルタリングしています。残りのチームからの問題は含まれません。",

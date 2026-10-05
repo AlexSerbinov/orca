@@ -4013,7 +4013,11 @@
             "resumingLabel": "正在恢复 {{value0}} 个聊天",
             "resumingAriaOne": "正在恢复 1 个聊天。点击查看详情。",
             "resumingAria": "正在恢复 {{value0}} 个聊天。点击查看详情。",
-            "resumingTooltip": "正在恢复中断的聊天并请它们继续…"
+            "resumingTooltip": "正在恢复中断的聊天并请它们继续…",
+            "labelOneOnMachine": "{{value0}} 上有 1 个聊天待恢复",
+            "labelOnMachine": "{{value1}} 上有 {{value0}} 个聊天待恢复",
+            "tooltipByMachine": "{{value0}} 个聊天待恢复：{{value1}}。点击选择。",
+            "tooltipMachinePart": "{{value1}} 上 {{value0}} 个"
           }
         }
       },
@@ -17308,7 +17312,26 @@
         "activitySubagentOne": "子代理运行中：{{value0}}",
         "activitySubagentMany": "{{value0}} 个子代理运行中",
         "activityMonitorOne": "正在监控：{{value0}}",
-        "activityMonitorMany": "正在监控 {{value0}} 个后台任务"
+        "activityMonitorMany": "正在监控 {{value0}} 个后台任务",
+        "machineCauseUpdate": "安装了更新",
+        "machineCauseQuit": "已退出",
+        "machineChatsOne": "1 个聊天",
+        "machineChatsMany": "{{value0}} 个聊天",
+        "machineSelected": "已选择 {{value0}}/{{value1}} 个聊天",
+        "selectMachine": "恢复 {{value0}} 上的所有聊天",
+        "machinesBody": "这些聊天在其所在机器上的 Orca 关闭或安装更新时正在工作。恢复会让每个聊天从停止处恢复，保留完整上下文，并让代理在继续之前先检查它刚才在做什么。你自己的提示不会被重新发送。",
+        "continuedOneOnMachine": "已在 {{value0}} 上恢复 1 个聊天并请它继续",
+        "continuedManyOnMachine": "已在 {{value1}} 上恢复 {{value0}} 个聊天并请它们继续",
+        "dismissNeedsUpdate": "请更新 {{value0}} 上的 Orca，才能从这里忽略它的聊天。",
+        "reconnectUpdateTitle": "{{value0}} 因更新而重启",
+        "reconnectQuitTitle": "{{value0}} 上的 Orca 已重启",
+        "reconnectBodyOne": "你在那里的 1 个聊天在回复中途停止。它会显示停止的位置，没有丢失任何内容。",
+        "reconnectBodyMany": "你在那里的 {{value0}} 个聊天在回复中途停止。每个都会显示停止的位置，没有丢失任何内容。",
+        "reconnectShow": "显示聊天",
+        "originAutomation": "自动化",
+        "originOtherDevice": "其他设备",
+        "originServer": "在 {{value0}} 上创建",
+        "originUnknown": "来源未知"
       },
       "linear-issue-attribute-filter-coverage-notice": {
         "statusPartialTeamCoverage": "过滤 {{value1}} 团队状态中的 {{value0}} — 不包括其余团队的问题。",

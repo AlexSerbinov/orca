@@ -46,7 +46,10 @@ export function ResumeMachineSection({
   const latest = Math.max(...rows.map((row) => row.recordedAt))
   const local = offer.target.kind === 'local'
   const cause = rows.some((row) => row.trigger === 'update')
-    ? translate('auto.components.NativeChatResumeOnRestartModal.machineCauseUpdate', 'Installed an update')
+    ? translate(
+        'auto.components.NativeChatResumeOnRestartModal.machineCauseUpdate',
+        'Installed an update'
+      )
     : translate('auto.components.NativeChatResumeOnRestartModal.machineCauseQuit', 'Was quit')
   const count =
     ticked === rows.length

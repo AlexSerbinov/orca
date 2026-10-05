@@ -103,7 +103,10 @@ export function resumeOwnershipLabel(
     case 'own':
       return undefined
     case 'automation':
-      return translate('auto.components.NativeChatResumeOnRestartModal.originAutomation', 'Automation')
+      return translate(
+        'auto.components.NativeChatResumeOnRestartModal.originAutomation',
+        'Automation'
+      )
     case 'other-device':
       return translate(
         'auto.components.NativeChatResumeOnRestartModal.originOtherDevice',

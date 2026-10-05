@@ -12,11 +12,16 @@ import {
   getNativeChatResumeOnRestartDialogRequest
 } from '../native-chat-resume-on-restart-dialog'
 import { _resetNativeChatRestartOffer } from '../native-chat-restart-offer-triggers'
-import { NativeChatResumeStatusSegment } from './NativeChatResumeStatusSegment'
+import {
+  nativeChatResumePendingText,
+  NativeChatResumeStatusSegment
+} from './NativeChatResumeStatusSegment'
+import { readNativeChatRestartMachine } from '../native-chat-resume-on-restart-store'
 
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: rpc,
+  supportsStructuredAgentSessionPairedRestartOffers: async () => true,
   // A failed row opens the status feed; these cases never drive it.
   subscribeStructuredAgentSessionStatus: () => new Promise(() => {})
 }))
@@ -253,5 +258,59 @@ describe('NativeChatResumeStatusSegment', () => {
 
     expect(screen.getByRole('button').textContent).toContain('2')
     expect(screen.queryByText('2 chats to resume')).toBeNull()
+  })
+
+  // One entry across machines: it names the machine only when there is just one.
+  it("names a paired server when it is the only machine with chats, and opens on it", async () => {
+    rpc.mockImplementation(async (target) =>
+      target.kind === 'environment' ? { sessions: candidates } : { sessions: [] }
+    )
+    useAppStore.setState({
+      runtimeEnvironments: [{ id: 'studio', name: 'studio-mac' }] as never
+    })
+    await mount()
+    await act(async () => {
+      await readNativeChatRestartMachine({ kind: 'environment', environmentId: 'studio' })
+    })
+    expect(screen.getByText('2 chats to resume on studio-mac')).toBeTruthy()
+    await act(async () => screen.getByRole('button').click())
+    expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ focus: 'environment:studio' })
+  })
+
+  it('counts every machine in one entry and opens on none in particular', async () => {
+    rpc.mockImplementation(async (target) =>
+      target.kind === 'environment' ? { sessions: candidates } : { sessions: [candidates[0]] }
+    )
+    useAppStore.setState({
+      runtimeEnvironments: [{ id: 'studio', name: 'studio-mac' }] as never
+    })
+    await mount()
+    await act(async () => {
+      await readNativeChatRestartMachine({ kind: 'environment', environmentId: 'studio' })
+    })
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    expect(screen.getByText('3 chats to resume')).toBeTruthy()
+    await act(async () => screen.getByRole('button').click())
+    expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ focus: null })
+  })
+
+  it('breaks the tooltip down by machine only when there is more than one', () => {
+    expect(
+      nativeChatResumePendingText(4, null, [
+        { count: 1, name: 'Local Mac' },
+        { count: 2, name: 'studio-mac' },
+        { count: 1, name: 'build-box' }
+      ]).tooltip
+    ).toBe('4 chats to resume: 1 on Local Mac, 2 on studio-mac, 1 on build-box. Click to choose.')
+    expect(
+      nativeChatResumePendingText(2, 'studio-mac', [{ count: 2, name: 'studio-mac' }])
+    ).toEqual({
+      label: '2 chats to resume on studio-mac',
+      ariaLabel: '2 chats available to resume',
+      tooltip: 'Open interrupted chats available to resume'
+    })
+    expect(nativeChatResumePendingText(1, null, [{ count: 1, name: 'Local Mac' }]).label).toBe(
+      '1 chat to resume'
+    )
   })
 })

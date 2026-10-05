@@ -15,7 +15,9 @@ function notify(): void {
 // Why: the launch load, the status-bar entry and a reconnect toast all open this dialog, and any
 // can fire before it subscribes. Keeping the request as an external snapshot prevents mount
 // ordering from losing it.
-export function requestNativeChatResumeOnRestartDialog(focus: RestartMachineKey | null = null): void {
+export function requestNativeChatResumeOnRestartDialog(
+  focus: RestartMachineKey | null = null
+): void {
   // The same request again keeps the opening it already made, and with it the user's ticks.
   if (pending?.focus === focus) {
     return

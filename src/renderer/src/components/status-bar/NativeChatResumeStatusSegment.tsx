@@ -177,7 +177,7 @@ function checkText(count: number): SegmentText {
 }
 
 /** "on studio-mac" after the count, when a paired server is the only machine with chats. */
-function pendingText(
+export function nativeChatResumePendingText(
   pending: number,
   onlyMachineName: string | null,
   breakdown: readonly { count: number; name: string }[]
@@ -273,7 +273,11 @@ export function NativeChatResumeStatusSegment({
     // An unconfirmed chat may be working, so "failed" would invite a duplicate "continue".
     unconfirmed ||= waiting.some((failure) => failure.outcome === 'unconfirmed')
     if (machinePending > 0) {
-      breakdown.push({ machine, count: machinePending, name: nameByMachine.get(machine) ?? machine })
+      breakdown.push({
+        machine,
+        count: machinePending,
+        name: nameByMachine.get(machine) ?? machine
+      })
     }
   }
   for (const ids of resumingByMachine.values()) {
@@ -300,7 +304,7 @@ export function NativeChatResumeStatusSegment({
           count={pending}
           machines={breakdown.map((entry) => entry.machine)}
           icon={<RotateCcw className="size-3 text-muted-foreground" />}
-          {...pendingText(pending, onlyPairedName, breakdown)}
+          {...nativeChatResumePendingText(pending, onlyPairedName, breakdown)}
         />
       )}
       {failures > 0 && (
