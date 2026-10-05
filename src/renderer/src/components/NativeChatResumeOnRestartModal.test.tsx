@@ -367,7 +367,7 @@ it('starts each opening from the default ticks, not the ones left at the last cl
   await act(async () => button('Close').click())
   expect(document.querySelector('[role="dialog"]')).toBeNull()
 
-  await act(async () => requestNativeChatResumeOnRestartDialog())
+  await act(async () => requestNativeChatResumeOnRestartDialog('user'))
   expect(checkbox(1).getAttribute('data-state')).toBe('checked')
   expect(button('Resume 2 chats').disabled).toBe(false)
 })
@@ -658,7 +658,7 @@ it('lists a chat the resume could not carry on when the dialog reopens, with wha
   await act(async () => button('Resume 2 chats').click())
   // Resume hands off to the status bar; its failure entry (or the toast's Show) reopens the list.
   expect(document.querySelector('[role="dialog"]')).toBeNull()
-  await act(async () => requestNativeChatResumeOnRestartDialog())
+  await act(async () => requestNativeChatResumeOnRestartDialog('user'))
   const dialog = document.querySelector('[role="dialog"]')
   expect(dialog).not.toBeNull()
   // Unchanged chrome: the title, the preference box, and the two footer actions.
@@ -712,7 +712,7 @@ it.each(['footer', 'row'] as const)(
     await mount(<NativeChatResumeOnRestartModal />)
     // Old failures never raise the launch dialog by themselves; the status entry does.
     expect(document.querySelector('[role="dialog"]')).toBeNull()
-    await act(async () => requestNativeChatResumeOnRestartDialog())
+    await act(async () => requestNativeChatResumeOnRestartDialog('user'))
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
       'Close it, then retry.'
     )
@@ -797,7 +797,7 @@ it('keeps a failure the host marks unretryable out of Resume, even after a tick'
   let failed: unknown[] = [failure('b')]
   rpc.mockImplementation(async () => ({ sessions: [], failed }))
   await mount(<NativeChatResumeOnRestartModal />)
-  await act(async () => requestNativeChatResumeOnRestartDialog())
+  await act(async () => requestNativeChatResumeOnRestartDialog('user'))
   // An older host sends no flag, and the row stays selectable as it always was.
   expect(checkbox(0).hasAttribute('disabled')).toBe(false)
   await act(async () => checkbox(0).click())
@@ -825,7 +825,7 @@ it('dismisses one failed chat by name, and every record through Dismiss all', as
         }
   )
   await mount(<NativeChatResumeOnRestartModal />)
-  await act(async () => requestNativeChatResumeOnRestartDialog())
+  await act(async () => requestNativeChatResumeOnRestartDialog('user'))
   expect(document.querySelectorAll('[role="checkbox"]')).toHaveLength(3)
   await act(async () => button('Dismiss "Prompt a" in workspace').click())
   expect(rpc.mock.calls.at(-1)?.slice(1)).toEqual([

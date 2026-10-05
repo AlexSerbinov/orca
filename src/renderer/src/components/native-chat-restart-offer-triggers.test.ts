@@ -7,6 +7,7 @@ import { useAppStore } from '../store'
 import type { ResumeCandidate } from './native-chat-resume-on-restart-grouping'
 import {
   consumeNativeChatResumeOnRestartDialogRequest,
+  getNativeChatResumeLaunchDecided,
   getNativeChatResumeOnRestartDialogRequest
 } from './native-chat-resume-on-restart-dialog'
 import {
@@ -222,7 +223,7 @@ it("the toast's buttons resume exactly the own chats there, or open the dialog o
   const options = vi.mocked(toast).mock.calls[0]?.[1]
   expect([label(options?.action), label(options?.cancel)]).toEqual(['Resume 1 chat', 'Show chats'])
   press(options?.cancel)
-  expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ focus: MACHINE })
+  expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ origin: 'user', focus: MACHINE })
   press(options?.action)
   await settle()
   expect(continueCalls()).toEqual([
@@ -394,4 +395,23 @@ it('forgets a server this desktop no longer pairs with', async () => {
   await vi.waitFor(() => expect(getNativeChatRestartOffers().has(MACHINE)).toBe(true))
   useAppStore.setState({ runtimeEnvironments: [] })
   expect(getNativeChatRestartOffers().has(MACHINE)).toBe(false)
+})
+
+// Only this computer's launch read raises the dialog by itself and decides the launch wait.
+it("asks for this computer's launch turn and decides the wait when its read decides", async () => {
+  mocks.rpc.mockImplementation(async (target) =>
+    target.kind === 'local' ? { sessions: [row('l1', 'here')] } : { sessions: [] }
+  )
+  expect(getNativeChatResumeLaunchDecided()).toBe(false)
+  renderHook(() => useNativeChatRestartOfferSources(true))
+  await vi.waitFor(() => expect(getNativeChatResumeLaunchDecided()).toBe(true))
+  expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ origin: 'launch', focus: 'local' })
+})
+
+it('never opens the dialog by itself for a paired server, nor counts toward the launch wait', async () => {
+  stageServer({ runtimeId: 'r2', priorRuntimeId: 'r1' })
+  renderHook(() => useNativeChatRestartOfferSources(false))
+  await vi.waitFor(() => expect(toast).toHaveBeenCalledTimes(1))
+  expect(getNativeChatResumeOnRestartDialogRequest()).toBeNull()
+  expect(getNativeChatResumeLaunchDecided()).toBe(false)
 })

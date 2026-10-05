@@ -3,10 +3,9 @@ import { requestNativeChatResumeOnRestartDialog } from './native-chat-resume-on-
 
 /**
  * The one way the resume dialog opens BY ITSELF: this computer's own launch found chats to resume.
- * Every other opening follows a click (status bar, toast) and goes straight to the dialog.
- *
- * Kept apart so dialogs that open by themselves after a restart can take turns here.
+ * It takes its turn among the dialogs that open by themselves; every other opening follows a click
+ * (status bar, toast) and shows at once.
  */
 export function requestLaunchResumePrompt(focus: RestartMachineKey): void {
-  requestNativeChatResumeOnRestartDialog(focus)
+  requestNativeChatResumeOnRestartDialog('launch', focus)
 }

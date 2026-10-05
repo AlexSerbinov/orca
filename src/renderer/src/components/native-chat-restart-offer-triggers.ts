@@ -25,7 +25,11 @@ import {
   resumeCandidateOwnershipSettled
 } from './native-chat-resume-ownership'
 import { requestLaunchResumePrompt } from './native-chat-resume-on-restart-launch-prompt'
-import { requestNativeChatResumeOnRestartDialog } from './native-chat-resume-on-restart-dialog'
+import {
+  _resetNativeChatResumeOnRestartDialog,
+  markNativeChatResumeLaunchDecided,
+  requestNativeChatResumeOnRestartDialog
+} from './native-chat-resume-on-restart-dialog'
 import { sameRestartMachineFence } from './native-chat-restart-machine-fence'
 import { announceReconnectRestartOffer } from './native-chat-restart-reconnect-toast'
 
@@ -150,6 +154,8 @@ async function loadLaunchOffer(): Promise<void> {
     requestLaunchResumePrompt(LOCAL_RESTART_MACHINE)
     return
   }
+  // Nothing will ask, so other launch prompts need not wait for the resume to settle.
+  markNativeChatResumeLaunchDecided()
   await autoResume(LOCAL_RESTART_MACHINE, ownCandidates(target, read.candidates))
 }
 
@@ -199,7 +205,7 @@ export async function readPairedMachineOnConnection(
       void continueNativeChatRestartOffer(machine, sessionIds, sessionIds, fence),
     show: () => {
       if (sameRestartMachineFence(getNativeChatRestartOffers().get(machine)?.fence, fence)) {
-        requestNativeChatResumeOnRestartDialog(machine)
+        requestNativeChatResumeOnRestartDialog('user', machine)
       }
     }
   })
@@ -299,7 +305,9 @@ export function useNativeChatRestartOfferSources(localEnabled: boolean): void {
   useEffect(() => {
     if (localEnabled) {
       // Fetched after mount, never awaited by startup: the workspace is usable first.
-      launch ??= loadLaunchOffer()
+      // Decided either way, so other launch prompts stop waiting on this read. Only this
+      // computer's read is waited on; a paired server's never holds them.
+      launch ??= loadLaunchOffer().finally(markNativeChatResumeLaunchDecided)
     }
   }, [localEnabled])
 }
@@ -307,6 +315,7 @@ export function useNativeChatRestartOfferSources(localEnabled: boolean): void {
 /** @internal - tests need a clean module between cases: every offer, action and trigger. */
 export function _resetNativeChatRestartOffer(): void {
   _resetNativeChatRestartOfferState()
+  _resetNativeChatResumeOnRestartDialog()
   launch = undefined
   attempted.clear()
   announced.clear()

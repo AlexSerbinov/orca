@@ -106,7 +106,7 @@ describe('NativeChatResumeStatusSegment', () => {
       'agentSession.restartResumable',
       'agentSession.restartResumable'
     ])
-    expect(getNativeChatResumeOnRestartDialogRequest()).not.toBeNull()
+    expect(getNativeChatResumeOnRestartDialogRequest()?.origin).toBe('user')
   })
 
   // The offer is spent once acted on, so without this entry a failed resume would leave the bar
@@ -129,7 +129,7 @@ describe('NativeChatResumeStatusSegment', () => {
 
     rpc.mockResolvedValue({ sessions: [], failed: [failed] })
     await act(async () => entry.click())
-    expect(getNativeChatResumeOnRestartDialogRequest()).not.toBeNull()
+    expect(getNativeChatResumeOnRestartDialogRequest()?.origin).toBe('user')
     // With the offer gone, only the failure entry is left — and it stays.
     expect(screen.queryByText('1 chat to resume')).toBeNull()
     expect(screen.getByText('1 chat failed to resume')).toBeTruthy()
@@ -275,7 +275,7 @@ describe('NativeChatResumeStatusSegment', () => {
     })
     expect(screen.getByText('2 chats to resume on studio-mac')).toBeTruthy()
     await act(async () => screen.getByRole('button').click())
-    expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ focus: 'environment:studio' })
+    expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ origin: 'user', focus: 'environment:studio' })
   })
 
   it('counts every machine in one entry and opens on none in particular', async () => {
@@ -292,7 +292,7 @@ describe('NativeChatResumeStatusSegment', () => {
     expect(screen.getAllByRole('button')).toHaveLength(1)
     expect(screen.getByText('3 chats to resume')).toBeTruthy()
     await act(async () => screen.getByRole('button').click())
-    expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ focus: null })
+    expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ origin: 'user', focus: null })
   })
 
   it('breaks the tooltip down by machine only when there is more than one', () => {
@@ -333,7 +333,7 @@ describe('NativeChatResumeStatusSegment', () => {
     })
     hang = true
     await act(async () => screen.getByRole('button').click())
-    expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ focus: null })
+    expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ origin: 'user', focus: null })
     // Both machines were asked again, each on its own.
     expect(
       rpc.mock.calls.filter((call) => call[1] === 'agentSession.restartResumable')

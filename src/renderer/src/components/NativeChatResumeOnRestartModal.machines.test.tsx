@@ -83,7 +83,7 @@ async function open(focus: string | null): Promise<void> {
       </TooltipProvider>
     )
   )
-  await act(async () => requestNativeChatResumeOnRestartDialog(focus))
+  await act(async () => requestNativeChatResumeOnRestartDialog('user', focus))
 }
 
 function machineToggle(name: string): HTMLElement {

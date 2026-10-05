@@ -60,7 +60,7 @@ function failureToastActions(machine: RestartMachineKey, fence: RestartMachineFe
   return {
     show: () => {
       if (currentOffer(machine, fence)) {
-        requestNativeChatResumeOnRestartDialog(machine)
+        requestNativeChatResumeOnRestartDialog('user', machine)
       }
     },
     dismiss: (sessionIds: readonly string[]) => {

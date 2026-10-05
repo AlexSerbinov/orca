@@ -6,12 +6,9 @@ import {
   getFeatureTipsAppOpenDecision,
   isCliFeatureTipCompleted
 } from '../components/feature-tips/feature-tip-startup-gate'
-import {
-  trackCmdJPaletteFeatureTipShown,
-  trackOrcaCliFeatureTipShown
-} from '../components/feature-tips/feature-tip-telemetry'
 import { useAppStore } from '../store'
 import { isWebClientLocation } from '../lib/web-client-location'
+import { useAppOpenFeatureTip } from '../components/feature-tips/use-app-open-feature-tip'
 import type { OnboardingState } from '../../../shared/onboarding-state-types'
 
 export type OnboardingGate = ReturnType<typeof useOnboardingAndFeatureTips>
@@ -25,6 +22,7 @@ export function useOnboardingAndFeatureTips() {
   const [onboardingLoaded, setOnboardingLoaded] = useState(false)
   const [featureTipCliInstalled, setFeatureTipCliInstalled] = useState<boolean | null>(null)
   const promptedThisSessionRef = useRef(false)
+  const queueAppOpenFeatureTip = useAppOpenFeatureTip()
   const suppressedByOnboardingThisSessionRef = useRef(false)
 
   const activeModal = useAppStore((s) => s.activeModal)
@@ -35,8 +33,6 @@ export function useOnboardingAndFeatureTips() {
   const contextualToursAutoEligible = useAppStore((s) => s.contextualToursAutoEligible)
   const actions = useAppStore(
     useShallow((s) => ({
-      openModal: s.openModal,
-      markFeatureTipsSeen: s.markFeatureTipsSeen,
       setContextualToursAutoEligible: s.setContextualToursAutoEligible,
       setContextualToursOnboardingVisible: s.setContextualToursOnboardingVisible
     }))
@@ -115,17 +111,7 @@ export function useOnboardingAndFeatureTips() {
     }
 
     promptedThisSessionRef.current = true
-    if (featureTipsDecision.tipId === 'orca-cli') {
-      trackOrcaCliFeatureTipShown('app_open')
-    } else if (featureTipsDecision.tipId === 'cmd-j-palette') {
-      trackCmdJPaletteFeatureTipShown('app_open')
-    }
-    // Why: mark seen on show so a quit/crash before dismiss doesn't reappear it next launch.
-    actions.markFeatureTipsSeen([featureTipsDecision.tipId])
-    actions.openModal('feature-tips', {
-      source: 'app_open',
-      tipId: featureTipsDecision.tipId
-    })
+    queueAppOpenFeatureTip(featureTipsDecision.tipId)
   }, [
     activeModal,
     actions,
@@ -134,6 +120,7 @@ export function useOnboardingAndFeatureTips() {
     featureTipsSeenIds,
     onboarding,
     persistedUIReady,
+    queueAppOpenFeatureTip,
     settings
   ])
 

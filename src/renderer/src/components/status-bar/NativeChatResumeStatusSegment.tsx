@@ -33,7 +33,7 @@ function focusOf(machines: readonly RestartMachineKey[]): RestartMachineKey | nu
  *  out of the open dialog; the dialog closes once none is left. Opening the chat itself is
  *  read-only and does not retire the offer. */
 function reopenOffer(machines: readonly RestartMachineKey[]): void {
-  requestNativeChatResumeOnRestartDialog(focusOf(machines))
+  requestNativeChatResumeOnRestartDialog('user', focusOf(machines))
   // Mid-resume the host's answer is already on its way; a re-read racing it could undo it.
   if (getNativeChatRestartResuming().size === 0) {
     void refreshNativeChatRestartOffers(machines)
