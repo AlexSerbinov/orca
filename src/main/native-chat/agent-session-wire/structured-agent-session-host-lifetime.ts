@@ -34,6 +34,12 @@ import {
 import { releaseStoredStructuredAgentSessionOwner } from './structured-agent-session-lease-release'
 import { settleStructuredAgentSessionDeadGeneration } from './structured-agent-session-dead-generation-settlement'
 import type { StructuredAgentSessionStopCause } from './structured-agent-session-adapter'
+import type { AgentSessionResumeTrigger } from '../../../shared/agent-session-resume-marker'
+import {
+  recordStructuredAgentSessionShutdownCut,
+  runningRootTurnItemId
+} from './structured-agent-session-orca-stop-row'
+import { structuredAgentSessionFailureWordsContext } from './structured-agent-session-send-preparation'
 export type { StructuredAgentSessionStopEnding } from './structured-agent-session-host-stop-event'
 import {
   recordStopEvent,
@@ -150,6 +156,8 @@ export async function stopStructuredAgentSessionAgentUnderSerialize(
   const owed = owedStop(session, cause, ending.retry === true)
   session.owesProviderChildWindDown = owed
   const stopping = session.child
+  // Read before the kill: the turn a quit's stop may cut.
+  const quitCuts = 'quit' in ending && ending.quit ? runningRootTurnItemId(session.journal) : null
   const eviction: StructuredAgentSessionEvictionContext = {
     sessionId,
     // The retry must not re-stop a child the adapter already proved gone, so this stays honest.
@@ -203,6 +211,21 @@ export async function stopStructuredAgentSessionAgentUnderSerialize(
         })
         // Without the cause the log names the step and nothing else.
         throw new Error('dead generation work settlement failed', { cause: settled.error })
+      }
+      if ('quit' in ending && ending.quit) {
+        const record = context.deps.store.getRecord(sessionId)
+        await recordStructuredAgentSessionShutdownCut({
+          journal: session.journal,
+          sessionId,
+          fence,
+          generation: owed?.generation ?? 'unknown',
+          turnItemId: quitCuts,
+          trigger: ending.quit,
+          ...(record
+            ? { failureTextContext: structuredAgentSessionFailureWordsContext(record) }
+            : {}),
+          logger: context.deps.logger
+        })
       }
     },
     releaseLease: async () => {
@@ -322,7 +345,8 @@ export async function evictOwnedStructuredAgentSessions(
   context: StructuredAgentSessionLifetimeContext & {
     serialize: (sessionId: string, task: () => Promise<void>) => Promise<void>
   },
-  retainOnFailure: Set<string>
+  retainOnFailure: Set<string>,
+  trigger: AgentSessionResumeTrigger = 'quit'
 ): Promise<void> {
   const ownedSessionIds = [...context.sessions]
     .filter(([, session]) => owedProviderChildWindDown(session) !== undefined)
@@ -340,7 +364,7 @@ export async function evictOwnedStructuredAgentSessions(
         await context.serialize(sessionId, () =>
           stopStructuredAgentSessionAgentUnderSerialize(context, sessionId, {
             cause: 'evict',
-            quit: true
+            quit: trigger
           })
         )
         retainOnFailure.delete(sessionId)

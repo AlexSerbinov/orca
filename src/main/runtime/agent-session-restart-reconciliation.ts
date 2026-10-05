@@ -48,7 +48,12 @@ export function applyAgentSessionRestartProbes(
     ) {
       continue
     }
-    const next = applyAgentSessionRestartAdjudication({ record, probe: probed.probe, now })
+    const next = applyAgentSessionRestartAdjudication({
+      record,
+      probe: probed.probe,
+      now,
+      runtimeEnd: state.previousRuntimeEnd ?? null
+    })
     state.records.set(sessionId, next)
     reconciled.set(sessionId, next)
   }

@@ -17932,7 +17932,11 @@
         "details": "Detalles",
         "plan": "Plan",
         "historyRepaired": "No se pudo cargar parte del historial de este chat.",
-        "historyItemTooLarge": "Esta parte del chat era demasiado grande para mostrarla."
+        "historyItemTooLarge": "Esta parte del chat era demasiado grande para mostrarla.",
+        "orcaStopUpdate": "Detenido: Orca en {{machine}} se reinició para actualizarse",
+        "orcaStopQuit": "Detenido: Orca en {{machine}} se reinició",
+        "orcaStopCrash": "Detenido: Orca en {{machine}} se detuvo inesperadamente",
+        "orcaStopDetail": "La respuesta se cortó a medias. Continúa y el agente comprobará primero si su último paso terminó."
       },
       "providerFrame": {
         "byteLength": "{{value0}} bytes"
@@ -17979,7 +17983,11 @@
       "structuredSessionHostDeclined": "Se abrió {{value0}} en una terminal",
       "structuredSessionHostDeclinedDescription": "Este servidor no puede ejecutar un chat de {{value0}} en este espacio de trabajo.",
       "structuredSessionHostUnreachable": "No se pudo contactar con {{value0}}",
-      "structuredSessionHostUnreachableDescription": "Orca no abrió un chat de {{value0}}. Comprueba la conexión con el servidor y vuelve a intentarlo."
+      "structuredSessionHostUnreachableDescription": "Orca no abrió un chat de {{value0}}. Comprueba la conexión con el servidor y vuelve a intentarlo.",
+      "interruptedContinue": {
+        "continue": "Continuar",
+        "failed": "No se pudo continuar este chat. Inténtalo de nuevo o envía un mensaje."
+      }
     },
     "tab": {
       "bar": {

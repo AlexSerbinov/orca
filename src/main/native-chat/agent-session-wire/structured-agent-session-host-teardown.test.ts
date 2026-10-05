@@ -30,6 +30,7 @@ describe('structured agent-session host teardown', () => {
       recordResumeMarkers: noop
     })
     expect(phases.map((phase) => phase.name)).toEqual([
+      'record-runtime-teardown',
       'begin-resume-markers',
       'dispose-idle-sweep',
       'stop-lease-renewal',
@@ -38,6 +39,27 @@ describe('structured agent-session host teardown', () => {
       'record-resume-markers',
       'flush-event-sinks'
     ])
+  })
+
+  it('records that this runtime is quitting first, and a failed record never stops the quit', async () => {
+    const order: string[] = []
+    const phases = structuredAgentSessionHostTeardownPhases({
+      logger: createStructuredAgentSessionLogger(),
+      idleSweep: { dispose: noop },
+      runtimeState: { stopLeaseRenewal: () => undefined, flushAllEventSinks: noop },
+      tasks: { drainAttaches: noop },
+      evictOwnedSessions: async () => void order.push('evict'),
+      beginResumeMarkers: () => {},
+      recordResumeMarkers: noop,
+      recordRuntimeTeardown: () => {
+        order.push('record')
+        throw new Error('disk full')
+      }
+    })
+    for (const phase of phases) {
+      await phase.run()
+    }
+    expect(order).toEqual(['record', 'evict'])
   })
 
   it("derives quit's child-eviction bound from every provider's supervised close", () => {

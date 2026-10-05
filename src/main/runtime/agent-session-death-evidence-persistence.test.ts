@@ -58,7 +58,9 @@ describe('death evidence on disk', () => {
       detail: 'recorded pid absent on host',
       observedAt: 90_000,
       ownerFence: 7,
-      lastProvenAliveAt: LAST_RENEWED_AT
+      lastProvenAliveAt: LAST_RENEWED_AT,
+      // The runtime before this one recorded no quit, so its owner died with a crash.
+      runtimeEnd: 'crash'
     }
     expect(crashed.getRecord(SESSION)?.lease.deathEvidence).toEqual(evidence)
     expect((await open()).getRecord(SESSION)?.lease.deathEvidence).toEqual(evidence)

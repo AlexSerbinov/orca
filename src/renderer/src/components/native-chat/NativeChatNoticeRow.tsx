@@ -10,7 +10,9 @@ import {
   isAgentSessionHostStatusPresentation,
   type AgentSessionHostStatusPresentation
 } from '../../../../shared/agent-session-host-status-rows'
+import type { AgentSessionOrcaStopCause } from '../../../../shared/agent-session-failure'
 import type { NativeChatTextBlock } from '../../../../shared/native-chat-types'
+import { useNativeChatHostLabel } from './native-chat-host-label-context'
 import { ProviderFrameRow } from './NativeChatTranscriptChrome'
 
 const HOST_STATUS_WORDS: Record<AgentSessionHostStatusPresentation, () => string> = {
@@ -26,6 +28,29 @@ const HOST_STATUS_WORDS: Record<AgentSessionHostStatusPresentation, () => string
     )
 }
 
+const ORCA_STOP_HEADLINES: Record<AgentSessionOrcaStopCause, (machine: string) => string> = {
+  update: (machine) =>
+    translate(
+      'components.native-chat.notices.orcaStopUpdate',
+      'Stopped: Orca on {{machine}} restarted for an update',
+      { machine }
+    ),
+  quit: (machine) =>
+    translate(
+      'components.native-chat.notices.orcaStopQuit',
+      'Stopped: Orca on {{machine}} was restarted',
+      {
+        machine
+      }
+    ),
+  crash: (machine) =>
+    translate(
+      'components.native-chat.notices.orcaStopCrash',
+      'Stopped: Orca on {{machine}} stopped unexpectedly',
+      { machine }
+    )
+}
+
 export function NativeChatNoticeRow({
   block,
   onLinkClick,
@@ -35,6 +60,7 @@ export function NativeChatNoticeRow({
   onLinkClick?: CommentMarkdownLinkClickHandler
   allowFileUriLinks?: boolean
 }): React.JSX.Element {
+  const hostLabel = useNativeChatHostLabel()
   if (block.presentation === 'compaction') {
     const label = translate('components.native-chat.notices.compaction', 'Context compacted')
     return (
@@ -86,6 +112,16 @@ export function NativeChatNoticeRow({
       </Card>
     )
   }
+  // The host's row about an Orca stop: named only when this chat knows its machine, else the
+  // generic words the host wrote.
+  const orcaStop = block.failure?.kind === 'providerExited' ? block.failure.orcaStop : undefined
+  const text =
+    orcaStop && hostLabel
+      ? `${ORCA_STOP_HEADLINES[orcaStop.cause](hostLabel)}\n${translate(
+          'components.native-chat.notices.orcaStopDetail',
+          'The reply was cut off partway through. Continue, and the agent first checks whether its last step finished.'
+        )}`
+      : block.text
   const tone = block.tone
   const Icon =
     tone === 'warning'
@@ -107,7 +143,7 @@ export function NativeChatNoticeRow({
     >
       <div className="flex items-start gap-2">
         {Icon ? <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" /> : null}
-        <p className="min-w-0 whitespace-pre-wrap break-words">{block.text}</p>
+        <p className="min-w-0 whitespace-pre-wrap break-words">{text}</p>
       </div>
       {block.providerFrame ? (
         <ProviderFrameRow

@@ -85,10 +85,11 @@ export type StructuredAgentSessionContinuationHost = {
 }
 
 /** Binds one continuation to the host: the superseded check before dispatch, the settlement
- *  waiter for the verdict, and the journal note that attributes the send to Orca. */
-export function restartContinuationDeps(
-  host: StructuredAgentSessionContinuationHost,
-  marker: AgentSessionResumeMarker
+ *  waiter for the verdict, and the journal note that attributes the send to Orca. `stillWanted` is
+ *  asked at acceptance, inside the session lock, so the first message accepted since decides. */
+export function continuationDeps(
+  host: Omit<StructuredAgentSessionContinuationHost, 'stillResumable'>,
+  stillWanted: () => boolean
 ): StructuredAgentSessionContinuationDeps {
   return {
     currentFence: host.conversationFence,
@@ -96,7 +97,7 @@ export function restartContinuationDeps(
       host.send({
         ...input,
         beforeRun: () => {
-          if (!host.stillResumable(marker)) {
+          if (!stillWanted()) {
             throw new RestartContinuationSupersededError()
           }
         }
@@ -212,7 +213,8 @@ export type StartedStructuredAgentSessionContinuation =
 export async function startStructuredAgentSessionContinuation(
   deps: StructuredAgentSessionContinuationDeps,
   sessionId: string,
-  marker: AgentSessionResumeMarker,
+  /** Only what picks the message's words; a continuation with no offer passes none. */
+  marker: Pick<AgentSessionResumeMarker, 'activity'>,
   /** This action's continuation, as its offer recorded it. */
   continuationId: string
 ): Promise<StartedStructuredAgentSessionContinuation> {
@@ -291,7 +293,7 @@ async function noteNotContinued(
 async function sendContinuation(
   deps: StructuredAgentSessionContinuationDeps,
   sessionId: string,
-  marker: AgentSessionResumeMarker,
+  marker: Pick<AgentSessionResumeMarker, 'activity'>,
   continuationId: string
 ): Promise<StartedStructuredAgentSessionContinuation> {
   const fence = deps.currentFence(sessionId)

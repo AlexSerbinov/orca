@@ -16,6 +16,7 @@ import {
   type StructuredAgentSessionLifetimeContext
 } from './structured-agent-session-host-lifetime'
 import { withTimeout } from '../../../shared/promise-timeout-fallback'
+import { recordAgentSessionRuntimeTeardown } from '../../runtime/agent-session-runtime-teardown-record'
 import type { StructuredAgentSessionHostSession } from './structured-agent-session-host-types'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 
@@ -67,9 +68,24 @@ export function structuredAgentSessionHostTeardownPhases(collaborators: {
   /** Opens this teardown's witnesses; each session's own is taken as eviction stops its child. */
   beginResumeMarkers: () => void
   recordResumeMarkers: () => Promise<void>
+  /** The durable word that this runtime began quitting, so the next start never calls an
+   *  unfinished quit a crash. */
+  recordRuntimeTeardown?: () => void
   logger: StructuredAgentSessionLogger
 }): StructuredAgentSessionTeardownPhase[] {
   return [
+    {
+      name: 'record-runtime-teardown',
+      run: () => {
+        try {
+          collaborators.recordRuntimeTeardown?.()
+        } catch {
+          collaborators.logger.warn('recording that this runtime is quitting failed', {
+            scope: 'teardown-runtime-record'
+          })
+        }
+      }
+    },
     {
       name: 'begin-resume-markers',
       run: () => {
@@ -171,8 +187,18 @@ export async function flushStructuredAgentSessionHost(
               stopped: context.restartResume.confirmStopped
             }
           },
-          retainSessionIds
+          retainSessionIds,
+          context.trigger
         ),
+      recordRuntimeTeardown: () => {
+        if (!context.deps.journalDatabase.readOnly) {
+          recordAgentSessionRuntimeTeardown(
+            context.deps.journalDatabase.db,
+            context.trigger,
+            context.now()
+          )
+        }
+      },
       beginResumeMarkers: () => context.restartResume.beginTeardown(context.trigger),
       recordResumeMarkers: context.restartResume.recordMarkers,
       logger: context.deps.logger

@@ -17869,7 +17869,11 @@
         "details": "세부",
         "plan": "계획",
         "historyRepaired": "이 채팅 기록의 일부를 불러올 수 없습니다.",
-        "historyItemTooLarge": "채팅의 이 부분은 너무 커서 표시할 수 없습니다."
+        "historyItemTooLarge": "채팅의 이 부분은 너무 커서 표시할 수 없습니다.",
+        "orcaStopUpdate": "중지됨: {{machine}}의 Orca가 업데이트를 위해 다시 시작됨",
+        "orcaStopQuit": "중지됨: {{machine}}의 Orca가 다시 시작됨",
+        "orcaStopCrash": "중지됨: {{machine}}의 Orca가 예기치 않게 중지됨",
+        "orcaStopDetail": "응답이 중간에 끊겼습니다. 계속하면 에이전트가 먼저 마지막 단계가 완료되었는지 확인합니다."
       },
       "providerFrame": {
         "byteLength": "{{value0}}바이트"
@@ -18014,7 +18018,11 @@
       "structuredSessionHostDeclined": "{{value0}}을(를) 터미널에서 열었습니다",
       "structuredSessionHostDeclinedDescription": "이 서버는 이 워크스페이스에서 {{value0}} 채팅을 실행할 수 없습니다.",
       "structuredSessionHostUnreachable": "{{value0}}에 연결할 수 없습니다",
-      "structuredSessionHostUnreachableDescription": "Orca가 {{value0}} 채팅을 열지 않았습니다. 서버 연결을 확인하고 다시 시도하세요."
+      "structuredSessionHostUnreachableDescription": "Orca가 {{value0}} 채팅을 열지 않았습니다. 서버 연결을 확인하고 다시 시도하세요.",
+      "interruptedContinue": {
+        "continue": "계속",
+        "failed": "이 채팅을 계속할 수 없습니다. 다시 시도하거나 메시지를 보내세요."
+      }
     },
     "tab": {
       "bar": {

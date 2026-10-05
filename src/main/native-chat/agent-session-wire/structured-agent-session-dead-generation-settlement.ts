@@ -38,6 +38,7 @@ import {
   exitedRootTurnScope,
   runningRootTurnScope
 } from './structured-agent-session-exit-turn-scope'
+import { providerExitedRowWords } from './structured-agent-session-orca-stop-row'
 import {
   withdrawCodexSendsNoTurnOpenedFor,
   type UnopenedSendJournal
@@ -265,13 +266,10 @@ export async function settleStaleStructuredAgentSessionState(input: {
         clientMessageId: `${STALE_SESSION_ROW_PREFIX}${input.sessionId}:death-${evidence.ownerFence ?? 'unowned'}-${evidence.observedAt}`
       },
       // The death evidence is Orca's log text, never a sentence for a person: the row says only
-      // that the provider stopped.
+      // that the provider stopped, and how Orca ended when the provider died with it.
       body: {
         kind: 'status',
-        ...agentSessionFailureWords(agentSessionFailureFact('providerExited'), {
-          ...input.failureTextContext,
-          surface: 'row'
-        }),
+        ...providerExitedRowWords(input.failureTextContext, evidence.runtimeEnd),
         tone: 'error'
       },
       turnScope: runningRootTurnScope(items)

@@ -5,6 +5,7 @@
 export {
   AttachParams,
   CancelParams,
+  ContinueInterruptedParams,
   ConversationCommandParams,
   CreateIntentParams,
   CreateParams,

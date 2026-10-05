@@ -94,6 +94,11 @@ export type AgentSessionDeathEvidence = {
    *  proved it alive. Only a probe's proof records it: absent on a surface-release exit, a failed
    *  start, and evidence older builds wrote. */
   lastProvenAliveAt?: number
+  /** Only from restart adjudication, which proves the owner died with the Orca runtime that held
+   *  it: how that runtime ended ('quit' | 'update' when it had begun a quit, else 'crash'). Absent
+   *  for a provider that died on its own. A string, since a newer build may write a cause this one
+   *  does not know; read it with `isAgentSessionOrcaStopCause`. */
+  runtimeEnd?: string
 }
 
 export type AgentSessionLease = {
@@ -285,7 +290,7 @@ function isAgentSessionDeathEvidence(value: unknown): value is AgentSessionDeath
     return false
   }
   const evidence = value as Partial<AgentSessionDeathEvidence>
-  const { observedAt, lastProvenAliveAt, ownerFence } = evidence
+  const { observedAt, lastProvenAliveAt, ownerFence, runtimeEnd } = evidence
   return (
     (evidence.kind === 'exit-observed' ||
       evidence.kind === 'pid-absent' ||
@@ -298,7 +303,8 @@ function isAgentSessionDeathEvidence(value: unknown): value is AgentSessionDeath
     (lastProvenAliveAt === undefined ||
       (Number.isSafeInteger(lastProvenAliveAt) &&
         lastProvenAliveAt >= 0 &&
-        lastProvenAliveAt <= observedAt))
+        lastProvenAliveAt <= observedAt)) &&
+    (runtimeEnd === undefined || isBoundedString(runtimeEnd, MAX_ID_LENGTH))
   )
 }
 

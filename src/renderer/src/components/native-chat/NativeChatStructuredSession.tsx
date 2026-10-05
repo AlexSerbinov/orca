@@ -22,6 +22,9 @@ import type { NativeChatStructuredViewProps } from './native-chat-view-types'
 import { NativeChatStructuredSessionStatus } from './NativeChatStructuredSessionStatus'
 import { useNativeChatLaunchDraftSignal } from './use-native-chat-launch-draft-adoption'
 import { NativeChatLaunchRetry } from './NativeChatLaunchRetry'
+import { NativeChatInterruptedContinue } from './NativeChatInterruptedContinue'
+import { NativeChatHostLabelContext } from './native-chat-host-label-context'
+import { useStructuredAgentSessionHostLabel } from './use-structured-agent-session-host-label'
 import { useNativeChatProvisionalLaunch } from './use-native-chat-provisional-launch'
 import { useStructuredAgentSessionHostExecutionPhase } from './StructuredAgentSessionStatusBridge'
 import { NativeChatQueuedMessageList } from './NativeChatQueuedMessageList'
@@ -113,6 +116,7 @@ export function NativeChatStructuredSession(
     [controller, historyPhase, props.agent, props.sessionId]
   )
   const agentLabel = structuredAgentLabel(props.agent === 'codex' ? 'codex' : 'claude')
+  const hostLabel = useStructuredAgentSessionHostLabel(props.target)
   const deliveryNotices = useStructuredAgentSessionDeliveryNotices({
     outbox: controller.outbox,
     submissions: controller.submissions,
@@ -260,25 +264,27 @@ export function NativeChatStructuredSession(
         ) : viewState.kind === 'empty' ? (
           <NativeChatEmptyState kind="empty" agent={props.agent} />
         ) : (
-          <NativeChatMessageList
-            session={session}
-            journalItems={controller.journalItems}
-            journalSubmissions={controller.submissions}
-            subagentRoster={controller.subagentRoster}
-            railOutline={controller.railOutline}
-            isVisible={props.isVisible}
-            isWorking={controller.isWorking}
-            expandSignal={false}
-            fontScale={fontScale.scale}
-            workingStartedAt={controller.workingStartedAt}
-            settledTurns={controller.settledTurns}
-            awaitingInput={prompt === null ? null : 'shown'}
-            turnActivity={controller.turnActivity}
-            onLinkClick={onLinkClick}
-            allowFileUriLinks={onLinkClick !== undefined}
-            runtimeContext={imageRuntimeContext}
-            deliveryNotices={deliveryNotices}
-          />
+          <NativeChatHostLabelContext.Provider value={hostLabel}>
+            <NativeChatMessageList
+              session={session}
+              journalItems={controller.journalItems}
+              journalSubmissions={controller.submissions}
+              subagentRoster={controller.subagentRoster}
+              railOutline={controller.railOutline}
+              isVisible={props.isVisible}
+              isWorking={controller.isWorking}
+              expandSignal={false}
+              fontScale={fontScale.scale}
+              workingStartedAt={controller.workingStartedAt}
+              settledTurns={controller.settledTurns}
+              awaitingInput={prompt === null ? null : 'shown'}
+              turnActivity={controller.turnActivity}
+              onLinkClick={onLinkClick}
+              allowFileUriLinks={onLinkClick !== undefined}
+              runtimeContext={imageRuntimeContext}
+              deliveryNotices={deliveryNotices}
+            />
+          </NativeChatHostLabelContext.Provider>
         )}
       </div>
       {readFailedFinally ? null : (
@@ -288,6 +294,14 @@ export function NativeChatStructuredSession(
             failure={provisionalLaunch.failure}
             agentLabel={agentLabel}
             onRetry={provisionalLaunch.retry}
+          />
+          <NativeChatInterruptedContinue
+            target={props.target}
+            sessionId={props.sessionId}
+            journalItems={controller.journalItems}
+            submissions={controller.submissions}
+            isWorking={controller.isWorking}
+            onError={setComposerError}
           />
           {/* Host-held drafts, never transcript rows. Above the status area, so running shells and agents sit next to the composer. */}
           <NativeChatQueuedMessageList

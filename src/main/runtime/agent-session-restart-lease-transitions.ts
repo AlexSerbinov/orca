@@ -10,6 +10,7 @@ import {
   adjudicateAgentSessionRestart,
   type AgentSessionOwnerProbe
 } from '../../shared/agent-session-lease-adjudication'
+import type { AgentSessionOrcaStopCause } from '../../shared/agent-session-failure'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import { withLease } from './agent-session-lease-transitions'
 
@@ -18,6 +19,8 @@ export function applyAgentSessionRestartAdjudication(args: {
   record: AgentSessionRecord
   probe: AgentSessionOwnerProbe
   now: number
+  /** How the runtime that held every loaded lease ended; null when that is unknown. */
+  runtimeEnd?: AgentSessionOrcaStopCause | null
 }): AgentSessionRecord {
   const { record } = args
   const adjudication = adjudicateAgentSessionRestart({
@@ -49,7 +52,12 @@ export function applyAgentSessionRestartAdjudication(args: {
       unreconciled: false,
       lastRenewedAt: args.now,
       handoffOperationId: null,
-      deathEvidence: adjudication.evidence
+      // A lease still owned at load was held by the runtime before this one, so the owner died
+      // with it: the evidence says how that runtime ended, which a provider's own exit never does.
+      deathEvidence:
+        adjudication.evidence && args.runtimeEnd
+          ? { ...adjudication.evidence, runtimeEnd: args.runtimeEnd }
+          : adjudication.evidence
     })
   }
   // Parking in recovery proves nothing alive, so `lastRenewedAt` keeps the pre-crash proof.
