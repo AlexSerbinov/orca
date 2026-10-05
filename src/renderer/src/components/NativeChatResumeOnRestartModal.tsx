@@ -244,8 +244,8 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
     resumeOwnershipLabel(machine.ownershipFor(sessionId), machine.name)
 
   return (
-    // Its own dialog never counts as another one it waits for.
-    <AutomaticPromptDialogScope.Provider value>
+    // Raised by the launch, it steps aside under another dialog; opened by the user, it counts as one.
+    <AutomaticPromptDialogScope automatic={request.origin !== 'user'}>
       <Dialog
         open
         onOpenChange={(next) => {
@@ -427,6 +427,6 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AutomaticPromptDialogScope.Provider>
+    </AutomaticPromptDialogScope>
   )
 }
