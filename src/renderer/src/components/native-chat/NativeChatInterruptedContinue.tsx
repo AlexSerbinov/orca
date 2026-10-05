@@ -23,6 +23,9 @@ export type NativeChatInterruptedContinuation = {
   view: NativeChatOrcaStopView
   /** The cut turn Continue is offered on right now, if any. */
   offeredTurnItemId: string | null
+  /** The composer's line for a Continue that did not go through, while the chat still sits on
+   *  that cut: gone once it is continued, from here or anywhere else. */
+  error: string | null
   continueNow: () => void
 }
 
@@ -37,9 +40,8 @@ export function useNativeChatInterruptedContinuation(input: {
   journalItems: readonly AgentJournalRenderItem[]
   submissions: readonly Pick<AgentJournalSubmission, 'dispatchState'>[]
   isWorking: boolean
-  onError: (message: string | null) => void
 }): NativeChatInterruptedContinuation {
-  const { target, sessionId, onError } = input
+  const { target, sessionId } = input
   const hostLabel = useStructuredAgentSessionHostLabel(target)
   const capability = useStructuredAgentSessionHostCapabilityState(
     target,
@@ -53,6 +55,7 @@ export function useNativeChatInterruptedContinuation(input: {
   )
   // The cut this client already asked to continue: hidden until the journal shows what came of it.
   const [asked, setAsked] = useState<string | null>(null)
+  const [failedOn, setFailedOn] = useState<string | null>(null)
   const offered =
     capability === 'supported' && cut && !input.isWorking && !resuming && asked !== cut.turnItemId
       ? cut.turnItemId
@@ -65,15 +68,10 @@ export function useNativeChatInterruptedContinuation(input: {
     // Nothing was accepted: one line in the composer, which a retry replaces rather than repeats.
     const failed = (): void => {
       setAsked((current) => (current === turnItemId ? null : current))
-      onError(
-        translate(
-          'components.native-chat.interruptedContinue.failed',
-          "Couldn't continue this chat. Try again, or send a message."
-        )
-      )
+      setFailedOn(turnItemId)
     }
     setAsked(turnItemId)
-    onError(null)
+    setFailedOn(null)
     void callStructuredAgentSession<ContinueAnswer>(target, 'agentSession.continueInterrupted', {
       sessionId,
       turnItemId
@@ -83,7 +81,14 @@ export function useNativeChatInterruptedContinuation(input: {
   const continueAvailable = capability !== 'unsupported'
   // One object per change, so the chat's rows re-render only when what they show changes.
   const view = useMemo(() => ({ hostLabel, continueAvailable }), [hostLabel, continueAvailable])
-  return { view, offeredTurnItemId: offered, continueNow }
+  const error =
+    failedOn !== null && cut?.turnItemId === failedOn
+      ? translate(
+          'components.native-chat.interruptedContinue.failed',
+          "Couldn't continue this chat. Try again, or send a message."
+        )
+      : null
+  return { view, offeredTurnItemId: offered, error, continueNow }
 }
 
 export function NativeChatInterruptedContinue({

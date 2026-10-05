@@ -61,7 +61,6 @@ type Props = {
   journalItems?: readonly AgentJournalRenderItem[]
   submissions?: readonly Pick<AgentJournalSubmission, 'dispatchState'>[]
   isWorking?: boolean
-  onError?: (message: string | null) => void
 }
 
 function Harness(props: Props): React.JSX.Element {
@@ -70,19 +69,20 @@ function Harness(props: Props): React.JSX.Element {
     sessionId: 'session-1',
     journalItems: props.journalItems ?? cutChat,
     submissions: props.submissions ?? [],
-    isWorking: props.isWorking ?? false,
-    onError: props.onError ?? vi.fn()
+    isWorking: props.isWorking ?? false
   })
   return (
     <TooltipProvider delayDuration={0}>
       <span data-testid="offered">{continuation.offeredTurnItemId ?? 'none'}</span>
       <span data-testid="available">{String(continuation.view.continueAvailable)}</span>
+      <span data-testid="error">{continuation.error ?? 'none'}</span>
       <NativeChatInterruptedContinue continuation={continuation} />
     </TooltipProvider>
   )
 }
 
 const continueButton = () => screen.queryByRole('button', { name: 'Continue' })
+const FAILED = "Couldn't continue this chat. Try again, or send a message."
 
 beforeEach(() => {
   mocks.capability = 'supported'
@@ -160,35 +160,51 @@ describe('Continue on a reply an Orca stop cut off', () => {
 
   it('says so once, in the composer, and offers it again when the host refuses', async () => {
     mocks.call.mockResolvedValue({ outcome: 'refused', reason: 'agent_session_not_attached' })
-    const onError = vi.fn()
-    render(<Harness onError={onError} />)
+    render(<Harness />)
 
     fireEvent.click(continueButton()!)
     await waitFor(() => expect(continueButton()).toBeInTheDocument())
+    expect(screen.getByTestId('error')).toHaveTextContent(FAILED)
+    // A retry clears the line until its own answer, which sets the same one line again.
     fireEvent.click(continueButton()!)
+    expect(screen.getByTestId('error')).toHaveTextContent('none')
     await waitFor(() => expect(continueButton()).toBeInTheDocument())
-
-    // One slot: each click clears it, and the refusal sets the same line again.
-    expect(onError.mock.calls).toEqual([
-      [null],
-      ["Couldn't continue this chat. Try again, or send a message."],
-      [null],
-      ["Couldn't continue this chat. Try again, or send a message."]
-    ])
+    expect(screen.getByTestId('error')).toHaveTextContent(FAILED)
   })
 
   it('says so and offers it again when the request fails', async () => {
     mocks.call.mockRejectedValue(new Error('offline'))
-    const onError = vi.fn()
-    render(<Harness onError={onError} />)
+    render(<Harness />)
 
     fireEvent.click(continueButton()!)
 
-    await waitFor(() =>
-      expect(onError).toHaveBeenLastCalledWith(
-        "Couldn't continue this chat. Try again, or send a message."
-      )
-    )
+    await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent(FAILED))
     expect(continueButton()).toBeInTheDocument()
+  })
+
+  it('drops the line once the chat was continued, here or by another client', async () => {
+    // The answer was lost after the host accepted it.
+    mocks.call.mockRejectedValue(new Error('timed out'))
+    const { rerender } = render(<Harness />)
+    fireEvent.click(continueButton()!)
+    await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent(FAILED))
+
+    // The journal then shows the continuation on its way: the chat is no longer on that cut.
+    rerender(<Harness submissions={[{ dispatchState: 'pending' }]} />)
+
+    expect(screen.getByTestId('error')).toHaveTextContent('none')
+  })
+
+  it('leaves no line when a retry finds the chat already continued', async () => {
+    mocks.call.mockRejectedValueOnce(new Error('timed out'))
+    mocks.call.mockResolvedValueOnce({ outcome: 'superseded' })
+    render(<Harness />)
+    fireEvent.click(continueButton()!)
+    await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent(FAILED))
+
+    fireEvent.click(continueButton()!)
+
+    await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(2))
+    expect(screen.getByTestId('error')).toHaveTextContent('none')
   })
 })

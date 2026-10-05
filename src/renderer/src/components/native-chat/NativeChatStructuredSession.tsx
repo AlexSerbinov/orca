@@ -123,8 +123,7 @@ export function NativeChatStructuredSession(
     sessionId: props.sessionId,
     journalItems: controller.journalItems,
     submissions: controller.submissions,
-    isWorking: controller.isWorking,
-    onError: setComposerError
+    isWorking: controller.isWorking
   })
   const deliveryNotices = useStructuredAgentSessionDeliveryNotices({
     outbox: controller.outbox,
@@ -323,7 +322,7 @@ export function NativeChatStructuredSession(
                 : readFailure.text
             }
             reconnecting={viewState.kind !== 'error' && readFailure !== null && !readFailure.named}
-            composerError={composerError}
+            composerError={composerError ?? continuation.error}
             isVisible={props.isVisible}
             backgroundTasks={controller.backgroundTasks}
             stopBackgroundTask={controller.stopBackgroundTask}
