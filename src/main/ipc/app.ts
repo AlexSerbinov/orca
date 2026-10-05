@@ -25,7 +25,6 @@ import { registerMacSymbolicHotkeysProbeHandler } from './macos-symbolic-hotkeys
 import { registerRendererShutdownCheckpointHandler } from './renderer-shutdown-checkpoint'
 import { readMacKeyboardLayoutSnapshot } from './macos-keyboard-layout-snapshot'
 import { registerMacKeyboardLayoutChangeNotifications } from './macos-keyboard-layout-change-notifications'
-import { recordAgentSessionRuntimeEnd } from '../runtime/agent-session-runtime-end-record'
 
 const KEYBOARD_INPUT_SOURCE_TIMEOUT_MS = 500
 const MAC_HITOOLBOX_DOMAIN = 'com.apple.HIToolbox'
@@ -303,8 +302,6 @@ export function registerAppHandlers(store: Store, options: RegisterAppHandlersOp
     setTimeout(() => {
       // Why: app.exit(0) skips before-quit, so destroy the Windows tray manually to avoid a stale icon.
       destroySystemTray()
-      // app.exit skips will-quit, whose teardown would otherwise record this.
-      recordAgentSessionRuntimeEnd('quit')
       relaunchApp('renderer-request')
       app.exit(0)
     }, 150)

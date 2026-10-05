@@ -56,7 +56,19 @@ function prune(directory: string, keep: string): void {
   }
 }
 
-/** Records that this runtime started. Never throws: a runtime with no record reads as unknown. */
+/** A graceful exit no call site recorded, such as an `app.exit(0)` or `process.exit(0)`, is a quit:
+ *  Electron emits the process's 'exit' on every quit or exit once its loop runs, and Node on every
+ *  `process.exit`. A non-zero exit records nothing, so it stays a crash. */
+export function recordAgentSessionRuntimeEndOnExit(code: number): void {
+  if (code === 0) {
+    recordAgentSessionRuntimeEnd('quit')
+  }
+}
+
+let exitHookInstalled = false
+
+/** Records that this runtime started. Never throws: a runtime with no record reads as unknown. A
+ *  second start of the same runtime (a host reinstalled during its quit) keeps the end it recorded. */
 export function beginAgentSessionRuntimeRecord(
   stateDirectory: string,
   runtime: string,
@@ -64,7 +76,13 @@ export function beginAgentSessionRuntimeRecord(
 ): void {
   const directory = join(stateDirectory, RUNTIMES_DIRECTORY)
   const name = `${runtime}.json`
-  current = { path: join(directory, name), record: { runtime, startedAt: now } }
+  const path = join(directory, name)
+  const ended = current?.path === path && current.record.end ? current.record : null
+  current = { path, record: ended ?? { runtime, startedAt: now } }
+  if (!exitHookInstalled) {
+    exitHookInstalled = true
+    process.once('exit', recordAgentSessionRuntimeEndOnExit)
+  }
   try {
     mkdirSync(directory, { recursive: true })
     writeRecord(current.path, current.record)
@@ -89,7 +107,12 @@ export function recordAgentSessionRuntimeEnd(
   try {
     writeRecord(current.path, current.record)
   } catch {
-    // Unwritten, a death of this runtime's owners reads as a crash.
+    // The start alone would read as a crash; with no record its owners name no cause.
+    try {
+      rmSync(current.path, { force: true })
+    } catch {
+      // Nothing left to try: the start stays, and reads as a crash.
+    }
   }
 }
 

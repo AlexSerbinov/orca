@@ -6,10 +6,27 @@ import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as DurableFileWrite from '../durable-file-write'
+
+const writes = vi.hoisted(() => ({ fail: false }))
+vi.mock('../durable-file-write', async (importOriginal) => {
+  const actual = await importOriginal<typeof DurableFileWrite>()
+  return {
+    ...actual,
+    writeFileDurableSync: (...args: Parameters<typeof actual.writeFileDurableSync>) => {
+      if (writes.fail) {
+        throw new Error('ENOSPC: no space left on device')
+      }
+      actual.writeFileDurableSync(...args)
+    }
+  }
+})
+
 import {
   beginAgentSessionRuntimeRecord,
   readAgentSessionRuntimeEnds,
-  recordAgentSessionRuntimeEnd
+  recordAgentSessionRuntimeEnd,
+  recordAgentSessionRuntimeEndOnExit
 } from './agent-session-runtime-end-record'
 import { tearDownRuntime, type InstalledRuntime } from './structured-agent-session-runtime-teardown'
 
@@ -19,6 +36,7 @@ const RUNTIME_B = '0000000b-0000-4000-8000-000000000000'
 let directory: string
 
 beforeEach(async () => {
+  writes.fail = false
   directory = await mkdtemp(join(tmpdir(), 'orca-runtime-end-'))
 })
 
@@ -102,6 +120,30 @@ describe('what a runtime records about itself', () => {
     await writeFile(runtimesDirectory(), 'not a directory')
     expect(() => beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 1)).not.toThrow()
     expect(() => recordAgentSessionRuntimeEnd('quit', 2)).not.toThrow()
+  })
+
+  it('keeps its end when the same runtime records its start again during the quit', () => {
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 1)
+    recordAgentSessionRuntimeEnd('update', 2)
+    // A host reinstalled by a request that landed during the quit opens its store again.
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 3)
+    expect(readAgentSessionRuntimeEnds(directory)?.get(RUNTIME_A)).toBe('update')
+  })
+
+  it('names no cause, rather than a crash, when its end could not be written', () => {
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 1)
+    writes.fail = true
+    recordAgentSessionRuntimeEnd('quit', 2)
+    expect(readAgentSessionRuntimeEnds(directory)?.has(RUNTIME_A)).toBe(false)
+  })
+
+  it('reads a clean process exit nothing else recorded as a quit, and any other exit as nothing', () => {
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 1)
+    expect(process.listeners('exit')).toContain(recordAgentSessionRuntimeEndOnExit)
+    recordAgentSessionRuntimeEndOnExit(1)
+    expect(readAgentSessionRuntimeEnds(directory)?.get(RUNTIME_A)).toBe('crash')
+    recordAgentSessionRuntimeEndOnExit(0)
+    expect(readAgentSessionRuntimeEnds(directory)?.get(RUNTIME_A)).toBe('quit')
   })
 
   it('leaves no temp files behind', async () => {
