@@ -10,7 +10,11 @@ import {
   type RestartContinuationOutcome
 } from './native-chat-restart-action-notifications'
 import { requestNativeChatResumeOnRestartDialog } from './native-chat-resume-on-restart-dialog'
-import { restartMachineTarget, type RestartMachineKey } from './native-chat-restart-machines'
+import {
+  projectRestartMachineRows,
+  restartMachineTarget,
+  type RestartMachineKey
+} from './native-chat-restart-machines'
 import { restartMachineName } from './native-chat-restart-machine-name'
 import {
   restartMachineCallFence,
@@ -18,7 +22,6 @@ import {
   type RestartMachineFence
 } from './native-chat-restart-machine-fence'
 import { failedFrom, type HostOfferPayload } from './native-chat-restart-offer-payload'
-import { projectRestartMachineRows } from './native-chat-restart-machines'
 import {
   beginNativeChatRestartAction,
   getNativeChatRestartOffers,

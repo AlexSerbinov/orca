@@ -137,8 +137,17 @@ describe('activateStructuredAgentSessionTab', () => {
   // and the focus goes to that machine under the pairing the chat was listed with.
   it('activates only the named machine’s tab, under the listed pairing', () => {
     const elsewhere = {
-      ...(mocks.state.unifiedTabsByWorktree as Record<string, Tab[]>)['wt-1']![0]!
-    }
+      id: 'structured-tab-1',
+      worktreeId: 'wt-1',
+      groupId: 'group-1',
+      contentType: 'agent-session',
+      entityId: 'session-1',
+      label: 'Codex Chat',
+      customLabel: null,
+      color: null,
+      sortOrder: 0,
+      createdAt: 0
+    } satisfies Tab
     mocks.state = {
       ...mocks.state,
       unifiedTabsByWorktree: {
