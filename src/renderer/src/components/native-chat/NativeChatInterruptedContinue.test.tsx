@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
@@ -74,7 +75,10 @@ type Props = {
 }
 
 function Harness(props: Props): React.JSX.Element {
+  // The chat's own composer error, as NativeChatStructuredSession holds it.
+  const [composerError, setComposerError] = useState<string | null>(null)
   const continuation = useNativeChatInterruptedContinuation({
+    composer: { error: composerError, clearError: () => setComposerError(null) },
     target: props.target ?? PAIRED,
     sessionId: 'session-1',
     journalItems: props.journalItems ?? cutChat,
@@ -85,7 +89,10 @@ function Harness(props: Props): React.JSX.Element {
     <TooltipProvider delayDuration={0}>
       <span data-testid="offered">{continuation.offeredTurnItemId ?? 'none'}</span>
       <span data-testid="available">{String(continuation.view.continueAvailable)}</span>
-      <span data-testid="error">{continuation.error ?? 'none'}</span>
+      <span data-testid="error">{continuation.composerError ?? 'none'}</span>
+      <button type="button" onClick={() => setComposerError(ATTACHMENTS)}>
+        compose
+      </button>
       <NativeChatInterruptedContinue continuation={continuation} />
     </TooltipProvider>
   )
@@ -93,6 +100,7 @@ function Harness(props: Props): React.JSX.Element {
 
 const continueButton = () => screen.queryByRole('button', { name: 'Continue' })
 const FAILED = "Couldn't continue this chat. Try again, or send a message."
+const ATTACHMENTS = 'Remove attachments before using a chat-session command.'
 
 beforeEach(() => {
   mocks.capability = 'supported'
@@ -201,6 +209,31 @@ describe('Continue on a reply an Orca stop cut off', () => {
 
     await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent(FAILED))
     expect(continueButton()).toBeInTheDocument()
+  })
+
+  it('replaces an older composer error with its own failure, and clears it when it goes through', async () => {
+    mocks.call.mockResolvedValueOnce({ outcome: 'refused', reason: 'agent_session_conflict' })
+    mocks.call.mockResolvedValueOnce({ outcome: 'pending' })
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'compose' }))
+    expect(screen.getByTestId('error')).toHaveTextContent(ATTACHMENTS)
+
+    fireEvent.click(continueButton()!)
+    await waitFor(() => expect(continueButton()).toBeInTheDocument())
+    expect(screen.getByTestId('error')).toHaveTextContent(FAILED)
+
+    fireEvent.click(screen.getByRole('button', { name: 'compose' }))
+    expect(screen.getByTestId('error')).toHaveTextContent(ATTACHMENTS)
+    fireEvent.click(continueButton()!)
+    await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(2))
+    expect(screen.getByTestId('error')).toHaveTextContent('none')
+  })
+
+  it('leaves an unrelated composer error alone when the chat moves on by itself', () => {
+    const { rerender } = render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'compose' }))
+    rerender(<Harness submissions={[{ dispatchState: 'pending' }]} />)
+    expect(screen.getByTestId('error')).toHaveTextContent(ATTACHMENTS)
   })
 
   it('drops the line once the chat was continued, here or by another client', async () => {

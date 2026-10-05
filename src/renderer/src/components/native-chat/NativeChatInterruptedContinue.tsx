@@ -24,9 +24,9 @@ export type NativeChatInterruptedContinuation = {
   view: NativeChatOrcaStopView
   /** The cut turn Continue is offered on right now, if any. */
   offeredTurnItemId: string | null
-  /** The composer's line for a Continue that did not go through, while the chat still sits on
-   *  that cut: gone once it is continued, from here or anywhere else. */
-  error: string | null
+  /** The composer's error line: the composer's own, or else a Continue that did not go through,
+   *  shown while the chat still sits on that cut and gone once it is continued from anywhere. */
+  composerError: string | null
   continueNow: () => void
 }
 
@@ -41,6 +41,8 @@ export function useNativeChatInterruptedContinuation(input: {
   journalItems: readonly AgentJournalRenderItem[]
   submissions: readonly Pick<AgentJournalSubmission, 'dispatchState'>[]
   isWorking: boolean
+  /** The composer's own error; a Continue click is the user's newer action, so it clears it. */
+  composer: { error: string | null; clearError: () => void }
 }): NativeChatInterruptedContinuation {
   const { target, sessionId } = input
   const hostLabel = useStructuredAgentSessionHostLabel(target)
@@ -75,6 +77,7 @@ export function useNativeChatInterruptedContinuation(input: {
     }
     setAsked(turnItemId)
     setFailedOn(null)
+    input.composer.clearError()
     void callStructuredAgentSession<ContinueAnswer>(target, 'agentSession.continueInterrupted', {
       sessionId,
       turnItemId
@@ -84,14 +87,19 @@ export function useNativeChatInterruptedContinuation(input: {
   const continueAvailable = capability !== 'unsupported'
   // One object per change, so the chat's rows re-render only when what they show changes.
   const view = useMemo(() => ({ hostLabel, continueAvailable }), [hostLabel, continueAvailable])
-  const error =
+  const failedHere =
     failedOn !== null && cut?.turnItemId === failedOn
       ? translate(
           'components.native-chat.interruptedContinue.failed',
           "Couldn't continue this chat. Try again, or send a message."
         )
       : null
-  return { view, offeredTurnItemId: offered, error, continueNow }
+  return {
+    view,
+    offeredTurnItemId: offered,
+    composerError: input.composer.error ?? failedHere,
+    continueNow
+  }
 }
 
 export function NativeChatInterruptedContinue({
