@@ -9,6 +9,8 @@ import type { AgentJournalRenderItem, AgentJournalSubmission } from './agent-ses
 import { STALE_SESSION_ROW_PREFIX } from './agent-session-stop-row-identity'
 import { readAgentJournalTurn, readAgentJournalTurnOutcome } from './agent-session-turn-record'
 import { agentTurnVerdict } from './agent-turn-outcome'
+import { structuredAgentSessionCommandTurnItemIds } from './structured-agent-session-command-entry'
+import { isStructuredAgentSessionNonRequestRow } from './structured-agent-session-latest-request'
 
 /** The row a quit or update writes for the turn it cut, keyed by the child the quit stopped, so a
  *  retried stop of that child writes no second row. The prefix is one older clients already read
@@ -34,8 +36,9 @@ export type NativeChatOrcaStopCut = {
 }
 
 /**
- * The latest root turn, when an Orca stop cut it and nothing was sent since: no message after it,
- * and no send still on its way. Null otherwise.
+ * The latest root turn, when an Orca stop cut it and nothing was sent since: no request after it,
+ * and no send still on its way. A steer into that turn or a conversation command asks for nothing
+ * new (`isStructuredAgentSessionNonRequestRow`). Null otherwise.
  */
 export function latestNativeChatOrcaStopCut(
   items: readonly AgentJournalRenderItem[],
@@ -44,10 +47,14 @@ export function latestNativeChatOrcaStopCut(
   if (submissions.some((submission) => submission.dispatchState === 'pending')) {
     return null
   }
+  const commandTurns = structuredAgentSessionCommandTurnItemIds(items)
   let turnIndex = -1
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]!
-    if (!isRootAgentJournalItem(item)) {
+    if (
+      !isRootAgentJournalItem(item) ||
+      isStructuredAgentSessionNonRequestRow(item, commandTurns)
+    ) {
       continue
     }
     if (item.body.kind === 'message' && item.body.role === 'user') {

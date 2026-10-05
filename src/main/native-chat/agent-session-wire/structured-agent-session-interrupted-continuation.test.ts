@@ -184,3 +184,25 @@ it('says in the chat when the agent cannot start after the click was answered', 
     })
   )
 })
+
+it('continues a reply the user had steered before Orca stopped', async () => {
+  const { host, dispatch, store, marker } = await interruptedRestart()
+  const turnItemId = await cutTurn(host)
+  const fence = store.getRecord(SESSION)?.lease.runtimeFence
+  const journal = host.collaboratorsForTests().sessions.get(SESSION)?.journal
+  if (fence === undefined || fence === null || !journal) {
+    throw new Error('the restarted chat has no open journal')
+  }
+  // A steer the cut turn took: the client still offers Continue, so the host must agree.
+  await journal.appendItem(
+    { provider: 'orca', clientMessageId: 'steer' },
+    hostTestMessage('also update the tests'),
+    { fence, turnScope: { kind: 'turn', turnItemId } }
+  )
+
+  const answer = await host.restartResume.continueInterrupted(SESSION, turnItemId)
+
+  expect(answer).toEqual({ sessionId: SESSION, outcome: 'pending' })
+  await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
+  expect(sentTexts(dispatch)).toEqual([restartContinuationMessage(marker!)])
+})

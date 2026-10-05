@@ -102,6 +102,47 @@ describe('the cut Continue answers', () => {
     ).toBeNull()
   })
 
+  it('stays for a steer the cut turn took, which asked for nothing new', () => {
+    const steer: AgentJournalRenderItem = {
+      ...userMessage(4),
+      turnScope: { kind: 'turn', turnItemId: turnId }
+    }
+    expect(
+      latestNativeChatOrcaStopCut([userMessage(1), cutTurn(), stopRow(update), steer], [])
+    ).toEqual({ turnItemId: turnId, cause: 'update' })
+  })
+
+  it('stays across a conversation command run after the cut, and its turn', () => {
+    const command: AgentJournalRenderItem = {
+      ...userMessage(4),
+      body: {
+        kind: 'message',
+        role: 'user',
+        blocks: [{ type: 'text', text: '/context' }],
+        command: { name: 'context' }
+      }
+    }
+    const commandTurn: AgentJournalRenderItem = {
+      itemId: agentJournalItemKey({ provider: 'codex', threadId: 't', turnId: 'cmd', ordinal: 1 }),
+      revision: 1,
+      sequence: 5,
+      observedAt: 7,
+      body: {
+        kind: 'turn',
+        turnId: 'cmd',
+        state: 'completed',
+        outcome: 'success',
+        userItemId: command.itemId
+      }
+    }
+    expect(
+      latestNativeChatOrcaStopCut(
+        [userMessage(1), cutTurn(), stopRow(update), command, commandTurn],
+        []
+      )
+    ).toEqual({ turnItemId: turnId, cause: 'update' })
+  })
+
   it('is gone while a send is on its way', () => {
     expect(
       latestNativeChatOrcaStopCut(
