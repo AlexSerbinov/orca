@@ -6,6 +6,7 @@ import { expect, it, vi } from 'vitest'
 import {
   AGENT_SESSION_RESTART_CONTINUATION_MESSAGE,
   AGENT_SESSION_RESTART_CONTINUATION_NOTE,
+  AGENT_SESSION_RESTART_CONTINUATION_REFUSED_NOTE,
   restartContinuationMessage
 } from '../../../shared/agent-session-restart-continuation'
 import { latestNativeChatOrcaStopCut } from '../../../shared/native-chat-orca-stop-cut'
@@ -141,4 +142,45 @@ it('continues when the restart offer cannot be read', async () => {
   await host.restartResume.continueInterrupted(SESSION, turnItemId)
 
   await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
+})
+
+it('answers once Orca accepted it, while the agent is still starting', async () => {
+  const { host, acquire, dispatch } = await interruptedRestart()
+  const turnItemId = await cutTurn(host)
+  const start = acquire.getMockImplementation()
+  if (!start) {
+    throw new Error('the harness acquire has no implementation')
+  }
+  let finishStarting!: () => void
+  const starting = new Promise<void>((resolve) => {
+    finishStarting = resolve
+  })
+  // An agent start slower than a paired client's wait for the answer.
+  acquire.mockImplementationOnce(async (input) => {
+    await starting
+    return start(input)
+  })
+
+  const answer = await host.restartResume.continueInterrupted(SESSION, turnItemId)
+
+  expect(answer).toEqual({ sessionId: SESSION, outcome: 'pending' })
+  expect(dispatch).not.toHaveBeenCalled()
+  finishStarting()
+  await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
+})
+
+it('says in the chat when the agent cannot start after the click was answered', async () => {
+  const { host, acquire } = await interruptedRestart()
+  const turnItemId = await cutTurn(host)
+  acquire.mockRejectedValueOnce(new Error('the agent could not start'))
+
+  const answer = await host.restartResume.continueInterrupted(SESSION, turnItemId)
+
+  expect(answer).toEqual({ sessionId: SESSION, outcome: 'pending' })
+  await vi.waitFor(async () =>
+    expect(await statusNotes(host)).toContainEqual({
+      text: AGENT_SESSION_RESTART_CONTINUATION_REFUSED_NOTE,
+      tone: 'error'
+    })
+  )
 })

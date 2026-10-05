@@ -62,14 +62,15 @@ export async function continueInterruptedStructuredAgentSessionTurn(
   const continuationId = interruptedContinuationId(sessionId, turnItemId, host.now(), input.nonce)
   try {
     const started = await startStructuredAgentSessionContinuation(
-      continuationDeps(host, stillCut),
+      // As a send answers: a paired client's wait is shorter than an agent's start can be.
+      { ...continuationDeps(host, stillCut), answerAtAcceptance: true },
       sessionId,
       input.offer ?? {},
       continuationId
     )
     if ('verdict' in started) {
-      // Handed to its agent: the provider's answer can take a whole turn, and the chat's own note
-      // reports it, so the click is answered now.
+      // Accepted: the agent's start and answer can take a whole turn, and the chat's own note
+      // reports a failure, so the click is answered now.
       void started.verdict().catch(() => {
         host.logger.warn('settling an interrupted-turn continuation failed', {
           scope: 'interrupted-continuation',
