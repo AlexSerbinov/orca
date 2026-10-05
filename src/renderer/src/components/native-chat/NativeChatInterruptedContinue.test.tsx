@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const hostLabel = (): string | null => 'studio-mac'
-  return { call: vi.fn(), supported: true, hostLabel: hostLabel() }
+  const capability = (): 'unknown' | 'supported' | 'unsupported' => 'supported'
+  const resuming: readonly string[] = []
+  return { call: vi.fn(), capability: capability(), hostLabel: hostLabel(), resuming }
 })
 
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
@@ -13,7 +15,10 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: mocks.call
 }))
 vi.mock('@/runtime/structured-agent-session-host-capability', () => ({
-  useStructuredAgentSessionHostCapability: () => mocks.supported
+  useStructuredAgentSessionHostCapabilityState: () => mocks.capability
+}))
+vi.mock('../native-chat-resume-on-restart-store', () => ({
+  useNativeChatRestartResuming: () => mocks.resuming
 }))
 vi.mock('./use-structured-agent-session-host-label', () => ({
   useStructuredAgentSessionHostLabel: () => mocks.hostLabel
@@ -70,7 +75,8 @@ function Harness(props: Props): React.JSX.Element {
   })
   return (
     <TooltipProvider delayDuration={0}>
-      <span data-testid="offered">{continuation.view.continueTurnItemId ?? 'none'}</span>
+      <span data-testid="offered">{continuation.offeredTurnItemId ?? 'none'}</span>
+      <span data-testid="available">{String(continuation.view.continueAvailable)}</span>
       <NativeChatInterruptedContinue continuation={continuation} />
     </TooltipProvider>
   )
@@ -79,7 +85,8 @@ function Harness(props: Props): React.JSX.Element {
 const continueButton = () => screen.queryByRole('button', { name: 'Continue' })
 
 beforeEach(() => {
-  mocks.supported = true
+  mocks.capability = 'supported'
+  mocks.resuming = []
   mocks.hostLabel = 'studio-mac'
   mocks.call.mockReset()
 })
@@ -111,7 +118,29 @@ describe('Continue on a reply an Orca stop cut off', () => {
   })
 
   it('is not offered by a host without the operation; the user continues by sending', () => {
-    mocks.supported = false
+    mocks.capability = 'unsupported'
+    render(<Harness />)
+    expect(continueButton()).toBeNull()
+    expect(screen.getByTestId('available')).toHaveTextContent('false')
+  })
+
+  it('tells the rows the same thing before the host answers, after it answers, and after a click', () => {
+    mocks.capability = 'unknown'
+    mocks.call.mockResolvedValue({ outcome: 'pending' })
+    const { rerender } = render(<Harness />)
+    expect(screen.getByTestId('available')).toHaveTextContent('true')
+    expect(continueButton()).toBeNull()
+
+    mocks.capability = 'supported'
+    rerender(<Harness />)
+    expect(screen.getByTestId('available')).toHaveTextContent('true')
+    fireEvent.click(continueButton()!)
+
+    expect(screen.getByTestId('available')).toHaveTextContent('true')
+  })
+
+  it('is not offered while the restart prompt or the launch is resuming this chat', () => {
+    mocks.resuming = ['session-1']
     render(<Harness />)
     expect(continueButton()).toBeNull()
   })

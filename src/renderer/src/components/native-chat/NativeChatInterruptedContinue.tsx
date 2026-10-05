@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
-import { useStructuredAgentSessionHostCapability } from '@/runtime/structured-agent-session-host-capability'
+import { useStructuredAgentSessionHostCapabilityState } from '@/runtime/structured-agent-session-host-capability'
 import type { RuntimeClientTarget } from '@/runtime/runtime-client-target'
 import type {
   AgentJournalRenderItem,
@@ -14,12 +14,15 @@ import { latestNativeChatOrcaStopCut } from '../../../../shared/native-chat-orca
 import { AGENT_SESSION_CONTINUE_INTERRUPTED_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import type { NativeChatOrcaStopView } from './native-chat-orca-stop-context'
 import { useStructuredAgentSessionHostLabel } from './use-structured-agent-session-host-label'
+import { useNativeChatRestartResuming } from '../native-chat-resume-on-restart-store'
 
 type ContinueAnswer = { outcome?: string }
 
 export type NativeChatInterruptedContinuation = {
-  /** What the chat's rows are told: the machine's name and the cut Continue is offered on. */
+  /** What the chat's rows are told: the machine's name and whether its host can continue a cut. */
   view: NativeChatOrcaStopView
+  /** The cut turn Continue is offered on right now, if any. */
+  offeredTurnItemId: string | null
   continueNow: () => void
 }
 
@@ -38,10 +41,12 @@ export function useNativeChatInterruptedContinuation(input: {
 }): NativeChatInterruptedContinuation {
   const { target, sessionId, onError } = input
   const hostLabel = useStructuredAgentSessionHostLabel(target)
-  const supported = useStructuredAgentSessionHostCapability(
+  const capability = useStructuredAgentSessionHostCapabilityState(
     target,
     AGENT_SESSION_CONTINUE_INTERRUPTED_RUNTIME_CAPABILITY
   )
+  // The restart prompt or the launch's own resume is already carrying this chat on.
+  const resuming = useNativeChatRestartResuming().includes(sessionId)
   const cut = useMemo(
     () => latestNativeChatOrcaStopCut(input.journalItems, input.submissions),
     [input.journalItems, input.submissions]
@@ -49,7 +54,9 @@ export function useNativeChatInterruptedContinuation(input: {
   // The cut this client already asked to continue: hidden until the journal shows what came of it.
   const [asked, setAsked] = useState<string | null>(null)
   const offered =
-    supported && cut && !input.isWorking && asked !== cut.turnItemId ? cut.turnItemId : null
+    capability === 'supported' && cut && !input.isWorking && !resuming && asked !== cut.turnItemId
+      ? cut.turnItemId
+      : null
   const continueNow = (): void => {
     if (offered === null) {
       return
@@ -75,9 +82,11 @@ export function useNativeChatInterruptedContinuation(input: {
       }
     )
   }
+  // Unknown counts as able: a host that writes cause rows has Continue, and the words stay put.
+  const continueAvailable = capability !== 'unsupported'
   // One object per change, so the chat's rows re-render only when what they show changes.
-  const view = useMemo(() => ({ hostLabel, continueTurnItemId: offered }), [hostLabel, offered])
-  return { view, continueNow }
+  const view = useMemo(() => ({ hostLabel, continueAvailable }), [hostLabel, continueAvailable])
+  return { view, offeredTurnItemId: offered, continueNow }
 }
 
 export function NativeChatInterruptedContinue({
@@ -86,7 +95,7 @@ export function NativeChatInterruptedContinue({
   continuation: NativeChatInterruptedContinuation
 }): React.JSX.Element | null {
   const explanationId = useId()
-  if (continuation.view.continueTurnItemId === null) {
+  if (continuation.offeredTurnItemId === null) {
     return null
   }
   const explanation = translate(

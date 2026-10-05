@@ -26,14 +26,14 @@ const STOPPED: Record<AgentSessionOrcaStopCause, (machine: string) => string> = 
     )
 }
 
-/** The row's sentence. While Continue is offered beside it, the button is the way on, so the row
- *  does not say it again. */
+/** The row's sentence. Where the host can continue a cut, Continue is the way on, so the row does
+ *  not say it again; decided by the host, not the button, so the words never change on screen. */
 export function nativeChatOrcaStopRowText(
   cause: AgentSessionOrcaStopCause,
   machine: string,
-  options: { continueOffered: boolean }
+  options: { continueAvailable: boolean }
 ): string {
-  return options.continueOffered
+  return options.continueAvailable
     ? STOPPED[cause](machine)
     : joinSentences([
         STOPPED[cause](machine),

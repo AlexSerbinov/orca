@@ -14,15 +14,15 @@ afterEach(cleanup)
 
 function orcaStopView(
   hostLabel: string | null,
-  continueTurnItemId: string | null
+  continueAvailable: boolean
 ): NativeChatOrcaStopView {
-  return { hostLabel, continueTurnItemId }
+  return { hostLabel, continueAvailable }
 }
 
 function renderStatus(
   body: AgentJournalStatusItem,
   hostLabel: string | null = null,
-  continueTurnItemId: string | null = null
+  continueAvailable = false
 ) {
   const [message] = projectStructuredItemsToNativeChat([
     {
@@ -34,7 +34,7 @@ function renderStatus(
       turnScope: { kind: 'turn', turnItemId: 'cut-turn' }
     }
   ])
-  const view = orcaStopView(hostLabel, continueTurnItemId)
+  const view = orcaStopView(hostLabel, continueAvailable)
   return render(
     <NativeChatOrcaStopContext.Provider value={view}>
       <MessageRow message={message!} expandSignal={false} onScrollMessageToTop={vi.fn()} />
@@ -66,8 +66,8 @@ describe('the row an Orca stop leaves', () => {
     expect(screen.queryByText(LEGACY_TEXT)).toBeNull()
   })
 
-  it('leaves the way on to Continue while Continue is offered on its turn', () => {
-    renderStatus(orcaStopRow('update'), 'studio-mac', 'cut-turn')
+  it('leaves the way on to Continue wherever its host can continue a cut', () => {
+    renderStatus(orcaStopRow('update'), 'studio-mac', true)
     expect(
       screen.getByText(
         'Orca on studio-mac restarted for an update while this response was in progress.'
