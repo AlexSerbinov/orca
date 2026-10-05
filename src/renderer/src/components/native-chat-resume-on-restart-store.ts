@@ -4,30 +4,24 @@ import {
   supportsStructuredAgentSessionPairedRestartOffers
 } from '@/runtime/structured-agent-session-client'
 import type { RuntimeClientTarget } from '@/runtime/runtime-client-target'
-import {
-  announceRestartDismissNeedsUpdate,
-  announceRestartDismissUnconfirmed,
-  announceRestartResults,
-  announceRestartUnconfirmed,
-  type RestartContinuationOutcome
-} from './native-chat-restart-action-notifications'
 import type { ResumeCandidate, ResumeFailure } from './native-chat-resume-on-restart-grouping'
 import {
   failedFrom,
   hostCannotOffer,
   type HostOfferPayload
 } from './native-chat-restart-offer-payload'
-import {
-  consumeNativeChatResumeOnRestartDialogRequest,
-  requestNativeChatResumeOnRestartDialog
-} from './native-chat-resume-on-restart-dialog'
+import { consumeNativeChatResumeOnRestartDialogRequest } from './native-chat-resume-on-restart-dialog'
 import {
   projectRestartMachineRows,
   restartMachineKey,
   restartMachineTarget,
   type RestartMachineKey
 } from './native-chat-restart-machines'
-import { restartMachineName } from './native-chat-restart-machine-name'
+import {
+  currentRestartMachineFence,
+  restartMachineCallFence,
+  type RestartMachineFence
+} from './native-chat-restart-machine-fence'
 import {
   releaseOfferedChatWatches,
   syncOfferedChatWatch
@@ -49,6 +43,8 @@ export type NativeChatRestartMachineOffer = Readonly<{
   candidates: readonly ResumeCandidate[]
   /** Acted-on offers whose agent did not carry on, as the host still records them. */
   failed: readonly ResumeFailure[]
+  /** The pairing and runtime this answer came from; every action on it is sent with it. */
+  fence: RestartMachineFence
   /** Stamped when the list arrived. Row ages read against this rather than a render-time
    *  `Date.now()`, so they stay stable across re-renders and the render stays pure. */
   listedAt: number
@@ -101,26 +97,28 @@ function publish(machine: RestartMachineKey, next: NativeChatRestartMachineOffer
   offers = updated.size === 0 ? NO_OFFERS : updated
   syncOfferedChatWatch(machine, offers.get(machine), refreshAfterOfferedChatActivity)
   emit()
+  // With nothing left on any machine, an open request for the dialog has nothing to show.
+  if (offers.size === 0) {
+    consumeNativeChatResumeOnRestartDialogRequest()
+  }
 }
 
-/** A confirmed host answer. Once no machine has anything left, any open request for the dialog is
- *  retired too: it has nothing to show. */
-function publishAnswer(
+/** A confirmed host answer for one machine. */
+export function publishNativeChatRestartAnswer(
   target: RuntimeClientTarget,
   candidates: readonly ResumeCandidate[],
-  failed: readonly ResumeFailure[]
+  failed: readonly ResumeFailure[],
+  fence: RestartMachineFence
 ): void {
   const machine = restartMachineKey(target)
   publish(machine, {
     machine,
     target,
+    fence,
     candidates: projectRestartMachineRows(target, candidates),
     failed: projectRestartMachineRows(target, failed),
     listedAt: Date.now()
   })
-  if (offers.size === 0) {
-    consumeNativeChatResumeOnRestartDialogRequest()
-  }
 }
 
 function syncResuming(): void {
@@ -185,18 +183,24 @@ export async function readNativeChatRestartMachine(
   const sequence = (readsIssued.get(machine) ?? 0) + 1
   readsIssued.set(machine, sequence)
   const latest = (): boolean => readsIssued.get(machine) === sequence && current()
+  const fence = currentRestartMachineFence(target)
+  const callFence = restartMachineCallFence(target, fence)
   try {
-    const offered = await callStructuredAgentSession<HostOfferPayload>(
-      target,
-      'agentSession.restartResumable'
-    )
+    const offered = await (callFence
+      ? callStructuredAgentSession<HostOfferPayload>(
+          target,
+          'agentSession.restartResumable',
+          undefined,
+          callFence
+        )
+      : callStructuredAgentSession<HostOfferPayload>(target, 'agentSession.restartResumable'))
     if (!Array.isArray(offered.sessions)) {
       throw new Error('agent_session_restart_offer_invalid')
     }
     const candidates: ResumeCandidate[] = offered.sessions
     const failed = failedFrom(offered)
     if (latest()) {
-      publishAnswer(target, candidates, failed)
+      publishNativeChatRestartAnswer(target, candidates, failed, fence)
     }
     return {
       kind: 'answered',
@@ -233,124 +237,24 @@ export function forgetNativeChatRestartMachine(machine: RestartMachineKey): void
   }
 }
 
-function failureToastActions(machine: RestartMachineKey) {
-  return {
-    show: () => requestNativeChatResumeOnRestartDialog(machine),
-    dismiss: (sessionIds: readonly string[]) => {
-      void dismissNativeChatRestartOffer(machine, [...sessionIds])
-    }
-  }
-}
-
-function beginAction(machine: RestartMachineKey): void {
-  actionsBegun.set(machine, (actionsBegun.get(machine) ?? 0) + 1)
-}
-
-function settleAction(machine: RestartMachineKey): void {
-  actionsSettled.set(machine, (actionsSettled.get(machine) ?? 0) + 1)
-}
-
-/**
- * Reattach the named chats on one machine, ask each agent to carry on, then replace that machine's
- * offer with its host's authoritative remaining list.
- *
- * `sessionIds` always names the chats: an action never continues one this side did not choose,
- * which on a shared server could be another device's. `reported` is what the toasts count.
- *
- * Never rejects. The payload is unvalidated, and a shape this side did not expect is reported as
- * an unconfirmed delivery — the message may well have gone out.
- */
-export async function continueNativeChatRestartOffer(
+/** Bookkeeping for an action (continue or dismiss) on one machine: a re-read racing it is dropped,
+ *  and a resume's chats show as in flight until the host answers. Used by the action module. */
+export function beginNativeChatRestartAction(
   machine: RestartMachineKey,
-  sessionIds: readonly string[],
-  reported: readonly string[] = sessionIds
-): Promise<void> {
-  if (sessionIds.length === 0) {
-    return
-  }
-  const target = restartMachineTarget(machine)
-  const machineName = target.kind === 'local' ? undefined : restartMachineName(machine)
-  beginAction(machine)
-  const batch = { machine, sessionIds: [...reported] }
-  resumeBatches.add(batch)
-  syncResuming()
-  try {
-    const result = await callStructuredAgentSession<
-      HostOfferPayload & {
-        /** Which chats the host reattached. */
-        resumed?: { sessionId: string }[]
-        continued: RestartContinuationOutcome[]
-      }
-    >(target, 'agentSession.restartContinue', { sessionIds: [...sessionIds] })
-    const failed = projectRestartMachineRows(target, failedFrom(result))
-    announceRestartResults(
-      reported,
-      result.continued,
-      Array.isArray(result.failed) ? failed : undefined,
-      failureToastActions(machine),
-      machineName
-    )
-    if (Array.isArray(result.sessions)) {
-      publishAnswer(target, result.sessions, failedFrom(result))
-    } else {
-      await readNativeChatRestartMachine(target)
-    }
-  } catch {
-    await readNativeChatRestartMachine(target)
-    announceRestartUnconfirmed(reported.length)
-  } finally {
-    settleAction(machine)
-    resumeBatches.delete(batch)
+  resumingIds?: readonly string[]
+): () => void {
+  actionsBegun.set(machine, (actionsBegun.get(machine) ?? 0) + 1)
+  const batch = resumingIds ? { machine, sessionIds: [...resumingIds] } : null
+  if (batch) {
+    resumeBatches.add(batch)
     syncResuming()
   }
-}
-
-/**
- * Turning offers down for good, which explicitly deletes the durable records.
- *
- * This computer may dismiss everything it listed by naming nothing. A paired server is always told
- * which chats: unnamed, its dismissal would delete every device's offers there. A server too old to
- * take names is sent nothing at all, and says so.
- *
- * A failed write or unreachable host leaves the durable record untouched; a later read can restore
- * the offer after the host is available again.
- */
-export async function dismissNativeChatRestartOffer(
-  machine: RestartMachineKey,
-  sessionIds?: readonly string[]
-): Promise<void> {
-  const target = restartMachineTarget(machine)
-  if (target.kind === 'environment') {
-    const listed = offers.get(machine)
-    const named =
-      sessionIds ??
-      [...(listed?.candidates ?? []), ...(listed?.failed ?? [])].map((row) => row.sessionId)
-    if (named.length === 0) {
-      return
+  return () => {
+    actionsSettled.set(machine, (actionsSettled.get(machine) ?? 0) + 1)
+    if (batch) {
+      resumeBatches.delete(batch)
+      syncResuming()
     }
-    if (!(await supportsStructuredAgentSessionPairedRestartOffers(target))) {
-      announceRestartDismissNeedsUpdate(restartMachineName(machine))
-      return
-    }
-    sessionIds = named
-  }
-  beginAction(machine)
-  try {
-    const result = await callStructuredAgentSession<HostOfferPayload>(
-      target,
-      'agentSession.restartResumableDismiss',
-      sessionIds ? { sessionIds: [...sessionIds] } : {}
-    )
-    if (Array.isArray(result.sessions)) {
-      publishAnswer(target, result.sessions, failedFrom(result))
-    } else {
-      await readNativeChatRestartMachine(target)
-    }
-  } catch {
-    await readNativeChatRestartMachine(target)
-    announceRestartDismissUnconfirmed()
-  } finally {
-    settleAction(machine)
   }
 }
 

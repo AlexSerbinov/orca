@@ -28,18 +28,15 @@ function focusOf(machines: readonly RestartMachineKey[]): RestartMachineKey | nu
   return machines.length === 1 ? machines[0]! : null
 }
 
-/** Re-reads every listed machine before opening so the dialog always reflects the current durable
- *  records. Opening the chat itself is read-only and does not retire the offer. */
-async function reopenOffer(machines: readonly RestartMachineKey[]): Promise<void> {
+/** Opens at once on the last confirmed offers, then re-reads each listed machine on its own, so an
+ *  unreachable machine never holds the dialog back. A machine whose host now lists nothing drops
+ *  out of the open dialog; the dialog closes once none is left. Opening the chat itself is
+ *  read-only and does not retire the offer. */
+function reopenOffer(machines: readonly RestartMachineKey[]): void {
+  requestNativeChatResumeOnRestartDialog(focusOf(machines))
   // Mid-resume the host's answer is already on its way; a re-read racing it could undo it.
-  if (getNativeChatRestartResuming().size > 0) {
-    requestNativeChatResumeOnRestartDialog(focusOf(machines))
-    return
-  }
-  const offers = await refreshNativeChatRestartOffers(machines)
-  const listed = machines.filter((machine) => offers.has(machine))
-  if (listed.length > 0) {
-    requestNativeChatResumeOnRestartDialog(focusOf(listed))
+  if (getNativeChatRestartResuming().size === 0) {
+    void refreshNativeChatRestartOffers(machines)
   }
 }
 
@@ -65,7 +62,7 @@ function Segment({
       <TooltipTrigger asChild>
         <button
           type="button"
-          onClick={() => void reopenOffer(machines)}
+          onClick={() => reopenOffer(machines)}
           className="inline-flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 hover:bg-accent/70"
           aria-label={ariaLabel}
         >

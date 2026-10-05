@@ -29,6 +29,7 @@ export function verifiedConnection(args: {
   pairedDeviceId?: string
   hostContactEpoch?: number
   priorRuntimeId?: string | null
+  pairingRevision?: number
 }): RuntimeEnvironmentStatus {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the offer triggers read only runtimeId and pairedDeviceId from a status; the rest of RuntimeStatus is irrelevant here.
   const status = {
@@ -41,7 +42,7 @@ export function verifiedConnection(args: {
     hostContactEpoch: args.hostContactEpoch ?? 0,
     snapshot: {
       environmentId: args.environmentId,
-      pairingRevision: 1,
+      pairingRevision: args.pairingRevision ?? 1,
       sequence: 1,
       checkedAt: 1,
       status,

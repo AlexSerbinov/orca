@@ -103,10 +103,18 @@ const STRUCTURED_AGENT_SESSION_METHOD_TIMEOUT_MS: ReadonlyMap<string, number> = 
   ['agentSession.modelCatalog', 90_000]
 ])
 
+/** The pairing and runtime a caller's state was read under; a host that changed since refuses the
+ *  call before it runs (`runtime_environment_changed`) instead of acting on stale state. */
+export type StructuredAgentSessionCallFence = {
+  expectedEnvironmentPairingRevision?: number
+  expectedEnvironmentRuntimeId?: string
+}
+
 export async function callStructuredAgentSession<TResult>(
   target: RuntimeClientTarget,
   method: string,
-  params?: unknown
+  params?: unknown,
+  fence?: StructuredAgentSessionCallFence
 ): Promise<TResult> {
   if (
     method === 'agentSession.rewind' &&
@@ -119,9 +127,12 @@ export async function callStructuredAgentSession<TResult>(
     throw new Error('Rewinding requires a newer Orca server. Update the server and try again.')
   }
   const timeoutMs = STRUCTURED_AGENT_SESSION_METHOD_TIMEOUT_MS.get(method)
-  return timeoutMs === undefined
+  return timeoutMs === undefined && fence === undefined
     ? callRuntimeRpc<TResult>(target, method, params)
-    : callRuntimeRpc<TResult>(target, method, params, { timeoutMs })
+    : callRuntimeRpc<TResult>(target, method, params, {
+        ...(timeoutMs === undefined ? {} : { timeoutMs }),
+        ...fence
+      })
 }
 
 async function subscribeStructuredAgentSessionMethod<TEvent>(

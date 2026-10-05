@@ -25,7 +25,9 @@ import {
 } from './native-chat-resume-on-restart-dialog'
 import {
   continueNativeChatRestartOffer,
-  dismissNativeChatRestartOffer,
+  dismissNativeChatRestartOffer
+} from './native-chat-restart-offer-actions'
+import {
   useNativeChatRestartOffers,
   useNativeChatRestartResuming,
   type NativeChatRestartMachineOffer
@@ -40,6 +42,7 @@ import {
 } from './native-chat-resume-ownership'
 import {
   chosenResumeRows,
+  restartListingIdentity,
   resumeRowKey,
   resumeRowSelectedByDefault,
   selectableResumeRows,
@@ -131,6 +134,7 @@ function useMachineViews(
       )
       return {
         machine: offer.machine,
+        identity: restartListingIdentity(offer.machine, offer.fence.pairingRevision),
         offer,
         name: facts?.name ?? offer.machine,
         rows,
@@ -178,8 +182,8 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
   )
   const chosenCount = chosen.reduce((total, entry) => total + entry.ids.length, 0)
 
-  const toggle = useCallback((machine: RestartMachineKey, sessionId: string, checked: boolean) => {
-    setOverrides((current) => new Map(current).set(resumeRowKey(machine, sessionId), checked))
+  const toggle = useCallback((identity: string, sessionId: string, checked: boolean) => {
+    setOverrides((current) => new Map(current).set(resumeRowKey(identity, sessionId), checked))
   }, [])
 
   /** Applied on whichever action the user takes, so the box means the same thing every way out. */
@@ -238,8 +242,12 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
       structuredSession: {
         workspaceId: failure.workspaceId,
         sessionId,
-        // The machine that listed it, never re-derived from whichever workspace shares its id.
-        executionHostId: failure.executionHostId
+        // The machine that listed it and the pairing it listed under, never re-derived from
+        // whichever workspace shares its id.
+        executionHostId: failure.executionHostId,
+        ...(machine.offer.fence.pairingRevision === undefined
+          ? {}
+          : { pairingRevision: machine.offer.fence.pairingRevision })
       }
     })
   }
@@ -318,7 +326,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
               listedAt={machines[0]!.offer.listedAt}
               busy={busy}
               selected={tickedFor(machines[0]!)}
-              onToggle={(sessionId, checked) => toggle(machines[0]!.machine, sessionId, checked)}
+              onToggle={(sessionId, checked) => toggle(machines[0]!.identity, sessionId, checked)}
               failureFor={machines[0]!.failureFor}
               onFailureAction={(action, sessionId) =>
                 void actOnFailure(machines[0]!, action, sessionId)
@@ -343,24 +351,24 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
                   )
                 return (
                   <ResumeMachineSection
-                    key={machine.machine}
+                    key={machine.identity}
                     offer={machine.offer}
                     name={machine.name}
-                    expanded={expandedOverrides.get(machine.machine) ?? expandedByDefault}
+                    expanded={expandedOverrides.get(machine.identity) ?? expandedByDefault}
                     onExpandedChange={(expanded) =>
                       setExpandedOverrides((current) =>
-                        new Map(current).set(machine.machine, expanded)
+                        new Map(current).set(machine.identity, expanded)
                       )
                     }
                     selected={ticked}
                     selectable={selectable}
                     busy={busy}
-                    onToggle={(sessionId, checked) => toggle(machine.machine, sessionId, checked)}
+                    onToggle={(sessionId, checked) => toggle(machine.identity, sessionId, checked)}
                     onToggleAll={(checked) =>
                       setOverrides((current) => {
                         const next = new Map(current)
                         for (const sessionId of selectable) {
-                          next.set(resumeRowKey(machine.machine, sessionId), checked)
+                          next.set(resumeRowKey(machine.identity, sessionId), checked)
                         }
                         return next
                       })

@@ -10,10 +10,13 @@ import {
   getNativeChatResumeOnRestartDialogRequest
 } from './native-chat-resume-on-restart-dialog'
 import {
-  dismissNativeChatRestartOffer,
   getNativeChatRestartOffers,
   readNativeChatRestartMachine
 } from './native-chat-resume-on-restart-store'
+import {
+  continueNativeChatRestartOffer,
+  dismissNativeChatRestartOffer
+} from './native-chat-restart-offer-actions'
 import {
   _resetNativeChatRestartOffer,
   readPairedMachineOnConnection,
@@ -22,6 +25,7 @@ import {
 import { renderHook } from '@testing-library/react'
 import type { Worktree } from '../../../shared/worktree/types'
 import { makeWorktree } from '../store/slices/store-test-helpers'
+import { replaceRuntimeEnvironmentRevisions } from '@/runtime/runtime-environment-revision'
 import {
   AUTOMATION_PROVENANCE,
   pairedEnvironment,
@@ -72,7 +76,10 @@ function stageServer(status: {
   runtimeId: string
   epoch?: number
   priorRuntimeId?: string | null
+  pairingRevision?: number
 }) {
+  const pairingRevision = status.pairingRevision ?? 1
+  replaceRuntimeEnvironmentRevisions([{ id: SERVER, createdAt: 1, pairingRevision }])
   useAppStore.setState({
     runtimeEnvironments: [pairedEnvironment(SERVER, 'studio-mac', MY_DEVICE)],
     runtimeStatusByEnvironmentId: new Map([
@@ -83,7 +90,8 @@ function stageServer(status: {
           runtimeId: status.runtimeId,
           pairedDeviceId: MY_DEVICE,
           hostContactEpoch: status.epoch,
-          priorRuntimeId: status.priorRuntimeId
+          priorRuntimeId: status.priorRuntimeId,
+          pairingRevision
         })
       ]
     ])
@@ -276,14 +284,83 @@ it('names every chat when dismissing on a server, and sends nothing to a server 
   expect(mocks.rpc.mock.calls.map(([, method]) => method)).not.toContain(
     'agentSession.restartResumableDismiss'
   )
-  expect(toast).toHaveBeenCalledWith('Update Orca on studio-mac to dismiss its chats from here.')
   mocks.supported.mockResolvedValue(true)
   mocks.rpc.mockResolvedValue({ dismissed: 2, sessions: [], failed: [] })
   await dismissNativeChatRestartOffer(MACHINE)
   expect(mocks.rpc.mock.calls.at(-1)?.slice(1)).toEqual([
     'agentSession.restartResumableDismiss',
-    { sessionIds: ['a', 'b'] }
+    { sessionIds: ['a', 'b'] },
+    { expectedEnvironmentPairingRevision: 1, expectedEnvironmentRuntimeId: 'r2' }
   ])
+})
+
+it('acts under the pairing and runtime the offer was listed from, not the ones current at the click', async () => {
+  stageServer({ runtimeId: 'r2' })
+  await readPairedMachineOnConnection(SERVER, true)
+  const options = vi.mocked(toast).mock.calls[0]?.[1]
+  // The server restarts (same pairing) before the click: the listing still names r2.
+  stageServer({ runtimeId: 'r3' })
+  press(options?.action)
+  await settle()
+  const sent = mocks.rpc.mock.calls.find(([, method]) => method === 'agentSession.restartContinue')
+  expect(sent?.[3]).toEqual({
+    expectedEnvironmentPairingRevision: 1,
+    expectedEnvironmentRuntimeId: 'r2'
+  })
+})
+
+it('says nothing was unconfirmed when the server refused a stale action before running it', async () => {
+  stageServer({ runtimeId: 'r2' })
+  await readPairedMachineOnConnection(SERVER, false)
+  mocks.rpc.mockImplementation(async (_target, method) => {
+    if (method === 'agentSession.restartContinue') {
+      throw Object.assign(new Error('runtime_environment_changed'), {
+        code: 'runtime_environment_changed'
+      })
+    }
+    return { sessions: [row('a', 'mine')] }
+  })
+  await continueNativeChatRestartOffer(MACHINE, ['a'])
+  expect(vi.mocked(toast).mock.calls.map(([title]) => String(title))).not.toContainEqual(
+    expect.stringContaining('unconfirmed')
+  )
+})
+
+it('retires the old pairing’s offers and toast on a re-pair, even with the same runtime id', async () => {
+  stageServer({ runtimeId: 'r2', priorRuntimeId: 'r1' })
+  renderHook(() => useNativeChatRestartOfferSources(false))
+  await vi.waitFor(() => expect(toast).toHaveBeenCalledTimes(1))
+  const options = vi.mocked(toast).mock.calls[0]?.[1]
+  mocks.rpc.mockImplementation(async (_target, method) =>
+    method === 'agentSession.restartResumable' ? { sessions: [], failed: [] } : {}
+  )
+  stageServer({ runtimeId: 'r2', priorRuntimeId: 'r1', pairingRevision: 2 })
+  await vi.waitFor(() => expect(getNativeChatRestartOffers().has(MACHINE)).toBe(false))
+  press(options?.action)
+  press(options?.cancel)
+  await settle()
+  expect(continueCalls()).toEqual([])
+  expect(getNativeChatResumeOnRestartDialogRequest()).toBeNull()
+  // A new pairing is not proof of the same server restarting: no toast for it.
+  expect(toast).toHaveBeenCalledTimes(1)
+})
+
+it('keeps the restart toast owed through a failed read and pays it on the next good one', async () => {
+  stageServer({ runtimeId: 'r2' })
+  mocks.rpc.mockRejectedValueOnce(new Error('connection lost'))
+  await readPairedMachineOnConnection(SERVER, true)
+  expect(toast).not.toHaveBeenCalled()
+  // The same runtime back after lost contact: no new restart, but the debt is still owed.
+  await readPairedMachineOnConnection(SERVER, false)
+  expect(toast).toHaveBeenCalledTimes(1)
+})
+
+it('retires an owed toast when the server answers that nothing is left', async () => {
+  stageServer({ runtimeId: 'r2' })
+  mocks.rpc.mockResolvedValueOnce({ sessions: [], failed: [] })
+  await readPairedMachineOnConnection(SERVER, true)
+  await readPairedMachineOnConnection(SERVER, false)
+  expect(toast).not.toHaveBeenCalled()
 })
 
 it('reads a server on each verified connection and compares against the id from before this run', async () => {

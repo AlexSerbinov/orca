@@ -158,18 +158,6 @@ export function announceRestartDismissUnconfirmed(): void {
   )
 }
 
-/** A paired server too old to dismiss by name. Nothing was sent: its only dismissal would also
- *  delete other devices' offers. */
-export function announceRestartDismissNeedsUpdate(machineName: string): void {
-  toast(
-    translate(
-      'auto.components.NativeChatResumeOnRestartModal.dismissNeedsUpdate',
-      'Update Orca on {{value0}} to dismiss its chats from here.',
-      { value0: machineName }
-    )
-  )
-}
-
 /** Which of the requested chats the host did not carry on: refused, unconfirmed, or — since
  *  eligibility can change after listing — omitted from the answer altogether. */
 export function restartChatsNotContinued(

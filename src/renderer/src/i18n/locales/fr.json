@@ -17436,7 +17436,6 @@
         "machinesBody": "Ces discussions étaient en cours quand Orca s'est fermé ou a installé une mise à jour sur leur machine. Les reprendre restaure chacune là où elle s'est arrêtée, avec tout son contexte, et demande à l'agent de vérifier ce qu'il faisait avant de continuer. Votre propre prompt n'est pas renvoyé.",
         "continuedOneOnMachine": "1 discussion reprise sur {{value0}}, avec la demande de continuer",
         "continuedManyOnMachine": "{{value0}} discussions reprises sur {{value1}}, avec la demande de continuer",
-        "dismissNeedsUpdate": "Mettez à jour Orca sur {{value0}} pour ignorer ses discussions d'ici.",
         "reconnectUpdateTitle": "{{value0}} a redémarré pour une mise à jour",
         "reconnectQuitTitle": "Orca sur {{value0}} a été redémarré",
         "reconnectBodyOne": "1 de vos discussions là-bas a été interrompue en pleine réponse. Elle indique où elle s'est arrêtée, et rien n'a été perdu.",

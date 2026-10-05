@@ -12,9 +12,9 @@ import {
   type RestartMachineKey
 } from './native-chat-restart-machines'
 import { restartMachineName } from './native-chat-restart-machine-name'
+import { continueNativeChatRestartOffer } from './native-chat-restart-offer-actions'
 import {
   _resetNativeChatRestartOfferState,
-  continueNativeChatRestartOffer,
   forgetNativeChatRestartMachine,
   getNativeChatRestartOffers,
   readNativeChatRestartMachine,
@@ -26,6 +26,7 @@ import {
 } from './native-chat-resume-ownership'
 import { requestLaunchResumePrompt } from './native-chat-resume-on-restart-launch-prompt'
 import { requestNativeChatResumeOnRestartDialog } from './native-chat-resume-on-restart-dialog'
+import { sameRestartMachineFence } from './native-chat-restart-machine-fence'
 import { announceReconnectRestartOffer } from './native-chat-restart-reconnect-toast'
 
 /**
@@ -47,6 +48,9 @@ let launch: Promise<void> | undefined
 const attempted = new Set<string>()
 /** Interruptions a reconnect toast already named, this app run. */
 const announced = new Set<string>()
+/** Servers seen restarting whose offer has not been read successfully since: a failed read keeps
+ *  the debt, a successful one (or a new pairing) settles it. */
+const owedAnnouncement = new Set<string>()
 
 function interruptionKey(machine: RestartMachineKey, candidate: ResumeCandidate): string {
   return `${machine}\u0000${candidate.sessionId}\u0000${candidate.recordedAt}`
@@ -156,18 +160,31 @@ export async function readPairedMachineOnConnection(
 ): Promise<void> {
   const target: RuntimeClientTarget = { kind: 'environment', environmentId }
   const machine = restartMachineKey(target)
+  if (incarnationChanged) {
+    owedAnnouncement.add(environmentId)
+  }
   const read = await readNativeChatRestartMachine(target)
-  if (read.kind !== 'answered' || read.candidates.length === 0) {
+  if (read.kind === 'unavailable') {
+    return
+  }
+  if (read.kind === 'unsupported' || read.candidates.length === 0) {
+    owedAnnouncement.delete(environmentId)
     return
   }
   await waitForOwnership(target, read.candidates)
   const own = ownCandidates(target, read.candidates)
+  const owed = owedAnnouncement.delete(environmentId)
   if (autoResumeEnabled()) {
     await autoResume(machine, own)
     return
   }
   // Without a restart this desktop can name, the status bar alone carries the offer.
-  if (!incarnationChanged) {
+  if (!owed) {
+    return
+  }
+  // The listing the toast names; its buttons act only while the server still answers under it.
+  const fence = getNativeChatRestartOffers().get(machine)?.fence
+  if (!fence) {
     return
   }
   const fresh = own.filter((candidate) => !announced.has(interruptionKey(machine, candidate)))
@@ -178,12 +195,19 @@ export async function readPairedMachineOnConnection(
     machine,
     machineName: restartMachineName(machine),
     own: fresh,
-    resume: (sessionIds) => void continueNativeChatRestartOffer(machine, sessionIds),
-    show: () => requestNativeChatResumeOnRestartDialog(machine)
+    resume: (sessionIds) =>
+      void continueNativeChatRestartOffer(machine, sessionIds, sessionIds, fence),
+    show: () => {
+      if (sameRestartMachineFence(getNativeChatRestartOffers().get(machine)?.fence, fence)) {
+        requestNativeChatResumeOnRestartDialog(machine)
+      }
+    }
   })
 }
 
-type SeenConnection = { key: string; runtimeId: string }
+/** `runtimeId` null marks a pairing that was revoked: whatever answers next is not known to be
+ *  the same server restarting. */
+type SeenConnection = { key: string; pairingRevision: number | undefined; runtimeId: string | null }
 const seenConnections = new Map<string, SeenConnection>()
 let stopWatchingConnections: (() => void) | null = null
 
@@ -198,7 +222,12 @@ function noticeConnections(state: AppState): void {
       continue
     }
     if (isRuntimeHostContactRevoked(entry)) {
-      seenConnections.delete(environmentId)
+      seenConnections.set(environmentId, {
+        key: '',
+        pairingRevision: entry.snapshot?.pairingRevision,
+        runtimeId: null
+      })
+      owedAnnouncement.delete(environmentId)
       forgetNativeChatRestartMachine(restartMachineKey({ kind: 'environment', environmentId }))
       continue
     }
@@ -206,20 +235,33 @@ function noticeConnections(state: AppState): void {
     if (!runtimeId) {
       continue
     }
-    const key = `${runtimeId}\u0000${entry.hostContactEpoch ?? 0}`
-    const seen = seenConnections.get(environmentId)
+    const pairingRevision = entry.snapshot?.pairingRevision
+    const key = `${pairingRevision ?? ''}\u0000${runtimeId}\u0000${entry.hostContactEpoch ?? 0}`
+    let seen = seenConnections.get(environmentId)
     if (seen?.key === key) {
       continue
     }
+    if (seen && seen.pairingRevision !== pairingRevision) {
+      // Re-paired under the same id: the old pairing's offers, ticks and toast are not this one's,
+      // and nothing proves the new pairing is the same server restarting.
+      forgetNativeChatRestartMachine(restartMachineKey({ kind: 'environment', environmentId }))
+      owedAnnouncement.delete(environmentId)
+      seen = undefined
+    }
     // This window's own last sighting first; on its first, the id persisted before this run.
-    const previous = seen ? seen.runtimeId : (entry.snapshot?.priorRuntimeId ?? null)
-    seenConnections.set(environmentId, { key, runtimeId })
+    const previous = seen
+      ? seen.runtimeId
+      : seenConnections.has(environmentId)
+        ? null
+        : (entry.snapshot?.priorRuntimeId ?? null)
+    seenConnections.set(environmentId, { key, pairingRevision, runtimeId })
     void readPairedMachineOnConnection(environmentId, previous !== null && previous !== runtimeId)
   }
   for (const machine of getNativeChatRestartOffers().keys()) {
     const target = restartMachineTarget(machine)
     if (target.kind === 'environment' && !paired.has(target.environmentId)) {
       seenConnections.delete(target.environmentId)
+      owedAnnouncement.delete(target.environmentId)
       forgetNativeChatRestartMachine(machine)
     }
   }
@@ -268,6 +310,7 @@ export function _resetNativeChatRestartOffer(): void {
   launch = undefined
   attempted.clear()
   announced.clear()
+  owedAnnouncement.clear()
   seenConnections.clear()
   stopWatchingConnections?.()
   stopWatchingConnections = null

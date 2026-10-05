@@ -2083,7 +2083,6 @@
         "machinesBody": "These chats were working when Orca on their machine closed or installed an update. Resuming restores each one where it stopped, with its full context, and asks the agent to check what it was doing before carrying on. Your own prompt is not re-sent.",
         "continuedOneOnMachine": "Resumed 1 chat on {{value0}} and asked it to continue",
         "continuedManyOnMachine": "Resumed {{value0}} chats on {{value1}} and asked them to continue",
-        "dismissNeedsUpdate": "Update Orca on {{value0}} to dismiss its chats from here.",
         "reconnectUpdateTitle": "{{value0}} restarted for an update",
         "reconnectQuitTitle": "Orca on {{value0}} was restarted",
         "reconnectBodyOne": "1 of your chats there was stopped mid-reply. It shows where it stopped, and nothing was lost.",

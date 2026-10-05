@@ -314,4 +314,40 @@ describe('NativeChatResumeStatusSegment', () => {
       '1 chat to resume'
     )
   })
+
+  it('opens the dialog at once and refreshes each machine without waiting on any', async () => {
+    let hang = false
+    rpc.mockImplementation((target) => {
+      if (hang && target.kind === 'environment') {
+        // An unreachable server: its re-read never answers.
+        return new Promise(() => {})
+      }
+      return Promise.resolve({ sessions: candidates })
+    })
+    useAppStore.setState({
+      runtimeEnvironments: [pairedEnvironment('studio', 'studio-mac')]
+    })
+    await mount()
+    await act(async () => {
+      await readNativeChatRestartMachine({ kind: 'environment', environmentId: 'studio' })
+    })
+    hang = true
+    await act(async () => screen.getByRole('button').click())
+    expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ focus: null })
+    // Both machines were asked again, each on its own.
+    expect(
+      rpc.mock.calls.filter((call) => call[1] === 'agentSession.restartResumable')
+    ).toHaveLength(4)
+  })
+
+  // A failed re-read is loss of contact, never evidence the offers are gone: keep the last answer.
+  it('keeps the last answer when a refresh of this computer fails', async () => {
+    rpc.mockResolvedValueOnce({ sessions: candidates }).mockRejectedValue(new Error('host busy'))
+    await mount()
+    expect(screen.getByText('2 chats to resume')).toBeTruthy()
+    await act(async () => {
+      await readNativeChatRestartMachine({ kind: 'local' })
+    })
+    expect(screen.getByText('2 chats to resume')).toBeTruthy()
+  })
 })

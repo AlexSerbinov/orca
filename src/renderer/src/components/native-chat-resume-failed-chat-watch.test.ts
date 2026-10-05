@@ -7,11 +7,13 @@ import type {
 } from '../../../shared/agent-session-wire'
 import { resetStructuredAgentSessionStatusFeedsForTests } from '@/runtime/structured-agent-session-status-feed'
 import {
-  continueNativeChatRestartOffer,
-  dismissNativeChatRestartOffer,
   getNativeChatRestartOffers,
   readNativeChatRestartMachine
 } from './native-chat-resume-on-restart-store'
+import {
+  continueNativeChatRestartOffer,
+  dismissNativeChatRestartOffer
+} from './native-chat-restart-offer-actions'
 import { _resetNativeChatRestartOffer } from './native-chat-restart-offer-triggers'
 
 const mocks = vi.hoisted(() => ({

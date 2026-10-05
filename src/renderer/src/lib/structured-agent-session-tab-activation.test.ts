@@ -132,4 +132,49 @@ describe('activateStructuredAgentSessionTab', () => {
       { worktree: 'id:wt-1', tabId: 'agent-session:session-1' }
     )
   })
+
+  // The resume dialog names the machine: a same-named workspace on another machine never answers,
+  // and the focus goes to that machine under the pairing the chat was listed with.
+  it('activates only the named machine’s tab, under the listed pairing', () => {
+    const elsewhere = {
+      ...(mocks.state.unifiedTabsByWorktree as Record<string, Tab[]>)['wt-1']![0]!
+    }
+    mocks.state = {
+      ...mocks.state,
+      unifiedTabsByWorktree: {
+        'wt-1': [{ ...elsewhere, id: 'local-tab', executionHostId: 'local' }]
+      }
+    }
+    expect(
+      activateStructuredAgentSessionById({
+        worktreeId: 'wt-1',
+        sessionId: 'session-1',
+        executionHostId: 'runtime:studio'
+      })
+    ).toBe(false)
+    mocks.state = {
+      ...mocks.state,
+      unifiedTabsByWorktree: {
+        'wt-1': [
+          { ...elsewhere, id: 'local-tab', executionHostId: 'local' },
+          { ...elsewhere, id: 'studio-tab', executionHostId: 'runtime:studio' }
+        ]
+      }
+    }
+    expect(
+      activateStructuredAgentSessionById({
+        worktreeId: 'wt-1',
+        sessionId: 'session-1',
+        executionHostId: 'runtime:studio',
+        pairingRevision: 4
+      })
+    ).toBe(true)
+    expect(mocks.activateTab).toHaveBeenCalledWith('studio-tab', { worktreeId: 'wt-1' })
+    expect(mocks.callRuntimeRpc).toHaveBeenLastCalledWith(
+      { kind: 'environment', environmentId: 'studio' },
+      'session.tabs.activate',
+      { worktree: 'id:wt-1', tabId: 'agent-session:session-1' },
+      { expectedEnvironmentPairingRevision: 4 }
+    )
+  })
 })

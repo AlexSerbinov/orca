@@ -16,8 +16,18 @@ import type { RestartMachineKey } from './native-chat-restart-machines'
  */
 export type ResumeSelectionOverrides = ReadonlyMap<string, boolean>
 
-export function resumeRowKey(machine: RestartMachineKey, sessionId: string): string {
-  return `${machine}\u0000${sessionId}`
+/** Ticks are keyed by the listing's identity, so a re-paired machine never inherits the old
+ *  pairing's ticks for a chat that happens to share an id. */
+export function resumeRowKey(identity: string, sessionId: string): string {
+  return `${identity}\u0000${sessionId}`
+}
+
+/** One machine's listing: the machine and the pairing it was read under. */
+export function restartListingIdentity(
+  machine: RestartMachineKey,
+  pairingRevision: number | undefined
+): string {
+  return `${machine}\u0000${pairingRevision ?? ''}`
 }
 
 /** Ticked by default: the user's own chat, unless it is a failure a retry cannot fix. */
@@ -37,6 +47,8 @@ export function resumeRowSelectedByDefault(
 
 export type ResumeSelectionMachine = {
   machine: RestartMachineKey
+  /** See `restartListingIdentity`. */
+  identity: string
   rows: readonly ResumeCandidate[]
   failureFor: (sessionId: string) => ResumeFailure | undefined
   ownershipFor: (sessionId: string) => ResumeWorkspaceOwnership
@@ -59,7 +71,7 @@ export function chosenResumeRows(
 ): string[] {
   return selectableResumeRows(machine).filter(
     (sessionId) =>
-      overrides.get(resumeRowKey(machine.machine, sessionId)) ??
+      overrides.get(resumeRowKey(machine.identity, sessionId)) ??
       resumeRowSelectedByDefault(machine.ownershipFor(sessionId), machine.failureFor(sessionId))
   )
 }

@@ -1,11 +1,13 @@
 import { toast } from 'sonner'
 import type { AiVaultSession } from '../../../shared/ai-vault-types'
-import { parseExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import { translate } from '@/i18n/i18n'
 import { activateAndRevealWorktree } from './worktree-activation'
-import { activateStructuredAgentSessionById } from './structured-agent-session-tab-activation'
+import {
+  activateStructuredAgentSessionById,
+  structuredSessionMachineEnvironmentId,
+  type StructuredSessionMachine
+} from './structured-agent-session-tab-activation'
 import { useAppStore } from '@/store'
-import { getRuntimeEnvironmentIdForWorktree } from './worktree-runtime-owner'
 import {
   callRuntimeRpc,
   getActiveRuntimeTarget,
@@ -33,8 +35,9 @@ export type StructuredSessionRevealOutcome =
   | 'host-cannot-open'
   | 'unreachable'
 
-/** The machine holding the chat, when the caller knows it; otherwise inferred from the workspace. */
-type StructuredSessionHost = { executionHostId?: ExecutionHostId }
+/** The machine holding the chat and the pairing it was listed under, when the caller knows them;
+ *  otherwise inferred from the workspace. Carried through every step, so no step re-derives it. */
+type StructuredSessionHost = StructuredSessionMachine
 
 type StructuredSessionActivationDeps = {
   activate: typeof activateStructuredAgentSessionById
@@ -105,16 +108,18 @@ export async function activateAiVaultStructuredSession(
   // Why: the click can chain a refresh, a capability probe, a reveal and a second refresh, each
   // with its own timeout, and nothing on the row says it is working. Without this, an impatient
   // second click runs the whole sequence again and lands its own toast.
-  const inFlight = activationsInFlight.get(structured.sessionId)
+  // Keyed by machine too: the same session id on two machines is two different chats.
+  const key = `${structured.executionHostId ?? ''}\u0000${structured.sessionId}`
+  const inFlight = activationsInFlight.get(key)
   if (inFlight) {
     return inFlight
   }
   const activation = activateStructuredSession(structured, deps)
-  activationsInFlight.set(structured.sessionId, activation)
+  activationsInFlight.set(key, activation)
   try {
     return await activation
   } finally {
-    activationsInFlight.delete(structured.sessionId)
+    activationsInFlight.delete(key)
   }
 }
 
@@ -124,10 +129,15 @@ async function activateStructuredSession(
   structured: NonNullable<AiVaultSession['structuredSession']> & StructuredSessionHost,
   deps: StructuredSessionActivationDeps
 ): Promise<boolean> {
-  const target = { worktreeId: structured.workspaceId, sessionId: structured.sessionId }
-  const host = structured.executionHostId
-    ? { executionHostId: structured.executionHostId }
+  const host: StructuredSessionHost | undefined = structured.executionHostId
+    ? {
+        executionHostId: structured.executionHostId,
+        ...(structured.pairingRevision === undefined
+          ? {}
+          : { pairingRevision: structured.pairingRevision })
+      }
     : undefined
+  const target = { worktreeId: structured.workspaceId, sessionId: structured.sessionId, ...host }
   if (!deps.activate(target)) {
     // A refresh alone can answer, and costs one call instead of two. It is only ever an
     // optimization, so a refresh that fails must fall through to the reveal rather than end the
@@ -136,7 +146,7 @@ async function activateStructuredSession(
     if (!refreshed || !deps.activate(target)) {
       // The inventory genuinely does not carry this chat: it was closed, or this process never
       // published it. Ask the host to republish the tab from the record it still holds on disk.
-      const revealed = await deps.reveal({ ...target, ...host })
+      const revealed = await deps.reveal(target)
       if (revealed !== 'revealed') {
         if (revealed === 'gone') {
           deps.gone()
@@ -156,7 +166,11 @@ async function activateStructuredSession(
     }
   }
   if (useAppStore.getState().activeWorktreeId !== structured.workspaceId) {
-    activateAndRevealWorktree(structured.workspaceId)
+    if (host?.executionHostId) {
+      activateAndRevealWorktree(structured.workspaceId, { executionHostId: host.executionHostId })
+    } else {
+      activateAndRevealWorktree(structured.workspaceId)
+    }
   }
   return true
 }
@@ -188,7 +202,11 @@ export async function revealStructuredSession(
     sessionId: string
   } & StructuredSessionHost
 ): Promise<StructuredSessionRevealOutcome> {
-  const environmentId = structuredSessionEnvironmentId(target.worktreeId, target)
+  const environmentId = structuredSessionMachineEnvironmentId(target, target.worktreeId)
+  const fence =
+    target.pairingRevision === undefined
+      ? {}
+      : { expectedEnvironmentPairingRevision: target.pairingRevision }
   const host = getActiveRuntimeTarget({ activeRuntimeEnvironmentId: environmentId })
   // Negotiated against the host that will answer this call, not the local one: a paired host runs
   // its own build, and its method-not-found is indistinguishable from a refusal we should surface.
@@ -224,7 +242,8 @@ export async function revealStructuredSession(
         'agentSession.reveal',
         { sessionId: target.sessionId },
         {
-          timeoutMs: STRUCTURED_SESSION_RESTORE_TIMEOUT_MS
+          timeoutMs: STRUCTURED_SESSION_RESTORE_TIMEOUT_MS,
+          ...fence
         }
       )
     )
@@ -241,24 +260,11 @@ export async function revealStructuredSession(
 
 type AgentSessionRevealReply = { ok?: boolean; refusal?: { code?: string } }
 
-/** The named machine when the caller knows it, never re-derived from workspace state; otherwise
- *  the machine the workspace belongs to. */
-function structuredSessionEnvironmentId(
-  worktreeId: string,
-  host: StructuredSessionHost | undefined
-): string | null {
-  if (host?.executionHostId) {
-    const parsed = parseExecutionHostId(host.executionHostId)
-    return parsed?.kind === 'runtime' ? parsed.environmentId : null
-  }
-  return getRuntimeEnvironmentIdForWorktree(useAppStore.getState(), worktreeId)
-}
-
 async function refreshStructuredSessionTabs(
   worktreeId: string,
   host?: StructuredSessionHost
 ): Promise<void> {
-  const environmentId = structuredSessionEnvironmentId(worktreeId, host)
+  const environmentId = structuredSessionMachineEnvironmentId(host, worktreeId)
   // Every other caller that applies an inventory fences it on the sync generation. Structured chat
   // can be switched off while this call is in flight, which wipes the mirror; without this the
   // answer would land afterwards and re-seed a chat row into a renderer that just discarded them.
@@ -268,7 +274,12 @@ async function refreshStructuredSessionTabs(
       getActiveRuntimeTarget({ activeRuntimeEnvironmentId: environmentId }),
       'session.tabs.list',
       { worktree: toRuntimeWorktreeSelector(worktreeId) },
-      { timeoutMs: STRUCTURED_SESSION_RESTORE_TIMEOUT_MS }
+      {
+        timeoutMs: STRUCTURED_SESSION_RESTORE_TIMEOUT_MS,
+        ...(host?.pairingRevision === undefined
+          ? {}
+          : { expectedEnvironmentPairingRevision: host.pairingRevision })
+      }
     )
   )
   if (!isCurrentLocalStructuredSessionGeneration(generation)) {
