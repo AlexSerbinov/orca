@@ -3,15 +3,20 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import { useAppStore } from '../store'
 import { getDefaultSettings } from '../../../shared/constants'
+import type { RestartOfferOrigin } from '../../../shared/restart-offer-origin'
 import { NativeChatResumeOnRestartModal } from './NativeChatResumeOnRestartModal'
 import { TooltipProvider } from './ui/tooltip'
 import type { ResumeCandidate } from './native-chat-resume-on-restart-grouping'
 import {
   consumeNativeChatResumeOnRestartDialogRequest,
+  getNativeChatResumeOnRestartDialogRequest,
+  markNativeChatResumeLaunchDecided,
   requestNativeChatResumeOnRestartDialog
 } from './native-chat-resume-on-restart-dialog'
+import { requestLaunchResumePrompt } from './native-chat-resume-on-restart-launch-prompt'
 import { readNativeChatRestartMachine } from './native-chat-resume-on-restart-store'
 import { _resetNativeChatRestartOffer } from './native-chat-restart-offer-triggers'
 import { pairedEnvironment } from './native-chat-restart-offer-test-support'
@@ -19,44 +24,33 @@ import { pairedEnvironment } from './native-chat-restart-offer-test-support'
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: rpc,
-  supportsStructuredAgentSessionPairedRestartOffers: async () => true,
+  pairedRestartOffersSupport: async () => 'supported',
   subscribeStructuredAgentSessionStatus: () => new Promise(() => {})
 }))
 vi.mock('sonner', () => ({ toast: vi.fn() }))
-// Who made each workspace, by name; the modal's cards then fall back to plain headers.
-vi.mock('./native-chat-resume-ownership', async (importActual) => {
-  const actual: object = await importActual()
-  return {
-    ...actual,
-    resumeCandidateOwnership: (_state: unknown, _machine: unknown, row: ResumeCandidate) =>
-      row.workspaceId.startsWith('mine')
-        ? 'own'
-        : row.workspaceId.startsWith('robot')
-          ? 'automation'
-          : 'other-device'
-  }
-})
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 let root: Root
 let container: HTMLDivElement
 
-function row(sessionId: string, workspaceId: string): ResumeCandidate {
+/** Each host says whose a chat is for this desktop; the modal's cards fall back to plain headers. */
+function row(sessionId: string, origin: RestartOfferOrigin): ResumeCandidate {
   return {
     sessionId,
-    workspaceId,
+    workspaceId: `workspace-${sessionId}`,
     agent: 'codex',
     trigger: 'update',
     latestPrompt: `Prompt ${sessionId}`,
     recordedAt: 1_800_000_000_000,
     executionHostId: 'local',
-    workspaceKind: 'git-worktree'
+    workspaceKind: 'git-worktree',
+    origin
   }
 }
 
-const LOCAL_ROWS = [row('l1', 'mine-local')]
-const SERVER_ROWS = [row('s1', 'mine-server'), row('s2', 'theirs'), row('s3', 'robot')]
-const OTHERS_ONLY = [row('o1', 'theirs-too')]
+let localRows = [row('l1', 'own')]
+const SERVER_ROWS = [row('s1', 'own'), row('s2', 'other-device'), row('s3', 'automation')]
+const OTHERS_ONLY = [row('o1', 'other-device')]
 
 async function stage(servers: Record<string, ResumeCandidate[]>): Promise<void> {
   rpc.mockImplementation(async (target, method) => {
@@ -64,7 +58,7 @@ async function stage(servers: Record<string, ResumeCandidate[]>): Promise<void> 
       return { continued: [], sessions: [] }
     }
     return {
-      sessions: target.kind === 'local' ? LOCAL_ROWS : (servers[target.environmentId] ?? [])
+      sessions: target.kind === 'local' ? localRows : (servers[target.environmentId] ?? [])
     }
   })
   await act(async () => {
@@ -120,6 +114,8 @@ function actionCalls(method: string): unknown[] {
 
 beforeEach(() => {
   rpc.mockReset()
+  vi.mocked(toast).mockClear()
+  localRows = [row('l1', 'own')]
   _resetNativeChatRestartOffer()
   consumeNativeChatResumeOnRestartDialogRequest()
   useAppStore.setState(useAppStore.getInitialState(), true)
@@ -176,14 +172,105 @@ it('resumes each machine’s picked chats on that machine, and the machine box p
   ])
 })
 
-it('dismisses everything here by naming nothing, and on a server by naming every chat', async () => {
-  await stage({ studio: SERVER_ROWS })
+// Another device's or an automation's chats stay on the server for their owner, and the button
+// says only what it does.
+it('dismisses everything here by naming nothing, and on a server only the user’s own and its own', async () => {
+  await stage({ studio: [...SERVER_ROWS, row('s4', 'server-made')] })
   await open(null)
-  await act(async () => button('Dismiss all').click())
+  await act(async () => button('Dismiss').click())
   expect(actionCalls('agentSession.restartResumableDismiss')).toEqual([
     [{ kind: 'local' }, {}],
-    [{ kind: 'environment', environmentId: 'studio' }, { sessionIds: ['s1', 's2', 's3'] }]
+    [
+      { kind: 'environment', environmentId: 'studio' },
+      {
+        sessionIds: ['s1', 's4'],
+        offers: [
+          { sessionId: 's1', recordedAt: 1_800_000_000_000 },
+          { sessionId: 's4', recordedAt: 1_800_000_000_000 }
+        ]
+      }
+    ]
   ])
+})
+
+it('keeps "Dismiss all" when every listed chat is the user’s to clear', async () => {
+  await stage({ studio: [row('s1', 'own')] })
+  await open(null)
+  expect(button('Dismiss all')).toBeTruthy()
+})
+
+it('reports one resume across machines in one notice', async () => {
+  await stage({ studio: SERVER_ROWS })
+  rpc.mockImplementation(async (target, method) =>
+    method === 'agentSession.restartContinue'
+      ? {
+          continued: [{ sessionId: target.kind === 'local' ? 'l1' : 's1', outcome: 'continued' }],
+          sessions: [],
+          failed: []
+        }
+      : { sessions: [] }
+  )
+  await open(null)
+  await act(async () => button('Resume 2 chats').click())
+  await vi.waitFor(() => expect(toast).toHaveBeenCalled())
+  expect(vi.mocked(toast).mock.calls.map(([title]) => title)).toEqual([
+    'Resumed 2 chats and asked them to continue'
+  ])
+})
+
+// One slow server must not hold this computer's chats hostage.
+it('locks only the machine whose resume is still running', async () => {
+  await stage({ studio: SERVER_ROWS })
+  rpc.mockImplementation(async (target, method) =>
+    method === 'agentSession.restartContinue' && target.kind === 'environment'
+      ? new Promise(() => {})
+      : { continued: [], sessions: localRows }
+  )
+  await open('environment:studio')
+  await act(async () => machineToggle('studio-mac').click())
+  await act(async () => button('Resume 4 chats').click())
+  await open(null)
+  expect(machineToggle('studio-mac').hasAttribute('disabled')).toBe(true)
+  expect(button('Resume 1 chat').disabled).toBe(false)
+})
+
+// The launch read joining a dialog the user opened must not move its focus.
+it("keeps the user's ticks and open machine when this computer's launch read lands", async () => {
+  await stage({ studio: [row('s1', 'own'), row('s2', 'own')] })
+  await open('environment:studio')
+  expect(button('Resume 3 chats')).toBeTruthy()
+  await act(async () => machineToggle('studio-mac').click())
+  expect(button('Resume 1 chat')).toBeTruthy()
+  await act(async () => requestLaunchResumePrompt('local'))
+  expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({
+    origin: 'user',
+    focus: 'environment:studio'
+  })
+  expect(button('Resume 1 chat')).toBeTruthy()
+  expect(machineRow('studio-mac').getAttribute('aria-expanded')).toBe('true')
+})
+
+it('never opens by itself for a paired server once this computer has nothing to offer', async () => {
+  await stage({ studio: [row('s1', 'own')] })
+  act(() => useAppStore.getState().setPromptBlockingDialogVisible('other:1', true))
+  await act(async () =>
+    root.render(
+      <TooltipProvider>
+        <NativeChatResumeOnRestartModal />
+      </TooltipProvider>
+    )
+  )
+  await act(async () => {
+    requestLaunchResumePrompt('local')
+    markNativeChatResumeLaunchDecided()
+  })
+  localRows = []
+  await act(async () => {
+    await readNativeChatRestartMachine({ kind: 'local' })
+  })
+  await act(async () => useAppStore.getState().setPromptBlockingDialogVisible('other:1', false))
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(getNativeChatResumeOnRestartDialogRequest()).toBeNull()
 })
 
 it('keeps the flat list when only this computer has chats', async () => {

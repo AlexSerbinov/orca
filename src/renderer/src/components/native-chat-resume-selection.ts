@@ -4,7 +4,7 @@ import {
   resumeFailureSelectable
 } from './native-chat-resume-failure-guidance'
 import type { ResumeWorkspaceOwnership } from './native-chat-resume-ownership'
-import type { RestartMachineKey } from './native-chat-restart-machines'
+import { LOCAL_RESTART_MACHINE, type RestartMachineKey } from './native-chat-restart-machines'
 
 /**
  * Which offered chats the dialog has ticked, across machines.
@@ -74,4 +74,19 @@ export function chosenResumeRows(
       overrides.get(resumeRowKey(machine.identity, sessionId)) ??
       resumeRowSelectedByDefault(machine.ownershipFor(sessionId), machine.failureFor(sessionId))
   )
+}
+
+/** What Dismiss forgets on one machine. This computer forgets everything it listed (undefined:
+ *  named by nothing). A paired server forgets only the user's own chats and the ones it made itself;
+ *  another device's or an automation's stay listed for their owner. */
+export function dismissedRows(machine: ResumeSelectionMachine): string[] | undefined {
+  if (machine.machine === LOCAL_RESTART_MACHINE) {
+    return undefined
+  }
+  return machine.rows
+    .filter((row) => {
+      const ownership = machine.ownershipFor(row.sessionId)
+      return ownership === 'own' || ownership === 'server-made'
+    })
+    .map((row) => row.sessionId)
 }

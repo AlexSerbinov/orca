@@ -94,13 +94,33 @@ it('says whose each offer is for the paired desktop asking, by the sidebar rule'
   })
 })
 
-it("counts the host's own user as the owner of what the host made", async () => {
-  const response = await call('agentSession.restartResumable', {}, undefined, RUNTIME)
+it.each([
+  ['an in-process caller', undefined],
+  ['its own desktop window', { ...STRUCTURED_CLIENT, clientId: 'desktop-renderer' }]
+])("counts the host's own user, as %s, as the owner of what the host made", async (_, client) => {
+  const response = await call('agentSession.restartResumable', {}, client, RUNTIME)
   expect(origins(response)).toMatchObject({
     a: 'other-device',
     c: 'own',
     d: 'own',
     e: 'automation'
+  })
+})
+
+it('leaves the origin out for a remote caller with no device identity', async () => {
+  const response = await call(
+    'agentSession.restartResumable',
+    {},
+    { ...STRUCTURED_CLIENT, clientId: 'token-1' },
+    RUNTIME
+  )
+  expect(origins(response)).toEqual({
+    a: undefined,
+    b: undefined,
+    c: undefined,
+    d: undefined,
+    e: undefined,
+    f: undefined
   })
 })
 

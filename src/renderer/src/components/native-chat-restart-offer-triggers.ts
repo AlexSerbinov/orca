@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { isRuntimeHostContactRevoked } from '../../../shared/runtime-host-status'
+import { parseRestartOfferOrigin } from '../../../shared/restart-offer-origin'
 import { isWebClientLocation } from '@/lib/web-client-location'
 import type { RuntimeClientTarget } from '@/runtime/runtime-client-target'
 import { useAppStore } from '../store'
@@ -12,84 +13,52 @@ import {
   type RestartMachineKey
 } from './native-chat-restart-machines'
 import { restartMachineName } from './native-chat-restart-machine-name'
-import { continueNativeChatRestartOffer } from './native-chat-restart-offer-actions'
+import { continueNativeChatRestartOffers } from './native-chat-restart-offer-actions'
 import {
   _resetNativeChatRestartOfferState,
   forgetNativeChatRestartMachine,
   getNativeChatRestartOffers,
   readNativeChatRestartMachine,
+  setNativeChatRestartReadListener,
   type RestartMachineRead
 } from './native-chat-resume-on-restart-store'
-import {
-  resumeCandidateOwnership,
-  resumeCandidateOwnershipSettled
-} from './native-chat-resume-ownership'
 import { requestLaunchResumePrompt } from './native-chat-resume-on-restart-launch-prompt'
 import {
   _resetNativeChatResumeOnRestartDialog,
+  getNativeChatResumeOnRestartDialogRequest,
   markNativeChatResumeLaunchDecided,
   requestNativeChatResumeOnRestartDialog
 } from './native-chat-resume-on-restart-dialog'
-import { sameRestartMachineFence } from './native-chat-restart-machine-fence'
+import {
+  decidedRestartInterruptions,
+  forgetRestartInterruptions,
+  restartDecidedEnvironments,
+  restartInterruptionKey,
+  settleRestartInterruptions
+} from './native-chat-restart-decided'
 import { announceReconnectRestartOffer } from './native-chat-restart-reconnect-toast'
 
 /**
  * When each machine is asked for its offer, and the one decision a fresh offer makes: ask, resume
- * the user's own chats without asking, or (for a paired server that restarted) say so in a toast.
+ * the user's own chats without asking, or (for a paired server) say so in a toast.
  *
  * This computer is asked once, at launch. Each paired server is asked on every verified connection
  * — the first, a new runtime, and a return after lost contact — never from its chat status feed,
- * which needs a host that may not exist yet.
+ * which needs a host that may not exist yet. A failed paired read is retried a few times while the
+ * connection holds.
+ *
+ * The toast is decided from the answer, not from a remembered edge: any published read of a paired
+ * server announces (or, opted in, resumes) the user's own interruptions this desktop has not yet
+ * decided about, then records them as decided.
  */
 
 const LAUNCH_READ_RETRY_DELAYS_MS = [100, 250, 500] as const
-/** How long a paired server's offer waits for its workspaces to load before ownership is judged on
- *  what is known; an unloaded workspace is then `unknown` and never toasted or auto-resumed. */
-const OWNERSHIP_SETTLE_TIMEOUT_MS = 5_000
+const PAIRED_READ_RETRY_DELAYS_MS = [2_000, 5_000, 15_000] as const
 
 let launch: Promise<void> | undefined
-/** Interruptions already continued without asking, this app run: never twice, never retried. */
-const attempted = new Set<string>()
-/** Interruptions a reconnect toast already named, this app run. */
-const announced = new Set<string>()
-/** Servers seen restarting whose offer has not been read successfully since: a failed read keeps
- *  the debt, a successful one (or a new pairing) settles it. */
-const owedAnnouncement = new Set<string>()
-
-function interruptionKey(machine: RestartMachineKey, candidate: ResumeCandidate): string {
-  return `${machine}\u0000${candidate.sessionId}\u0000${candidate.recordedAt}`
-}
 
 function autoResumeEnabled(): boolean {
   return useAppStore.getState().settings?.nativeChatResumeWorkOnRestart === true
-}
-
-function ownershipSettled(target: RuntimeClientTarget, candidates: readonly ResumeCandidate[]) {
-  const state = useAppStore.getState()
-  return candidates.every((candidate) => resumeCandidateOwnershipSettled(state, target, candidate))
-}
-
-/** Resolves once every candidate's workspace is loaded, or the bounded wait runs out. */
-function waitForOwnership(
-  target: RuntimeClientTarget,
-  candidates: readonly ResumeCandidate[]
-): Promise<void> {
-  if (ownershipSettled(target, candidates)) {
-    return Promise.resolve()
-  }
-  return new Promise((resolve) => {
-    const finish = (): void => {
-      clearTimeout(timer)
-      unsubscribe()
-      resolve()
-    }
-    const timer = setTimeout(finish, OWNERSHIP_SETTLE_TIMEOUT_MS)
-    const unsubscribe = useAppStore.subscribe(() => {
-      if (ownershipSettled(target, candidates)) {
-        finish()
-      }
-    })
-  })
 }
 
 /** The user's own chats among those the machine still offers right now. */
@@ -97,33 +66,21 @@ function ownCandidates(
   target: RuntimeClientTarget,
   read: readonly ResumeCandidate[]
 ): ResumeCandidate[] {
-  const machine = restartMachineKey(target)
   const stillOffered = new Set(
     getNativeChatRestartOffers()
-      .get(machine)
+      .get(restartMachineKey(target))
       ?.candidates.map((candidate) => candidate.sessionId) ?? []
   )
-  const state = useAppStore.getState()
   return read.filter(
     (candidate) =>
-      stillOffered.has(candidate.sessionId) &&
-      resumeCandidateOwnership(state, target, candidate) === 'own'
+      stillOffered.has(candidate.sessionId) && parseRestartOfferOrigin(candidate.origin) === 'own'
   )
 }
 
-/** "Resume automatically": the user's own chats on this machine, each interruption once. */
-async function autoResume(
-  machine: RestartMachineKey,
-  own: readonly ResumeCandidate[]
-): Promise<void> {
-  const fresh = own.filter((candidate) => !attempted.has(interruptionKey(machine, candidate)))
-  for (const candidate of fresh) {
-    attempted.add(interruptionKey(machine, candidate))
-  }
-  await continueNativeChatRestartOffer(
-    machine,
-    fresh.map((candidate) => candidate.sessionId)
-  )
+function resumeOwn(machine: RestartMachineKey, own: readonly ResumeCandidate[]): Promise<void> {
+  return continueNativeChatRestartOffers([
+    { machine, sessionIds: own.map((candidate) => candidate.sessionId) }
+  ])
 }
 
 /**
@@ -156,70 +113,90 @@ async function loadLaunchOffer(): Promise<void> {
   }
   // Nothing will ask, so other launch prompts need not wait for the resume to settle.
   markNativeChatResumeLaunchDecided()
-  await autoResume(LOCAL_RESTART_MACHINE, ownCandidates(target, read.candidates))
+  await resumeOwn(LOCAL_RESTART_MACHINE, ownCandidates(target, read.candidates))
 }
 
-/** One verified connection to a paired server: read its offer, then auto-resume or announce. */
-export async function readPairedMachineOnConnection(
-  environmentId: string,
-  incarnationChanged: boolean
-): Promise<void> {
-  const target: RuntimeClientTarget = { kind: 'environment', environmentId }
+/**
+ * A paired server's published answer: its own interruptions this desktop has not decided about
+ * are resumed (opted in) or announced, and every key the server no longer offers is forgotten.
+ * Shown in an open dialog, they are decided without a toast.
+ */
+function decidePairedAnswer(target: RuntimeClientTarget, candidates: readonly ResumeCandidate[]) {
+  if (target.kind !== 'environment') {
+    return
+  }
   const machine = restartMachineKey(target)
-  if (incarnationChanged) {
-    owedAnnouncement.add(environmentId)
-  }
-  const read = await readNativeChatRestartMachine(target)
-  if (read.kind === 'unavailable') {
+  const decided = decidedRestartInterruptions(target.environmentId)
+  const fresh = ownCandidates(target, candidates).filter(
+    (candidate) => !decided.has(restartInterruptionKey(candidate))
+  )
+  settleRestartInterruptions(
+    target.environmentId,
+    candidates.map(restartInterruptionKey),
+    fresh.map(restartInterruptionKey)
+  )
+  if (fresh.length === 0 || getNativeChatResumeOnRestartDialogRequest()?.origin === 'user') {
     return
   }
-  if (read.kind === 'unsupported' || read.candidates.length === 0) {
-    owedAnnouncement.delete(environmentId)
-    return
-  }
-  await waitForOwnership(target, read.candidates)
-  const own = ownCandidates(target, read.candidates)
-  const owed = owedAnnouncement.delete(environmentId)
   if (autoResumeEnabled()) {
-    await autoResume(machine, own)
+    void resumeOwn(machine, fresh)
     return
   }
-  // Without a restart this desktop can name, the status bar alone carries the offer.
-  if (!owed) {
-    return
-  }
-  // The listing the toast names; its buttons act only while the server still answers under it.
   const fence = getNativeChatRestartOffers().get(machine)?.fence
-  if (!fence) {
-    return
-  }
-  const fresh = own.filter((candidate) => !announced.has(interruptionKey(machine, candidate)))
-  for (const candidate of fresh) {
-    announced.add(interruptionKey(machine, candidate))
-  }
   announceReconnectRestartOffer({
     machine,
     machineName: restartMachineName(machine),
     own: fresh,
-    resume: (sessionIds) =>
-      void continueNativeChatRestartOffer(machine, sessionIds, sessionIds, fence),
-    show: () => {
-      if (sameRestartMachineFence(getNativeChatRestartOffers().get(machine)?.fence, fence)) {
-        requestNativeChatResumeOnRestartDialog('user', machine)
-      }
-    }
+    resume: (sessionIds) => void continueNativeChatRestartOffers([{ machine, sessionIds }], fence),
+    show: () => requestNativeChatResumeOnRestartDialog('user', machine)
   })
 }
 
-/** `runtimeId` null marks a pairing that was revoked: whatever answers next is not known to be
- *  the same server restarting. */
-type SeenConnection = { key: string; pairingRevision: number | undefined; runtimeId: string | null }
+/** Marks what an open dialog shows as decided, so a later read does not announce it again. */
+export function markNativeChatRestartOffersShown(
+  shown: readonly { machine: RestartMachineKey; candidates: readonly ResumeCandidate[] }[]
+): void {
+  for (const { machine, candidates } of shown) {
+    const target = restartMachineTarget(machine)
+    if (target.kind === 'environment') {
+      const keys = candidates.map(restartInterruptionKey)
+      settleRestartInterruptions(target.environmentId, keys, keys)
+    }
+  }
+}
+
+type SeenConnection = { key: string; pairingRevision: number | undefined; generation: number }
 const seenConnections = new Map<string, SeenConnection>()
 let stopWatchingConnections: (() => void) | null = null
+let connectionGenerations = 0
+
+function connectionStillCurrent(environmentId: string, generation: number): boolean {
+  return seenConnections.get(environmentId)?.generation === generation
+}
+
+/** One verified connection: read, and retry a failed read a few times while it holds. */
+async function readPairedMachineOnConnection(environmentId: string, generation: number) {
+  const target: RuntimeClientTarget = { kind: 'environment', environmentId }
+  for (const delay of [...PAIRED_READ_RETRY_DELAYS_MS, null]) {
+    const read = await readNativeChatRestartMachine(target)
+    if (read.kind !== 'unavailable' || delay === null) {
+      return
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, delay))
+    if (!connectionStillCurrent(environmentId, generation)) {
+      return
+    }
+  }
+}
+
+function forgetPairedMachine(environmentId: string): void {
+  forgetNativeChatRestartMachine(restartMachineKey({ kind: 'environment', environmentId }))
+  forgetRestartInterruptions(environmentId)
+}
 
 /**
  * Reads a paired server's offer on each verified connection transition. Loss of contact reads
- * nothing and keeps the offer; only a revoked pairing or a removed server forgets it.
+ * nothing and keeps the offer; only a revoked pairing, a re-pair or a removed server forgets it.
  */
 function noticeConnections(state: AppState): void {
   const paired = new Set(state.runtimeEnvironments.map((environment) => environment.id))
@@ -227,49 +204,42 @@ function noticeConnections(state: AppState): void {
     if (!paired.has(environmentId)) {
       continue
     }
+    const pairingRevision = entry.snapshot?.pairingRevision
     if (isRuntimeHostContactRevoked(entry)) {
-      seenConnections.set(environmentId, {
-        key: '',
-        pairingRevision: entry.snapshot?.pairingRevision,
-        runtimeId: null
-      })
-      owedAnnouncement.delete(environmentId)
-      forgetNativeChatRestartMachine(restartMachineKey({ kind: 'environment', environmentId }))
+      seenConnections.set(environmentId, { key: '', pairingRevision, generation: 0 })
+      forgetPairedMachine(environmentId)
       continue
     }
     const runtimeId = entry.status?.runtimeId
     if (!runtimeId) {
       continue
     }
-    const pairingRevision = entry.snapshot?.pairingRevision
     const key = `${pairingRevision ?? ''}\u0000${runtimeId}\u0000${entry.hostContactEpoch ?? 0}`
-    let seen = seenConnections.get(environmentId)
+    const seen = seenConnections.get(environmentId)
     if (seen?.key === key) {
       continue
     }
     if (seen && seen.pairingRevision !== pairingRevision) {
-      // Re-paired under the same id: the old pairing's offers, ticks and toast are not this one's,
-      // and nothing proves the new pairing is the same server restarting.
-      forgetNativeChatRestartMachine(restartMachineKey({ kind: 'environment', environmentId }))
-      owedAnnouncement.delete(environmentId)
-      seen = undefined
+      // Re-paired under the same id: the old pairing's offers, ticks and decisions are not this one's.
+      forgetPairedMachine(environmentId)
     }
-    // This window's own last sighting first; on its first, the id persisted before this run.
-    const previous = seen
-      ? seen.runtimeId
-      : seenConnections.has(environmentId)
-        ? null
-        : (entry.snapshot?.priorRuntimeId ?? null)
-    seenConnections.set(environmentId, { key, pairingRevision, runtimeId })
-    void readPairedMachineOnConnection(environmentId, previous !== null && previous !== runtimeId)
+    const generation = ++connectionGenerations
+    seenConnections.set(environmentId, { key, pairingRevision, generation })
+    void readPairedMachineOnConnection(environmentId, generation)
   }
-  for (const machine of getNativeChatRestartOffers().keys()) {
-    const target = restartMachineTarget(machine)
-    if (target.kind === 'environment' && !paired.has(target.environmentId)) {
-      seenConnections.delete(target.environmentId)
-      owedAnnouncement.delete(target.environmentId)
-      forgetNativeChatRestartMachine(machine)
-    }
+  const removed = new Set(
+    [
+      ...[...getNativeChatRestartOffers().keys()].flatMap((machine) => {
+        const target = restartMachineTarget(machine)
+        return target.kind === 'environment' ? [target.environmentId] : []
+      }),
+      ...seenConnections.keys(),
+      ...restartDecidedEnvironments()
+    ].filter((environmentId) => !paired.has(environmentId))
+  )
+  for (const environmentId of removed) {
+    seenConnections.delete(environmentId)
+    forgetPairedMachine(environmentId)
   }
 }
 
@@ -278,6 +248,7 @@ function watchPairedConnections(): void {
   if (stopWatchingConnections || isWebClientLocation()) {
     return
   }
+  setNativeChatRestartReadListener(decidePairedAnswer)
   let last: AppState | null = null
   const check = (state: AppState): void => {
     if (
@@ -317,10 +288,8 @@ export function _resetNativeChatRestartOffer(): void {
   _resetNativeChatRestartOfferState()
   _resetNativeChatResumeOnRestartDialog()
   launch = undefined
-  attempted.clear()
-  announced.clear()
-  owedAnnouncement.clear()
   seenConnections.clear()
+  connectionGenerations = 0
   stopWatchingConnections?.()
   stopWatchingConnections = null
 }

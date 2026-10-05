@@ -22,7 +22,7 @@ import { pairedEnvironment } from '../native-chat-restart-offer-test-support'
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: rpc,
-  supportsStructuredAgentSessionPairedRestartOffers: async () => true,
+  pairedRestartOffersSupport: async () => 'supported',
   // A failed row opens the status feed; these cases never drive it.
   subscribeStructuredAgentSessionStatus: () => new Promise(() => {})
 }))
@@ -35,7 +35,8 @@ const candidates: ResumeCandidate[] = [
     agent: 'codex',
     trigger: 'quit',
     latestPrompt: 'Fix it',
-    recordedAt: 1
+    recordedAt: 1,
+    origin: 'own'
   },
   {
     sessionId: 'b',
@@ -43,7 +44,8 @@ const candidates: ResumeCandidate[] = [
     agent: 'claude',
     trigger: 'update',
     latestPrompt: 'Review it',
-    recordedAt: 2
+    recordedAt: 2,
+    origin: 'own'
   }
 ]
 
@@ -275,7 +277,38 @@ describe('NativeChatResumeStatusSegment', () => {
     })
     expect(screen.getByText('2 chats to resume on studio-mac')).toBeTruthy()
     await act(async () => screen.getByRole('button').click())
-    expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ origin: 'user', focus: 'environment:studio' })
+    expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({
+      origin: 'user',
+      focus: 'environment:studio'
+    })
+  })
+
+  // Another device's or an automation's chats are theirs to resume; the entry counts the user's.
+  it("counts only the user's own chats, and adds nothing for a server holding only others'", async () => {
+    const others = (['other-device', 'automation', 'server-made'] as const).map(
+      (origin, index) => ({
+        ...candidates[0]!,
+        sessionId: `o${index}`,
+        origin
+      })
+    )
+    let studio = [...candidates, ...others]
+    rpc.mockImplementation(async (target) =>
+      target.kind === 'environment' ? { sessions: studio } : { sessions: [] }
+    )
+    useAppStore.setState({
+      runtimeEnvironments: [pairedEnvironment('studio', 'studio-mac')]
+    })
+    await mount()
+    await act(async () => {
+      await readNativeChatRestartMachine({ kind: 'environment', environmentId: 'studio' })
+    })
+    expect(screen.getByText('2 chats to resume on studio-mac')).toBeTruthy()
+    studio = others
+    await act(async () => {
+      await readNativeChatRestartMachine({ kind: 'environment', environmentId: 'studio' })
+    })
+    expect(screen.queryByRole('button')).toBeNull()
   })
 
   it('counts every machine in one entry and opens on none in particular', async () => {

@@ -15,10 +15,6 @@ export type RuntimeHostStatusSnapshot = {
   transport: 'unknown' | 'connecting' | 'ready' | 'disconnected'
   remoteControl?: RemoteRuntimeSharedConnectionDiagnostics | null
   retired?: true
-  /** The runtime id this client had verified for the host before this connection owner existed —
-   *  at app start, the one persisted by the previous run. Lets a fresh window tell "the host
-   *  restarted while we were away" from "first time we know of it" (null). */
-  priorRuntimeId?: string | null
 }
 
 /**

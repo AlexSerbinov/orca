@@ -19,8 +19,6 @@ type StatusOwnerOptions = {
   environmentId: string
   pairingRevision: number
   persistent?: boolean
-  /** See `RuntimeHostStatusSnapshot.priorRuntimeId`. */
-  priorRuntimeId?: string | null
   request: (signal: AbortSignal) => Promise<RuntimeHostStatusResponse>
   verified: (response: Extract<RuntimeHostStatusResponse, { ok: true }>, active: boolean) => boolean
   publish: (snapshot: RuntimeHostStatusSnapshot) => void
@@ -50,8 +48,7 @@ export class RuntimeHostStatusOwner {
       checkedAt: 0,
       status: null,
       verification: 'checking',
-      transport: 'unknown',
-      ...(options.priorRuntimeId === undefined ? {} : { priorRuntimeId: options.priorRuntimeId })
+      transport: 'unknown'
     }
   }
 

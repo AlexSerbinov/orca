@@ -13,6 +13,8 @@ import { useNativeChatRestartOfferSources } from '../native-chat-restart-offer-t
 import { LOCAL_RESTART_MACHINE, type RestartMachineKey } from '../native-chat-restart-machines'
 import { restartMachineNameFromState } from '../native-chat-restart-machine-name'
 import { useAppStore } from '../../store'
+import type { ResumeCandidate } from '../native-chat-resume-on-restart-grouping'
+import { resumeCandidateOwnership } from '../native-chat-resume-ownership'
 
 // Why: closing the resume dialog is a snooze, not a decline — each host keeps its offer. This is
 // then the only surface left carrying it, so it is always rendered rather than gated by
@@ -258,15 +260,20 @@ export function NativeChatResumeStatusSegment({
   let failures = 0
   let unconfirmed = false
   const breakdown: { machine: RestartMachineKey; count: number; name: string }[] = []
+  const failingMachines: RestartMachineKey[] = []
   for (const [machine, offer] of offers) {
-    // A chat being resumed is counted once, as in flight, until the host answers for it.
+    // A chat being resumed is counted once, as in flight, until the host answers for it. Only the
+    // user's own chats count: another device's or an automation's are theirs to resume.
     const inFlight = new Set(resumingByMachine.get(machine) ?? [])
-    const waiting = offer.failed.filter((failure) => !inFlight.has(failure.sessionId))
-    const machinePending = offer.candidates.filter(
-      (candidate) => !inFlight.has(candidate.sessionId)
-    ).length
+    const counted = (row: ResumeCandidate): boolean =>
+      !inFlight.has(row.sessionId) && resumeCandidateOwnership(row) === 'own'
+    const waiting = offer.failed.filter(counted)
+    const machinePending = offer.candidates.filter(counted).length
     pending += machinePending
     failures += waiting.length
+    if (waiting.length > 0) {
+      failingMachines.push(machine)
+    }
     // An unconfirmed chat may be working, so "failed" would invite a duplicate "continue".
     unconfirmed ||= waiting.some((failure) => failure.outcome === 'unconfirmed')
     if (machinePending > 0) {
@@ -310,7 +317,7 @@ export function NativeChatResumeStatusSegment({
         <Segment
           iconOnly={iconOnly}
           count={failures}
-          machines={machines.filter((machine) => (offers.get(machine)?.failed.length ?? 0) > 0)}
+          machines={failingMachines}
           icon={<AlertCircle className="size-3 text-status-warning" />}
           {...(unconfirmed ? checkText(failures) : failedText(failures))}
         />

@@ -1,6 +1,7 @@
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import type { ResumeFailure } from './native-chat-resume-on-restart-grouping'
+import type { RestartMachineKey } from './native-chat-restart-machines'
 
 /**
  * What Orca tells the user after acting on a restart offer.
@@ -64,14 +65,46 @@ export function announceRestartUnconfirmed(count: number): void {
   )
 }
 
-/** What the failure toast can do: open the modal that lists the chats, or forget them. Passed in
- *  because the offer store owns both and this module must not import it back. */
+/** What the failure toast can do: open the modal on the machine that failed (or on none in
+ *  particular), or forget the failures. Passed in because the offer store owns both and this module
+ *  must not import it back. */
 export type RestartFailureActions = {
-  show: () => void
-  dismiss: (sessionIds: readonly string[]) => void
+  show: (machine: RestartMachineKey | null) => void
+  dismiss: (machine: RestartMachineKey, sessionIds: readonly string[]) => void
 }
 
-function refusedCountText(count: number): string {
+/** How one machine's part of a resume ended: the host's answer, a call whose delivery is unknown,
+ *  or one refused before it was sent (the server was re-paired). */
+export type RestartContinueResult = {
+  machine: RestartMachineKey
+  /** Names a paired server; this computer's own chats need no "where". */
+  machineName?: string
+  requested: readonly string[]
+} & (
+  | {
+      kind: 'answered'
+      results: readonly RestartContinuationOutcome[]
+      /** The host's own failure list after the action; undefined from an older host. */
+      hostFailed: readonly Pick<ResumeFailure, 'sessionId' | 'outcome'>[] | undefined
+    }
+  | { kind: 'unconfirmed' }
+  | { kind: 'not-sent' }
+)
+
+function refusedCountText(count: number, machineName: string | undefined): string {
+  if (machineName !== undefined) {
+    return count === 1
+      ? translate(
+          'auto.components.NativeChatResumeOnRestartModal.notContinuedOneOnMachine',
+          '1 chat on {{value0}} couldn’t be resumed',
+          { value0: machineName }
+        )
+      : translate(
+          'auto.components.NativeChatResumeOnRestartModal.notContinuedManyOnMachine',
+          '{{value0}} chats on {{value1}} couldn’t be resumed',
+          { value0: count, value1: machineName }
+        )
+  }
   return count === 1
     ? translate(
         'auto.components.NativeChatResumeOnRestartModal.notContinuedOne',
@@ -84,7 +117,20 @@ function refusedCountText(count: number): string {
       )
 }
 
-function unconfirmedCountText(count: number): string {
+function unconfirmedCountText(count: number, machineName: string | undefined): string {
+  if (machineName !== undefined) {
+    return count === 1
+      ? translate(
+          'auto.components.NativeChatResumeOnRestartModal.notConfirmedOneOnMachine',
+          'Couldn’t confirm 1 chat on {{value0}} was resumed',
+          { value0: machineName }
+        )
+      : translate(
+          'auto.components.NativeChatResumeOnRestartModal.notConfirmedManyOnMachine',
+          'Couldn’t confirm {{value0}} chats on {{value1}} were resumed',
+          { value0: count, value1: machineName }
+        )
+  }
   return count === 1
     ? translate(
         'auto.components.NativeChatResumeOnRestartModal.notConfirmedOne',
@@ -111,41 +157,21 @@ function otherUnconfirmedCountText(count: number): string {
       )
 }
 
-/** The chats an action did not carry on. No names here: the modal has the list, and the count is
- *  the same shape whether it is one chat or ten. Unconfirmed chats get their own count because the
- *  agent may well be working; "couldn't be resumed" would invite a duplicate send. Dismiss forgets
- *  only the chats the host listed as failed — a chat that merely dropped out of the answer may
- *  still be a live offer. */
-function announceNotContinued(
-  refused: readonly string[],
-  unconfirmed: readonly string[],
-  hostFailed: ReadonlySet<string>,
-  actions: RestartFailureActions
-): void {
-  const counted = [...refused, ...unconfirmed]
-  if (counted.length === 0) {
-    return
-  }
-  const dismissable = counted.filter((sessionId) => hostFailed.has(sessionId))
-  const title =
-    refused.length > 0 ? refusedCountText(refused.length) : unconfirmedCountText(unconfirmed.length)
-  toast(title, {
-    ...(refused.length > 0 && unconfirmed.length > 0
-      ? { description: otherUnconfirmedCountText(unconfirmed.length) }
-      : {}),
-    action: {
-      label: translate('auto.components.NativeChatResumeOnRestartModal.show', 'Show'),
-      onClick: actions.show
-    },
-    ...(dismissable.length === 0
-      ? {}
-      : {
-          cancel: {
-            label: translate('auto.components.NativeChatResumeOnRestartModal.dismiss', 'Dismiss'),
-            onClick: () => actions.dismiss(dismissable)
-          }
-        })
-  })
+/** Chats that dropped out of the offer before this resume reached them: another device resumed or
+ *  dismissed them, or the chat moved on. Nothing failed, and nothing was sent. */
+function announceNoLongerNeeded(count: number): void {
+  toast(
+    count === 1
+      ? translate(
+          'auto.components.NativeChatResumeOnRestartModal.noLongerNeededOne',
+          '1 chat no longer needs resuming'
+        )
+      : translate(
+          'auto.components.NativeChatResumeOnRestartModal.noLongerNeededMany',
+          '{{value0}} chats no longer need resuming',
+          { value0: count }
+        )
+  )
 }
 
 /** A dismissal Orca could not confirm. The offer belongs to the host, so say it may still be there. */
@@ -168,15 +194,23 @@ export function restartChatsNotContinued(
   return [...new Set(requested)].filter((sessionId) => bySession.get(sessionId) !== 'continued')
 }
 
-export function announceRestartResults(
+type MachineTally = {
+  machine: RestartMachineKey
+  machineName: string | undefined
+  continued: number
+  refused: string[]
+  unconfirmed: string[]
+  /** Only chats the host listed as failed: one that merely dropped out may still be a live offer. */
+  dismissable: string[]
+  noLonger: number
+  deliveryUnknown: number
+}
+
+function tallyAnswer(
   requested: readonly string[],
   results: readonly RestartContinuationOutcome[],
-  /** The host's own failure list after the action; undefined from an older host. */
-  hostFailed: readonly Pick<ResumeFailure, 'sessionId' | 'outcome'>[] | undefined,
-  actions: RestartFailureActions,
-  /** The paired server the chats are on; omitted for this computer. */
-  machineName?: string
-): void {
+  hostFailed: readonly Pick<ResumeFailure, 'sessionId' | 'outcome'>[] | undefined
+): Omit<MachineTally, 'machine' | 'machineName' | 'deliveryUnknown'> {
   const notContinued = restartChatsNotContinued(requested, results)
   const failed = new Map(hostFailed?.map((failure) => [failure.sessionId, failure.outcome]))
   // A host that lists failures has already dropped chats that moved on by themselves or that the
@@ -197,14 +231,92 @@ export function announceRestartResults(
   const unconfirmed = (sessionId: string): boolean =>
     (failed.get(sessionId) ?? (sentUnconfirmed(sessionId) ? 'unconfirmed' : 'refused')) ===
     'unconfirmed'
-  announceContinued(
-    new Set(requested).size - notContinued.length + seenCarryingOn.length,
-    machineName
+  return {
+    continued: new Set(requested).size - notContinued.length + seenCarryingOn.length,
+    refused: reported.filter((sessionId) => !unconfirmed(sessionId)),
+    unconfirmed: reported.filter(unconfirmed),
+    dismissable: reported.filter((sessionId) => failed.has(sessionId)),
+    noLonger: notContinued.length - reported.length - seenCarryingOn.length
+  }
+}
+
+function tally(result: RestartContinueResult): MachineTally {
+  const base = { machine: result.machine, machineName: result.machineName }
+  const none = { continued: 0, refused: [], unconfirmed: [], dismissable: [], noLonger: 0 }
+  switch (result.kind) {
+    case 'answered':
+      return {
+        ...base,
+        ...tallyAnswer(result.requested, result.results, result.hostFailed),
+        deliveryUnknown: 0
+      }
+    case 'unconfirmed':
+      return { ...base, ...none, deliveryUnknown: new Set(result.requested).size }
+    case 'not-sent':
+      return { ...base, ...none, refused: [...new Set(result.requested)], deliveryUnknown: 0 }
+  }
+}
+
+/** One machine's name when it alone holds the counted chats; otherwise the count needs no "where"
+ *  and the dialog it opens lists each machine. */
+function soleMachineName(tallies: readonly MachineTally[]): string | undefined {
+  return tallies.length === 1 ? tallies[0]!.machineName : undefined
+}
+
+/** The chats an action did not carry on, as one notice across every machine. No chat names: the
+ *  modal has the list. Unconfirmed chats get their own count because the agent may well be
+ *  working; "couldn't be resumed" would invite a duplicate send. */
+function announceNotContinued(tallies: readonly MachineTally[], actions: RestartFailureActions) {
+  const failing = tallies.filter((entry) => entry.refused.length + entry.unconfirmed.length > 0)
+  if (failing.length === 0) {
+    return
+  }
+  const refused = failing.reduce((total, entry) => total + entry.refused.length, 0)
+  const unconfirmed = failing.reduce((total, entry) => total + entry.unconfirmed.length, 0)
+  const name = soleMachineName(failing)
+  const dismissable = failing.filter((entry) => entry.dismissable.length > 0)
+  toast(refused > 0 ? refusedCountText(refused, name) : unconfirmedCountText(unconfirmed, name), {
+    ...(refused > 0 && unconfirmed > 0
+      ? { description: otherUnconfirmedCountText(unconfirmed) }
+      : {}),
+    action: {
+      label: translate('auto.components.NativeChatResumeOnRestartModal.show', 'Show'),
+      onClick: () => actions.show(failing.length === 1 ? failing[0]!.machine : null)
+    },
+    ...(dismissable.length === 0
+      ? {}
+      : {
+          cancel: {
+            label: translate('auto.components.NativeChatResumeOnRestartModal.dismiss', 'Dismiss'),
+            onClick: () => {
+              for (const entry of dismissable) {
+                actions.dismiss(entry.machine, entry.dismissable)
+              }
+            }
+          }
+        })
+  })
+}
+
+/** What one resume did, across every machine it reached: at most one notice per kind of result. */
+export function announceRestartResults(
+  results: readonly RestartContinueResult[],
+  actions: RestartFailureActions
+): void {
+  const tallies = results.map(tally)
+  const continuing = tallies.filter((entry) => entry.continued > 0)
+  const continued = continuing.reduce((total, entry) => total + entry.continued, 0)
+  announceContinued(continued, soleMachineName(continuing))
+  announceNotContinued(tallies, actions)
+  const deliveryUnknown = tallies.reduce((total, entry) => total + entry.deliveryUnknown, 0)
+  announceRestartUnconfirmed(deliveryUnknown)
+  const failures = tallies.reduce(
+    (total, entry) => total + entry.refused.length + entry.unconfirmed.length,
+    0
   )
-  announceNotContinued(
-    reported.filter((sessionId) => !unconfirmed(sessionId)),
-    reported.filter(unconfirmed),
-    new Set(failed.keys()),
-    actions
-  )
+  const noLonger = tallies.reduce((total, entry) => total + entry.noLonger, 0)
+  // Said only when nothing else was: a click must not end in silence.
+  if (noLonger > 0 && continued === 0 && failures === 0 && deliveryUnknown === 0) {
+    announceNoLongerNeeded(noLonger)
+  }
 }

@@ -56,14 +56,21 @@ export function supportsStructuredAgentSessionQuietRepeatedStop(
   return structuredAgentSessionHostSupports(target, AGENT_SESSION_REPEATED_STOP_RUNTIME_CAPABILITY)
 }
 
-/** Whether a paired desktop may read this host's restart offers on connect and dismiss them by name. */
-export function supportsStructuredAgentSessionPairedRestartOffers(
-  target: RuntimeClientTarget
-): Promise<boolean> {
-  return structuredAgentSessionHostSupports(
-    target,
-    AGENT_SESSION_PAIRED_RESTART_OFFERS_RUNTIME_CAPABILITY
-  )
+/** Whether a paired server takes the restart-offer read on connect and named dismissal. A probe
+ *  that failed proves nothing either way, so it is `unknown`, never `unsupported`. */
+export async function pairedRestartOffersSupport(
+  environmentId: string
+): Promise<'supported' | 'unsupported' | 'unknown'> {
+  try {
+    return (await runtimeEnvironmentSupportsCapability(
+      environmentId,
+      AGENT_SESSION_PAIRED_RESTART_OFFERS_RUNTIME_CAPABILITY
+    ))
+      ? 'supported'
+      : 'unsupported'
+  } catch {
+    return 'unknown'
+  }
 }
 
 export function supportsStructuredAgentSessionQuestionAnswers(
@@ -103,11 +110,10 @@ const STRUCTURED_AGENT_SESSION_METHOD_TIMEOUT_MS: ReadonlyMap<string, number> = 
   ['agentSession.modelCatalog', 90_000]
 ])
 
-/** The pairing and runtime a caller's state was read under; a host that changed since refuses the
- *  call before it runs (`runtime_environment_changed`) instead of acting on stale state. */
+/** The pairing a caller's state was read under; a server re-paired since is refused before the
+ *  call is sent (`runtime_environment_changed`) instead of acting on another server's state. */
 export type StructuredAgentSessionCallFence = {
   expectedEnvironmentPairingRevision?: number
-  expectedEnvironmentRuntimeId?: string
 }
 
 export async function callStructuredAgentSession<TResult>(

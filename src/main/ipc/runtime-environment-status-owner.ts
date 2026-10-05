@@ -34,8 +34,6 @@ export function createRuntimeEnvironmentStatusOwner(
   return new RuntimeHostStatusOwner({
     environmentId: environment.id,
     pairingRevision: environment.pairingRevision ?? environment.createdAt,
-    // Read before the first verified status below overwrites it.
-    priorRuntimeId: environment.runtimeId,
     request: (signal) => {
       evidence = captureRuntimeEnvironmentCapabilityEvidence(environment.id, pairing)
       return transport.isReady() &&

@@ -25,7 +25,7 @@ const rpc = vi.hoisted(() => vi.fn())
 const activate = vi.hoisted(() => vi.fn(async () => true))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: rpc,
-  supportsStructuredAgentSessionPairedRestartOffers: async () => true,
+  pairedRestartOffersSupport: async () => 'supported',
   // A failed row opens the status feed; these cases never drive it.
   subscribeStructuredAgentSessionStatus: () => new Promise(() => {})
 }))
@@ -45,7 +45,8 @@ const offered: ResumeCandidate[] = ['a', 'b'].map((sessionId) => ({
   latestPrompt: `Prompt ${sessionId}`,
   recordedAt: 1_800_000_000_000,
   executionHostId: 'local',
-  workspaceKind: 'git-worktree'
+  workspaceKind: 'git-worktree',
+  origin: 'own'
 }))
 
 /** A chat the host acted on and could not carry on, as it reports it. */
@@ -625,7 +626,7 @@ it('lets the failure notice open the list or forget the chats it counted', async
   await act(async () => press(options?.cancel))
   expect(rpc.mock.calls.at(-1)?.slice(1)).toEqual([
     'agentSession.restartResumableDismiss',
-    { sessionIds: ['a'] }
+    { sessionIds: ['a'], offers: [{ sessionId: 'a', recordedAt: 1_800_000_000_000 }] }
   ])
 })
 
@@ -830,7 +831,7 @@ it('dismisses one failed chat by name, and every record through Dismiss all', as
   await act(async () => button('Dismiss "Prompt a" in workspace').click())
   expect(rpc.mock.calls.at(-1)?.slice(1)).toEqual([
     'agentSession.restartResumableDismiss',
-    { sessionIds: ['a'] }
+    { sessionIds: ['a'], offers: [{ sessionId: 'a', recordedAt: 1_800_000_000_000 }] }
   ])
   expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Prompt a')
   expect(document.querySelectorAll('[role="checkbox"]')).toHaveLength(2)

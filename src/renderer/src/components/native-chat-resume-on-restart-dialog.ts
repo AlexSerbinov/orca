@@ -26,13 +26,16 @@ export function requestNativeChatResumeOnRestartDialog(
   origin: NativeChatResumeDialogOrigin,
   focus: RestartMachineKey | null = null
 ): void {
-  // A user's request is never demoted to a scheduled one.
-  const nextOrigin = pending?.origin === 'user' ? 'user' : origin
-  // The same request again keeps the opening it already made, and with it the user's ticks.
-  if (pending?.origin === nextOrigin && pending.focus === focus) {
+  // A dialog the user opened is already showing; this computer's launch read joining it must not
+  // move its focus, which would reset the user's ticks and collapse the machine they opened.
+  if (pending?.origin === 'user' && origin === 'launch') {
     return
   }
-  pending = { origin: nextOrigin, focus }
+  // The same request again keeps the opening it already made, and with it the user's ticks.
+  if (pending?.origin === origin && pending.focus === focus) {
+    return
+  }
+  pending = { origin, focus }
   notify()
 }
 
@@ -42,6 +45,13 @@ export function consumeNativeChatResumeOnRestartDialogRequest(): void {
   }
   pending = null
   notify()
+}
+
+/** Drops a request only this computer's launch raised; one the user made stays. */
+export function consumeNativeChatResumeOnRestartLaunchRequest(): void {
+  if (pending?.origin === 'launch') {
+    consumeNativeChatResumeOnRestartDialogRequest()
+  }
 }
 
 export function getNativeChatResumeOnRestartDialogRequest(): NativeChatResumeOnRestartDialogRequest | null {

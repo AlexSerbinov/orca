@@ -11,7 +11,7 @@ import {
   readNativeChatRestartMachine
 } from './native-chat-resume-on-restart-store'
 import {
-  continueNativeChatRestartOffer,
+  continueNativeChatRestartOffers,
   dismissNativeChatRestartOffer
 } from './native-chat-restart-offer-actions'
 import { _resetNativeChatRestartOffer } from './native-chat-restart-offer-triggers'
@@ -45,6 +45,7 @@ const failure = {
   trigger: 'update',
   latestPrompt: 'Fix it',
   recordedAt: 1,
+  origin: 'own',
   failedAt: 2,
   outcome: 'refused',
   reason: 'agent_session_restart_work_superseded'
@@ -199,7 +200,7 @@ it('waits for a resume in flight instead of re-reading under it', async () => {
       ? acting.promise
       : Promise.resolve({ sessions: [], failed: [failure] })
   )
-  const retry = continueNativeChatRestartOffer('local', ['a'])
+  const retry = continueNativeChatRestartOffers([{ machine: 'local', sessionIds: ['a'] }])
   hostEmit()({ type: 'status', session: summary('working', 'Carry on please', Date.now() + 1) })
   await vi.advanceTimersByTimeAsync(500)
   expect(offerReads()).toBe(1)

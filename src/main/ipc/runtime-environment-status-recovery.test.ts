@@ -3,10 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import {
-  addEnvironmentFromPairingCode,
-  markEnvironmentUsed
-} from '../../shared/runtime-environment-store'
+import { addEnvironmentFromPairingCode } from '../../shared/runtime-environment-store'
 import { pairingCode } from './runtime-environments-ipc-test-harness'
 import {
   getRuntimeEnvironmentStatus,
@@ -89,45 +86,4 @@ it('a passive capability check does not strand later active bootstrap recovery',
   await getRuntimeEnvironmentStatus(profile, environment.id)
   await vi.advanceTimersByTimeAsync(3_000)
   expect(request).toHaveBeenCalledTimes(3)
-})
-
-it('publishes the runtime id persisted before this run beside the one that just answered', async () => {
-  const environment = addEnvironmentFromPairingCode(profile, {
-    name: 'restarted-while-away',
-    pairingCode: pairingCode()
-  })
-  markEnvironmentUsed(profile, environment.id, { runtimeId: 'host-before' })
-  request.mockResolvedValue({
-    id: 'status',
-    ok: true,
-    result: { runtimeId: 'host-after', graphStatus: 'ready', capabilities: [] },
-    _meta: { runtimeId: 'host-after' }
-  })
-  expect((await getRuntimeEnvironmentStatus(profile, environment.id)).ok).toBe(true)
-  expect(publish).toHaveBeenCalledWith(
-    'runtimeEnvironments:statusChanged',
-    expect.objectContaining({
-      verification: 'verified',
-      priorRuntimeId: 'host-before',
-      status: expect.objectContaining({ runtimeId: 'host-after' })
-    })
-  )
-})
-
-it('publishes no prior runtime id for a host this client never verified', async () => {
-  const environment = addEnvironmentFromPairingCode(profile, {
-    name: 'never-verified',
-    pairingCode: pairingCode()
-  })
-  request.mockResolvedValue({
-    id: 'status',
-    ok: true,
-    result: { runtimeId: 'host-1', graphStatus: 'ready', capabilities: [] },
-    _meta: { runtimeId: 'host-1' }
-  })
-  await getRuntimeEnvironmentStatus(profile, environment.id)
-  expect(publish).toHaveBeenCalledWith(
-    'runtimeEnvironments:statusChanged',
-    expect.objectContaining({ verification: 'verified', priorRuntimeId: null })
-  )
 })

@@ -1,7 +1,6 @@
 import type { PublicKnownRuntimeEnvironment } from '../../../shared/runtime-environments'
 import type { RuntimeEnvironmentStatus } from '../../../shared/runtime-host-status'
 import type { RuntimeStatus } from '../../../shared/runtime-types'
-import type { AutomationWorkspaceProvenance } from '../../../shared/worktree/types'
 
 /** A paired server as the desktop's saved list holds it. */
 export function pairedEnvironment(
@@ -22,13 +21,12 @@ export function pairedEnvironment(
   }
 }
 
-/** A verified connection: the server's runtime, and the id persisted before this run. */
+/** A verified connection to a server's runtime under one pairing. */
 export function verifiedConnection(args: {
   environmentId: string
   runtimeId: string
   pairedDeviceId?: string
   hostContactEpoch?: number
-  priorRuntimeId?: string | null
   pairingRevision?: number
 }): RuntimeEnvironmentStatus {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the offer triggers read only runtimeId and pairedDeviceId from a status; the rest of RuntimeStatus is irrelevant here.
@@ -47,20 +45,7 @@ export function verifiedConnection(args: {
       checkedAt: 1,
       status,
       verification: 'verified',
-      transport: 'ready',
-      priorRuntimeId: args.priorRuntimeId ?? null
+      transport: 'ready'
     }
   }
-}
-
-export const AUTOMATION_PROVENANCE: AutomationWorkspaceProvenance = {
-  kind: 'created-by-automation',
-  automationId: 'automation-1',
-  automationNameSnapshot: 'Nightly dependency bump',
-  automationRunId: 'run-1',
-  automationRunTitleSnapshot: 'Nightly',
-  createdAt: 1,
-  executionTargetType: 'local',
-  executionTargetId: 'local',
-  projectId: 'project-1'
 }
