@@ -13,6 +13,8 @@ import { journalOpenRefusalError } from '../native-chat/agent-session-journal/jo
 import { AgentSessionJournalError } from '../native-chat/agent-session-journal/journal-write-guards'
 import type { AgentSessionStoreState } from './agent-session-record-store-file'
 import { writeAgentSessionStoreRows } from './agent-session-record-rows'
+import { attributeAgentSessionRuntime } from './agent-session-runtime-attribution'
+import { readAgentSessionRuntimeEnds } from './agent-session-runtime-end-record'
 import {
   agentSessionStoreDraftRowWrites,
   draftAgentSessionStoreState,
@@ -79,7 +81,10 @@ export class AgentSessionStoreTransactions {
     loaded: AgentSessionStoreState
   ) {
     freezeRows(loaded, null)
-    this.published = loaded
+    this.published = {
+      ...loaded,
+      runtimeEnds: readAgentSessionRuntimeEnds(journalDatabase.stateDirectory)
+    }
   }
 
   /** The committed state. A transaction in flight never shows here until its rows have landed. */
@@ -148,6 +153,7 @@ export class AgentSessionStoreTransactions {
     const published = this.published
     const draft = draftAgentSessionStoreState(published)
     const result = apply(draft)
+    attributeAgentSessionRuntime(published, draft)
     const writes = agentSessionStoreDraftRowWrites(published, draft)
     return {
       result,

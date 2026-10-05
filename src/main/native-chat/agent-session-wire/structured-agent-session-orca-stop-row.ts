@@ -2,10 +2,8 @@
 // every client already prints for a stopped agent, with the cause beside them for clients that
 // name it (`AgentSessionOrcaStop`).
 
-import {
-  agentSessionFailureFact,
-  isAgentSessionOrcaStopCause
-} from '../../../shared/agent-session-failure'
+import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
+import { isAgentSessionOrcaStopCause } from '../../../shared/agent-session-orca-stop'
 import type { AgentSessionResumeTrigger } from '../../../shared/agent-session-resume-marker'
 import {
   agentSessionFailureWords,
@@ -13,7 +11,10 @@ import {
 } from '../../../shared/agent-session-failure-words'
 import { parseAgentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
-import type { AgentJournalRenderItem } from '../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalRenderItem,
+  AgentJournalStatusItem
+} from '../../../shared/agent-session-journal-types'
 import {
   readAgentJournalTurn,
   readAgentJournalTurnOutcome
@@ -25,18 +26,21 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 
 type OrcaStopRowJournal = Pick<AgentSessionJournal, 'snapshot' | 'appendItem'>
 
-/** A stopped provider's row words, with how Orca ended when the provider stopped with it. */
-export function providerExitedRowWords(
+/** The row about an owner gone from under a turn: today's words, which every client prints, and
+ *  why Orca stopped when it was Orca, which a client that knows the cause names instead. */
+export function orcaStopRowBody(
   context: AgentSessionFailureWordsContext | undefined,
   orcaEnd: unknown
-) {
-  return agentSessionFailureWords(
-    agentSessionFailureFact(
-      'providerExited',
-      isAgentSessionOrcaStopCause(orcaEnd) ? { orcaStop: { cause: orcaEnd } } : {}
-    ),
-    { ...context, surface: 'row' }
-  )
+): AgentJournalStatusItem {
+  return {
+    kind: 'status',
+    ...agentSessionFailureWords(agentSessionFailureFact('providerExited'), {
+      ...context,
+      surface: 'row'
+    }),
+    tone: 'error',
+    ...(isAgentSessionOrcaStopCause(orcaEnd) ? { orcaStop: { cause: orcaEnd } } : {})
+  }
 }
 
 /** The root turn running as the quit stops the child: the one its stop may cut. */
@@ -97,11 +101,7 @@ export async function recordStructuredAgentSessionShutdownCut(input: {
     }
     await input.journal.appendItem(
       { provider: 'orca', clientMessageId },
-      {
-        kind: 'status',
-        ...providerExitedRowWords(input.failureTextContext, input.trigger),
-        tone: 'error'
-      },
+      orcaStopRowBody(input.failureTextContext, input.trigger),
       { fence: input.fence, turnScope: { kind: 'turn', turnItemId } }
     )
   } catch (error) {

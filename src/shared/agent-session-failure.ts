@@ -134,24 +134,6 @@ export type AgentSessionFailureFact = {
   attachment?: AgentSessionAttachmentProblem
   /** On `providerRetrying`: why the provider is retrying. */
   retry?: AgentSessionProviderRetry
-  /** On `providerExited`: Orca itself stopped on the chat's host, and why. */
-  orcaStop?: AgentSessionOrcaStop
-}
-
-/** Why the Orca running a chat stopped mid-reply. Open on the wire: a cause this build does not know
- *  reads as no cause, so the row keeps its generic words. */
-export const AGENT_SESSION_ORCA_STOP_CAUSES = ['update', 'quit', 'crash'] as const
-export type AgentSessionOrcaStopCause = (typeof AGENT_SESSION_ORCA_STOP_CAUSES)[number]
-export type AgentSessionOrcaStop = { cause: AgentSessionOrcaStopCause }
-
-export function isAgentSessionOrcaStopCause(value: unknown): value is AgentSessionOrcaStopCause {
-  return AGENT_SESSION_ORCA_STOP_CAUSES.some((cause) => cause === value)
-}
-
-function readOrcaStop(value: unknown): AgentSessionOrcaStop | undefined {
-  return isRecord(value) && isAgentSessionOrcaStopCause(value.cause)
-    ? { cause: value.cause }
-    : undefined
 }
 
 /** A fact as a row stores it: its kind may be one a newer host added, so only
@@ -183,7 +165,6 @@ export function agentSessionFailureFact<TKind extends AgentSessionFailureKind>(
     refusal?: AgentSessionRefusalReference
     attachment?: AgentSessionAttachmentProblem
     retry?: AgentSessionProviderRetry
-    orcaStop?: AgentSessionOrcaStop
   } = {}
 ): AgentSessionFailureFact & { kind: TKind } {
   // Re-bounded here, so no writer can store more than the cap however it built the detail.
@@ -195,8 +176,7 @@ export function agentSessionFailureFact<TKind extends AgentSessionFailureKind>(
     ...(detail ? { detail } : {}),
     ...(extra.refusal ? { refusal: extra.refusal } : {}),
     ...(extra.attachment ? { attachment: extra.attachment } : {}),
-    ...(extra.retry ? { retry: extra.retry } : {}),
-    ...(extra.orcaStop ? { orcaStop: { cause: extra.orcaStop.cause } } : {})
+    ...(extra.retry ? { retry: extra.retry } : {})
   }
 }
 
@@ -253,13 +233,11 @@ export function readAgentSessionFailureFact(value: unknown): AgentSessionFailure
   const refusal = readAgentSessionRefusalReference(value.refusal)
   const attachment = readAttachmentProblem(value.attachment)
   const retry = readProviderRetry(value.retry)
-  const orcaStop = readOrcaStop(value.orcaStop)
   return agentSessionFailureFact(value.kind, {
     ...(isProviderDiagnostic(value.detail) ? { detail: value.detail } : {}),
     ...(refusal ? { refusal } : {}),
     ...(attachment ? { attachment } : {}),
-    ...(retry ? { retry } : {}),
-    ...(orcaStop ? { orcaStop } : {})
+    ...(retry ? { retry } : {})
   })
 }
 

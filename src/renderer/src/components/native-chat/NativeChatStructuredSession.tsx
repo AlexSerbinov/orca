@@ -22,9 +22,11 @@ import type { NativeChatStructuredViewProps } from './native-chat-view-types'
 import { NativeChatStructuredSessionStatus } from './NativeChatStructuredSessionStatus'
 import { useNativeChatLaunchDraftSignal } from './use-native-chat-launch-draft-adoption'
 import { NativeChatLaunchRetry } from './NativeChatLaunchRetry'
-import { NativeChatInterruptedContinue } from './NativeChatInterruptedContinue'
-import { NativeChatHostLabelContext } from './native-chat-host-label-context'
-import { useStructuredAgentSessionHostLabel } from './use-structured-agent-session-host-label'
+import {
+  NativeChatInterruptedContinue,
+  useNativeChatInterruptedContinuation
+} from './NativeChatInterruptedContinue'
+import { NativeChatOrcaStopContext } from './native-chat-orca-stop-context'
 import { useNativeChatProvisionalLaunch } from './use-native-chat-provisional-launch'
 import { useStructuredAgentSessionHostExecutionPhase } from './StructuredAgentSessionStatusBridge'
 import { NativeChatQueuedMessageList } from './NativeChatQueuedMessageList'
@@ -116,7 +118,14 @@ export function NativeChatStructuredSession(
     [controller, historyPhase, props.agent, props.sessionId]
   )
   const agentLabel = structuredAgentLabel(props.agent === 'codex' ? 'codex' : 'claude')
-  const hostLabel = useStructuredAgentSessionHostLabel(props.target)
+  const continuation = useNativeChatInterruptedContinuation({
+    target: props.target,
+    sessionId: props.sessionId,
+    journalItems: controller.journalItems,
+    submissions: controller.submissions,
+    isWorking: controller.isWorking,
+    onError: setComposerError
+  })
   const deliveryNotices = useStructuredAgentSessionDeliveryNotices({
     outbox: controller.outbox,
     submissions: controller.submissions,
@@ -264,7 +273,7 @@ export function NativeChatStructuredSession(
         ) : viewState.kind === 'empty' ? (
           <NativeChatEmptyState kind="empty" agent={props.agent} />
         ) : (
-          <NativeChatHostLabelContext.Provider value={hostLabel}>
+          <NativeChatOrcaStopContext.Provider value={continuation.view}>
             <NativeChatMessageList
               session={session}
               journalItems={controller.journalItems}
@@ -284,7 +293,7 @@ export function NativeChatStructuredSession(
               runtimeContext={imageRuntimeContext}
               deliveryNotices={deliveryNotices}
             />
-          </NativeChatHostLabelContext.Provider>
+          </NativeChatOrcaStopContext.Provider>
         )}
       </div>
       {readFailedFinally ? null : (
@@ -295,14 +304,7 @@ export function NativeChatStructuredSession(
             agentLabel={agentLabel}
             onRetry={provisionalLaunch.retry}
           />
-          <NativeChatInterruptedContinue
-            target={props.target}
-            sessionId={props.sessionId}
-            journalItems={controller.journalItems}
-            submissions={controller.submissions}
-            isWorking={controller.isWorking}
-            onError={setComposerError}
-          />
+          <NativeChatInterruptedContinue continuation={continuation} />
           {/* Host-held drafts, never transcript rows. Above the status area, so running shells and agents sit next to the composer. */}
           <NativeChatQueuedMessageList
             controller={controller.queuedMessages}

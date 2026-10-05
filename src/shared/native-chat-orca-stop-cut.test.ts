@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { agentSessionFailureFact, readAgentSessionFailureFact } from './agent-session-failure'
+import { agentSessionFailureFact } from './agent-session-failure'
 import { agentSessionFailureWords } from './agent-session-failure-words'
+import { readAgentSessionOrcaStop } from './agent-session-orca-stop'
 import { agentJournalItemKey } from './agent-session-journal-item-key'
 import type { AgentJournalRenderItem } from './agent-session-journal-types'
 import { withNativeChatCutTurnNotices } from './native-chat-cut-turn-notice'
@@ -41,8 +42,9 @@ function cutTurn(outcome?: string): AgentJournalRenderItem {
   }
 }
 
-/** The host's row, as a host this build or a newer one writes it. */
-function stopRow(failure: unknown, scoped = true): AgentJournalRenderItem {
+/** The host's row, as a host this build or a newer one writes it: today's words and fact, and the
+ *  cause beside them. */
+function stopRow(orcaStop: { cause: string } | undefined, scoped = true): AgentJournalRenderItem {
   return {
     itemId: agentJournalItemKey({
       provider: 'orca',
@@ -51,32 +53,35 @@ function stopRow(failure: unknown, scoped = true): AgentJournalRenderItem {
     revision: 1,
     sequence: 3,
     observedAt: 6,
-    body: { kind: 'status', text: LEGACY_TEXT, tone: 'error', failure },
+    body: {
+      kind: 'status',
+      ...agentSessionFailureWords(agentSessionFailureFact('providerExited'), {
+        agentName: 'Codex',
+        surface: 'row'
+      }),
+      tone: 'error',
+      ...(orcaStop === undefined ? {} : { orcaStop })
+    },
     ...(scoped ? { turnScope: { kind: 'turn' as const, turnItemId: turnId } } : {})
   }
 }
 
-const updateFact = agentSessionFailureFact('providerExited', { orcaStop: { cause: 'update' } })
+const update = { cause: 'update' }
 
 describe('the cause on a stopped row', () => {
   it('is read when known and dropped when a newer host names one this build does not know', () => {
-    expect(readAgentSessionFailureFact(updateFact)?.orcaStop).toEqual({ cause: 'update' })
-    expect(
-      readAgentSessionFailureFact({ kind: 'providerExited', orcaStop: { cause: 'power-loss' } })
-    ).toEqual({ kind: 'providerExited' })
+    expect(readAgentSessionOrcaStop(update)).toEqual({ cause: 'update' })
+    expect(readAgentSessionOrcaStop({ cause: 'power-loss' })).toBeUndefined()
   })
 
-  it("keeps today's sentence, so a client that reads no cause prints the same row", () => {
-    expect(agentSessionFailureWords(updateFact, { agentName: 'Codex', surface: 'row' }).text).toBe(
-      LEGACY_TEXT
-    )
+  it("rides beside today's sentence, so a client that reads no cause prints the same row", () => {
+    expect(stopRow(update).body).toMatchObject({ text: LEGACY_TEXT, tone: 'error' })
   })
 })
 
 describe('a client that predates the cause', () => {
   it("reads the host row as the cut turn's one explanation and adds none of its own", () => {
-    // An older client keeps only the kind (as this build does for an unknown cause).
-    const items = [userMessage(1), cutTurn(), stopRow({ kind: 'providerExited' })]
+    const items = [userMessage(1), cutTurn(), stopRow(update)]
     const read = withNativeChatCutTurnNotices(items, { agentName: 'Codex' })
     expect(read).toBe(items)
     expect(read.filter((item) => item.body.kind === 'status')).toHaveLength(1)
@@ -85,36 +90,30 @@ describe('a client that predates the cause', () => {
 
 describe('the cut Continue answers', () => {
   it('is the latest turn when an Orca stop cut it and nothing was sent since', () => {
-    expect(
-      latestNativeChatOrcaStopCut([userMessage(1), cutTurn(), stopRow(updateFact)], [])
-    ).toEqual({ turnItemId: turnId, cause: 'update' })
+    expect(latestNativeChatOrcaStopCut([userMessage(1), cutTurn(), stopRow(update)], [])).toEqual({
+      turnItemId: turnId,
+      cause: 'update'
+    })
   })
 
   it('is gone once a message follows the cut', () => {
     expect(
-      latestNativeChatOrcaStopCut(
-        [userMessage(1), cutTurn(), stopRow(updateFact), userMessage(4)],
-        []
-      )
+      latestNativeChatOrcaStopCut([userMessage(1), cutTurn(), stopRow(update), userMessage(4)], [])
     ).toBeNull()
   })
 
   it('is gone while a send is on its way', () => {
     expect(
       latestNativeChatOrcaStopCut(
-        [userMessage(1), cutTurn(), stopRow(updateFact)],
+        [userMessage(1), cutTurn(), stopRow(update)],
         [{ dispatchState: 'pending' }]
       )
     ).toBeNull()
   })
 
   it("is none for a stop with no Orca cause, a person's Stop, or an unscoped row", () => {
-    expect(
-      latestNativeChatOrcaStopCut([cutTurn(), stopRow({ kind: 'providerExited' })], [])
-    ).toBeNull()
-    expect(
-      latestNativeChatOrcaStopCut([cutTurn('cancellation'), stopRow(updateFact)], [])
-    ).toBeNull()
-    expect(latestNativeChatOrcaStopCut([cutTurn(), stopRow(updateFact, false)], [])).toBeNull()
+    expect(latestNativeChatOrcaStopCut([cutTurn(), stopRow(undefined)], [])).toBeNull()
+    expect(latestNativeChatOrcaStopCut([cutTurn('cancellation'), stopRow(update)], [])).toBeNull()
+    expect(latestNativeChatOrcaStopCut([cutTurn(), stopRow(update, false)], [])).toBeNull()
   })
 })

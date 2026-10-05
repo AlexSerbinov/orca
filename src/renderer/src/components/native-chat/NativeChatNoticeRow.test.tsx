@@ -5,18 +5,40 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { projectStructuredItemsToNativeChat } from '../../../../shared/structured-agent-session-projection'
 import type { AgentJournalStatusItem } from '../../../../shared/agent-session-journal-types'
 import { MessageRow } from './NativeChatMessageRow'
-import { NativeChatHostLabelContext } from './native-chat-host-label-context'
+import {
+  NativeChatOrcaStopContext,
+  type NativeChatOrcaStopView
+} from './native-chat-orca-stop-context'
 
 afterEach(cleanup)
 
-function renderStatus(body: AgentJournalStatusItem, hostLabel: string | null = null) {
+function orcaStopView(
+  hostLabel: string | null,
+  continueTurnItemId: string | null
+): NativeChatOrcaStopView {
+  return { hostLabel, continueTurnItemId }
+}
+
+function renderStatus(
+  body: AgentJournalStatusItem,
+  hostLabel: string | null = null,
+  continueTurnItemId: string | null = null
+) {
   const [message] = projectStructuredItemsToNativeChat([
-    { itemId: 'notice', sequence: 1, revision: 1, observedAt: 1, body }
+    {
+      itemId: 'notice',
+      sequence: 1,
+      revision: 1,
+      observedAt: 1,
+      body,
+      turnScope: { kind: 'turn', turnItemId: 'cut-turn' }
+    }
   ])
+  const view = orcaStopView(hostLabel, continueTurnItemId)
   return render(
-    <NativeChatHostLabelContext.Provider value={hostLabel}>
+    <NativeChatOrcaStopContext.Provider value={view}>
       <MessageRow message={message!} expandSignal={false} onScrollMessageToTop={vi.fn()} />
-    </NativeChatHostLabelContext.Provider>
+    </NativeChatOrcaStopContext.Provider>
   )
 }
 
@@ -28,23 +50,29 @@ function orcaStopRow(cause: string): AgentJournalStatusItem {
     kind: 'status',
     text: LEGACY_TEXT,
     tone: 'error',
-    failure: { kind: 'providerExited', orcaStop: { cause } }
+    orcaStop: { cause }
   }
 }
 
 describe('the row an Orca stop leaves', () => {
   it.each([
-    ['update', 'Stopped: Orca on studio-mac restarted for an update'],
-    ['quit', 'Stopped: Orca on studio-mac was restarted'],
-    ['crash', 'Stopped: Orca on studio-mac stopped unexpectedly']
-  ])('names a %s and the machine', (cause, headline) => {
+    ['update', 'Orca on studio-mac restarted for an update while this response was in progress.'],
+    ['quit', 'Orca on studio-mac was closed while this response was in progress.'],
+    ['crash', 'Orca on studio-mac stopped unexpectedly while this response was in progress.']
+  ])('names a %s and the machine, muted', (cause, sentence) => {
     renderStatus(orcaStopRow(cause), 'studio-mac')
-    const row = screen.getByText(new RegExp(headline))
-    expect(row).toHaveTextContent(
-      'The reply was cut off partway through. Continue, and the agent first checks whether its last step finished.'
-    )
-    expect(row.parentElement?.parentElement).toHaveClass('text-destructive')
+    const row = screen.getByText(`${sentence} You can continue in this conversation.`)
+    expect(row.parentElement?.parentElement).toHaveClass('text-muted-foreground')
     expect(screen.queryByText(LEGACY_TEXT)).toBeNull()
+  })
+
+  it('leaves the way on to Continue while Continue is offered on its turn', () => {
+    renderStatus(orcaStopRow('update'), 'studio-mac', 'cut-turn')
+    expect(
+      screen.getByText(
+        'Orca on studio-mac restarted for an update while this response was in progress.'
+      )
+    ).toBeInTheDocument()
   })
 
   it('keeps the host words for a cause this build does not know', () => {
@@ -58,7 +86,8 @@ describe('the row an Orca stop leaves', () => {
   })
 
   it('keeps the host words for a stop Orca did not cause', () => {
-    renderStatus({ ...orcaStopRow('update'), failure: { kind: 'providerExited' } }, 'studio-mac')
+    const { orcaStop: _orcaStop, ...agentExit } = orcaStopRow('update')
+    renderStatus(agentExit, 'studio-mac')
     expect(screen.getByText(LEGACY_TEXT)).toBeInTheDocument()
   })
 })

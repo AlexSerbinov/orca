@@ -10,9 +10,9 @@ import {
   isAgentSessionHostStatusPresentation,
   type AgentSessionHostStatusPresentation
 } from '../../../../shared/agent-session-host-status-rows'
-import type { AgentSessionOrcaStopCause } from '../../../../shared/agent-session-failure'
 import type { NativeChatTextBlock } from '../../../../shared/native-chat-types'
-import { useNativeChatHostLabel } from './native-chat-host-label-context'
+import { useNativeChatOrcaStopView } from './native-chat-orca-stop-context'
+import { nativeChatOrcaStopRowText } from './native-chat-orca-stop-words'
 import { ProviderFrameRow } from './NativeChatTranscriptChrome'
 
 const HOST_STATUS_WORDS: Record<AgentSessionHostStatusPresentation, () => string> = {
@@ -28,29 +28,6 @@ const HOST_STATUS_WORDS: Record<AgentSessionHostStatusPresentation, () => string
     )
 }
 
-const ORCA_STOP_HEADLINES: Record<AgentSessionOrcaStopCause, (machine: string) => string> = {
-  update: (machine) =>
-    translate(
-      'components.native-chat.notices.orcaStopUpdate',
-      'Stopped: Orca on {{machine}} restarted for an update',
-      { machine }
-    ),
-  quit: (machine) =>
-    translate(
-      'components.native-chat.notices.orcaStopQuit',
-      'Stopped: Orca on {{machine}} was restarted',
-      {
-        machine
-      }
-    ),
-  crash: (machine) =>
-    translate(
-      'components.native-chat.notices.orcaStopCrash',
-      'Stopped: Orca on {{machine}} stopped unexpectedly',
-      { machine }
-    )
-}
-
 export function NativeChatNoticeRow({
   block,
   onLinkClick,
@@ -60,7 +37,7 @@ export function NativeChatNoticeRow({
   onLinkClick?: CommentMarkdownLinkClickHandler
   allowFileUriLinks?: boolean
 }): React.JSX.Element {
-  const hostLabel = useNativeChatHostLabel()
+  const orcaStopView = useNativeChatOrcaStopView()
   if (block.presentation === 'compaction') {
     const label = translate('components.native-chat.notices.compaction', 'Context compacted')
     return (
@@ -112,17 +89,18 @@ export function NativeChatNoticeRow({
       </Card>
     )
   }
-  // The host's row about an Orca stop: named only when this chat knows its machine, else the
-  // generic words the host wrote.
-  const orcaStop = block.failure?.kind === 'providerExited' ? block.failure.orcaStop : undefined
-  const text =
-    orcaStop && hostLabel
-      ? `${ORCA_STOP_HEADLINES[orcaStop.cause](hostLabel)}\n${translate(
-          'components.native-chat.notices.orcaStopDetail',
-          'The reply was cut off partway through. Continue, and the agent first checks whether its last step finished.'
-        )}`
-      : block.text
-  const tone = block.tone
+  // The host's row about an Orca stop names the cause and the machine, muted: Orca stopped, not the
+  // agent. With no machine to name it keeps the host's own words.
+  const { orcaStop } = block
+  const { hostLabel, continueTurnItemId } = orcaStopView
+  const named = orcaStop !== undefined && hostLabel !== null
+  const text = named
+    ? nativeChatOrcaStopRowText(orcaStop.cause, hostLabel, {
+        continueOffered:
+          orcaStop.turnItemId !== undefined && orcaStop.turnItemId === continueTurnItemId
+      })
+    : block.text
+  const tone = named ? 'notice' : block.tone
   const Icon =
     tone === 'warning'
       ? AlertTriangle

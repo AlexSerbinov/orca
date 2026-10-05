@@ -24,7 +24,6 @@ import {
   isReadableRetiredAgentSessionClaimKey
 } from './agent-session-store-row-rules'
 import { AgentSessionTabTable, type PersistedAgentSessionTab } from './agent-session-tab-table'
-import { takeAgentSessionRuntimeTeardown } from './agent-session-runtime-teardown-record'
 
 /** "Never recorded" and "recorded, now empty" differ, and #17439's legacy fallback needs the first;
  *  no row count can say which. */
@@ -164,7 +163,6 @@ export function loadAgentSessionStoreRows(
   } else if (table.sessionIds().length > 0) {
     state.unrecordedSessionTabs = table
   }
-  state.previousRuntimeEnd = takeAgentSessionRuntimeTeardown(db)
   return state
 }
 

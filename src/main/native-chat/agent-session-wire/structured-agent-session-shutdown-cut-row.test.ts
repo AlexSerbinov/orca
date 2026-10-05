@@ -2,17 +2,21 @@
 // prints, with the cause beside them. A turn that finished, a person's Stop and an idle eviction
 // write none.
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalTurnLifecycle
 } from '../../../shared/agent-session-journal-types'
-import { readAgentSessionFailureFact } from '../../../shared/agent-session-failure'
+import { readAgentSessionOrcaStop } from '../../../shared/agent-session-orca-stop'
 import { withNativeChatCutTurnNotices } from '../../../shared/native-chat-cut-turn-notice'
 import { latestNativeChatOrcaStopCut } from '../../../shared/native-chat-orca-stop-cut'
 import { AgentSessionRecoveryCapsule } from '../../runtime/agent-session-recovery-capsule'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
-import { recordAgentSessionRuntimeTeardown } from '../../runtime/agent-session-runtime-teardown-record'
+import {
+  agentSessionRuntimeIncarnation,
+  beginAgentSessionRuntimeIncarnationForTest
+} from '../../runtime/agent-session-runtime-attribution'
+import { recordAgentSessionRuntimeEnd } from '../../runtime/agent-session-runtime-end-record'
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
 import {
@@ -91,6 +95,7 @@ async function runningTurn(): Promise<void> {
  *  finds the turn's owner gone. */
 async function restartAfterDeath(): Promise<void> {
   const { root } = hostTestState()
+  beginAgentSessionRuntimeIncarnationForTest()
   const store = await openTestAgentSessionRecordStore(root)
   host = new StructuredAgentSessionHost({
     logger: createStructuredAgentSessionLogger(),
@@ -113,8 +118,7 @@ async function reread() {
   const turnItemId = items.find((item) => item.body.kind === 'turn')?.itemId
   const stopRows = items.filter(
     (item) =>
-      item.body.kind === 'status' &&
-      readAgentSessionFailureFact(item.body.failure)?.orcaStop !== undefined
+      item.body.kind === 'status' && readAgentSessionOrcaStop(item.body.orcaStop) !== undefined
   )
   const readerErrors = withNativeChatCutTurnNotices(items, { agentName: 'Codex' }).flatMap(
     (item) => (item.body.kind === 'status' && item.body.tone === 'error' ? [item.body.text] : [])
@@ -135,7 +139,8 @@ describe('the row a quit writes for the reply it cut', () => {
       kind: 'status',
       text: LEGACY_TEXT,
       tone: 'error',
-      failure: { kind: 'providerExited', orcaStop: { cause: trigger } }
+      failure: { kind: 'providerExited' },
+      orcaStop: { cause: trigger }
     })
     expect(row?.turnScope).toEqual({ kind: 'turn', turnItemId })
     // A client that reads no cause still prints exactly one row for the cut, in today's words.
@@ -187,7 +192,7 @@ describe('the row a restart writes for a reply its Orca died in', () => {
     expect(stopRows).toHaveLength(1)
     expect(stopRows[0]?.body).toMatchObject({
       text: LEGACY_TEXT,
-      failure: { kind: 'providerExited', orcaStop: { cause: 'crash' } }
+      orcaStop: { cause: 'crash' }
     })
     expect(readerErrors).toEqual([LEGACY_TEXT])
     expect(latestNativeChatOrcaStopCut(items, [])).toEqual({ turnItemId, cause: 'crash' })
@@ -196,8 +201,9 @@ describe('the row a restart writes for a reply its Orca died in', () => {
   it('names the update an unfinished quit began, never a crash', async () => {
     await runningTurn()
     // The quit wrote its first word, then died before it stopped the agent.
-    recordAgentSessionRuntimeTeardown(
-      openTestJournalHostDatabase(hostTestState().root).db,
+    await recordAgentSessionRuntimeEnd(
+      hostTestState().root,
+      agentSessionRuntimeIncarnation(),
       'update',
       HOST_TEST_NOW
     )
@@ -205,8 +211,40 @@ describe('the row a restart writes for a reply its Orca died in', () => {
     await restartAfterDeath()
 
     const { stopRows } = await reread()
-    expect(stopRows.map((row) => row.body)).toMatchObject([
-      { failure: { kind: 'providerExited', orcaStop: { cause: 'update' } } }
-    ])
+    expect(stopRows.map((row) => row.body)).toMatchObject([{ orcaStop: { cause: 'update' } }])
+  })
+})
+
+describe('an agent this Orca runs', () => {
+  it('is recorded as held by this runtime', async () => {
+    await runningTurn()
+    expect(hostTestState().store.getRecord(SESSION)?.lease.ownerProcess?.runtime).toBe(
+      agentSessionRuntimeIncarnation()
+    )
+  })
+
+  it('names no Orca cause when the agent dies while Orca runs', async () => {
+    await runningTurn()
+    const child = host.collaboratorsForTests().sessions.get(SESSION)!.child!
+
+    await host.handleAdapterEvent({
+      type: 'ended',
+      sessionId: SESSION,
+      reason: 'killed',
+      cause: 'unexpected-exit',
+      fence: child.fence,
+      acquisitionGeneration: child.generation!
+    })
+
+    await vi.waitFor(() =>
+      expect(hostTestState().store.getRecord(SESSION)?.lease.deathEvidence).toMatchObject({
+        kind: 'exit-observed'
+      })
+    )
+    expect(hostTestState().store.getRecord(SESSION)?.lease.deathEvidence).not.toHaveProperty(
+      'runtimeEnd'
+    )
+    const { stopRows } = await reread()
+    expect(stopRows).toEqual([])
   })
 })

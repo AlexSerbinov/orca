@@ -17,7 +17,7 @@ import {
   type AgentSessionRecord
 } from '../../shared/agent-session-record'
 import { normalizeLegacyHandoffRecord } from '../../shared/agent-session-legacy-handoff-lease'
-import type { AgentSessionOrcaStopCause } from '../../shared/agent-session-failure'
+import type { AgentSessionResumeTrigger } from '../../shared/agent-session-resume-marker'
 import { parseAgentSessionTabTable, type AgentSessionTabTable } from './agent-session-tab-table'
 
 export const AGENT_SESSION_STORE_SCHEMA_VERSION = 2 as const
@@ -41,9 +41,9 @@ export type AgentSessionStoreState = {
   sessionTabs: AgentSessionTabTable | null
   /** Tab rows an index never recorded holds (chats opened while the import was owed). */
   unrecordedSessionTabs?: AgentSessionTabTable
-  /** How the runtime before this one ended, read once at load; null when that cannot be told.
-   *  Restart adjudication stamps it on the deaths it proves. */
-  previousRuntimeEnd?: AgentSessionOrcaStopCause | null
+  /** Each earlier runtime that began a quit here, and why; read once at load. Null or absent when
+   *  that cannot be read, which attributes no death to Orca. */
+  runtimeEnds?: ReadonlyMap<string, AgentSessionResumeTrigger> | null
 }
 
 export type LoadedAgentSessionStore = {

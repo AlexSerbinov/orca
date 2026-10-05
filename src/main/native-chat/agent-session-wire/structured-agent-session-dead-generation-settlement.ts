@@ -38,7 +38,7 @@ import {
   exitedRootTurnScope,
   runningRootTurnScope
 } from './structured-agent-session-exit-turn-scope'
-import { providerExitedRowWords } from './structured-agent-session-orca-stop-row'
+import { orcaStopRowBody } from './structured-agent-session-orca-stop-row'
 import {
   withdrawCodexSendsNoTurnOpenedFor,
   type UnopenedSendJournal
@@ -267,11 +267,7 @@ export async function settleStaleStructuredAgentSessionState(input: {
       },
       // The death evidence is Orca's log text, never a sentence for a person: the row says only
       // that the provider stopped, and how Orca ended when the provider died with it.
-      body: {
-        kind: 'status',
-        ...providerExitedRowWords(input.failureTextContext, evidence.runtimeEnd),
-        tone: 'error'
-      },
+      body: orcaStopRowBody(input.failureTextContext, evidence.runtimeEnd),
       turnScope: runningRootTurnScope(items)
     })
   }

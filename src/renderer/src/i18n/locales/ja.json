@@ -17870,10 +17870,10 @@
         "plan": "プラン",
         "historyRepaired": "このチャットの履歴の一部を読み込めませんでした。",
         "historyItemTooLarge": "チャットのこの部分は大きすぎるため表示できません。",
-        "orcaStopUpdate": "停止: {{machine}} の Orca がアップデートのため再起動しました",
-        "orcaStopQuit": "停止: {{machine}} の Orca が再起動されました",
-        "orcaStopCrash": "停止: {{machine}} の Orca が予期せず停止しました",
-        "orcaStopDetail": "返信は途中で中断されました。続行すると、Agent はまず最後の手順が完了したかどうかを確認します。"
+        "orcaStopUpdate": "この応答の途中で、{{machine}} の Orca がアップデートのため再起動しました。",
+        "orcaStopQuit": "この応答の途中で、{{machine}} の Orca が終了しました。",
+        "orcaStopCrash": "この応答の途中で、{{machine}} の Orca が予期せず停止しました。",
+        "orcaStopCanContinue": "この会話で続行できます。"
       },
       "providerFrame": {
         "byteLength": "{{value0}}バイト"
@@ -18021,7 +18021,8 @@
       "structuredSessionHostUnreachableDescription": "Orca は {{value0}} チャットを開きませんでした。サーバーへの接続を確認して、もう一度お試しください。",
       "interruptedContinue": {
         "continue": "続行",
-        "failed": "このチャットを続行できませんでした。もう一度試すか、メッセージを送信してください。"
+        "failed": "このチャットを続行できませんでした。もう一度試すか、メッセージを送信してください。",
+        "explanation": "続行すると、Agent はまず最後の手順が完了したかどうかを確認します。"
       }
     },
     "tab": {

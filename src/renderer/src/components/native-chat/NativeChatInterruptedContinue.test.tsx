@@ -3,10 +3,10 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({
-  call: vi.fn(),
-  supported: true
-}))
+const mocks = vi.hoisted(() => {
+  const hostLabel = (): string | null => 'studio-mac'
+  return { call: vi.fn(), supported: true, hostLabel: hostLabel() }
+})
 
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
@@ -15,12 +15,21 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
 vi.mock('@/runtime/structured-agent-session-host-capability', () => ({
   useStructuredAgentSessionHostCapability: () => mocks.supported
 }))
+vi.mock('./use-structured-agent-session-host-label', () => ({
+  useStructuredAgentSessionHostLabel: () => mocks.hostLabel
+}))
 
-import { agentSessionFailureFact } from '../../../../shared/agent-session-failure'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { agentJournalItemKey } from '../../../../shared/agent-session-journal-item-key'
-import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalRenderItem,
+  AgentJournalSubmission
+} from '../../../../shared/agent-session-journal-types'
 import type { RuntimeClientTarget } from '@/runtime/runtime-client-target'
-import { NativeChatInterruptedContinue } from './NativeChatInterruptedContinue'
+import {
+  NativeChatInterruptedContinue,
+  useNativeChatInterruptedContinuation
+} from './NativeChatInterruptedContinue'
 
 const TURN = agentJournalItemKey({ provider: 'codex', threadId: 't', turnId: 'cut', ordinal: 1 })
 const PAIRED: RuntimeClientTarget = { kind: 'environment', environmentId: 'studio-mac' }
@@ -39,85 +48,99 @@ const cutChat: AgentJournalRenderItem[] = [
     sequence: 2,
     observedAt: 6,
     turnScope: { kind: 'turn', turnItemId: TURN },
-    body: {
-      kind: 'status',
-      text: 'Codex stopped.',
-      tone: 'error',
-      failure: agentSessionFailureFact('providerExited', { orcaStop: { cause: 'crash' } })
-    }
+    body: { kind: 'status', text: 'Codex stopped.', tone: 'error', orcaStop: { cause: 'crash' } }
   }
 ]
 
-function renderContinue(
-  overrides: Partial<Parameters<typeof NativeChatInterruptedContinue>[0]> = {}
-) {
-  const onError = vi.fn()
-  render(
-    <NativeChatInterruptedContinue
-      target={PAIRED}
-      sessionId="session-1"
-      journalItems={cutChat}
-      submissions={[]}
-      isWorking={false}
-      onError={onError}
-      {...overrides}
-    />
-  )
-  return { onError }
+type Props = {
+  journalItems?: readonly AgentJournalRenderItem[]
+  submissions?: readonly Pick<AgentJournalSubmission, 'dispatchState'>[]
+  isWorking?: boolean
+  onError?: (message: string | null) => void
 }
+
+function Harness(props: Props): React.JSX.Element {
+  const continuation = useNativeChatInterruptedContinuation({
+    target: PAIRED,
+    sessionId: 'session-1',
+    journalItems: props.journalItems ?? cutChat,
+    submissions: props.submissions ?? [],
+    isWorking: props.isWorking ?? false,
+    onError: props.onError ?? vi.fn()
+  })
+  return (
+    <TooltipProvider delayDuration={0}>
+      <span data-testid="offered">{continuation.view.continueTurnItemId ?? 'none'}</span>
+      <NativeChatInterruptedContinue continuation={continuation} />
+    </TooltipProvider>
+  )
+}
+
+const continueButton = () => screen.queryByRole('button', { name: 'Continue' })
 
 beforeEach(() => {
   mocks.supported = true
+  mocks.hostLabel = 'studio-mac'
   mocks.call.mockReset()
 })
 
 afterEach(cleanup)
 
 describe('Continue on a reply an Orca stop cut off', () => {
-  it("asks the chat's own host, paired or local, to continue that cut turn", async () => {
+  it("asks the chat's own host, paired or local, to continue that cut turn", () => {
     mocks.call.mockResolvedValue({ outcome: 'pending' })
-    renderContinue()
+    render(<Harness />)
+    expect(screen.getByTestId('offered')).toHaveTextContent(TURN)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(continueButton()!)
 
     expect(mocks.call).toHaveBeenCalledExactlyOnceWith(PAIRED, 'agentSession.continueInterrupted', {
       sessionId: 'session-1',
       turnItemId: TURN
     })
-    // Gone once asked: the journal shows what came of it.
-    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
+    // Gone once asked, and the row gets its own way on back: the journal shows what came of it.
+    expect(continueButton()).toBeNull()
+    expect(screen.getByTestId('offered')).toHaveTextContent('none')
   })
 
-  it('is not offered by a host without the operation', () => {
+  it('says what it does, for a reader and on hover', () => {
+    render(<Harness />)
+    expect(continueButton()).toHaveAccessibleDescription(
+      'Continue, and the agent first checks whether its last step finished.'
+    )
+  })
+
+  it('is not offered by a host without the operation; the user continues by sending', () => {
     mocks.supported = false
-    renderContinue()
-    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
+    render(<Harness />)
+    expect(continueButton()).toBeNull()
   })
 
   it('is not offered once anything was sent, or while the agent works', () => {
-    renderContinue({ submissions: [{ dispatchState: 'pending' }] })
-    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
+    render(<Harness submissions={[{ dispatchState: 'pending' }]} />)
+    expect(continueButton()).toBeNull()
     cleanup()
-    renderContinue({ isWorking: true })
-    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
+    render(<Harness isWorking />)
+    expect(continueButton()).toBeNull()
   })
 
   it('is not offered for a cut no Orca stop explains', () => {
-    renderContinue({ journalItems: cutChat.slice(0, 1) })
-    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
+    render(<Harness journalItems={cutChat.slice(0, 1)} />)
+    expect(continueButton()).toBeNull()
   })
 
   it('says so and offers it again when the request fails', async () => {
     mocks.call.mockRejectedValue(new Error('offline'))
-    const { onError } = renderContinue()
+    const onError = vi.fn()
+    render(<Harness onError={onError} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(continueButton()!)
 
     await waitFor(() =>
       expect(onError).toHaveBeenLastCalledWith(
         "Couldn't continue this chat. Try again, or send a message."
       )
     )
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument()
+    expect(continueButton()).toBeInTheDocument()
   })
 })

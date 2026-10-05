@@ -17934,10 +17934,10 @@
         "plan": "Plan",
         "historyRepaired": "Une partie de l'historique de ce chat n'a pas pu être chargée.",
         "historyItemTooLarge": "Cette partie du chat était trop volumineuse pour être affichée.",
-        "orcaStopUpdate": "Arrêté : Orca sur {{machine}} a redémarré pour une mise à jour",
-        "orcaStopQuit": "Arrêté : Orca sur {{machine}} a été redémarré",
-        "orcaStopCrash": "Arrêté : Orca sur {{machine}} s'est arrêté de manière inattendue",
-        "orcaStopDetail": "La réponse a été interrompue en cours de route. Continuez, et l'agent vérifiera d'abord si sa dernière étape s'est terminée."
+        "orcaStopUpdate": "Orca sur {{machine}} a redémarré pour une mise à jour pendant que cette réponse était en cours.",
+        "orcaStopQuit": "Orca sur {{machine}} a été fermé pendant que cette réponse était en cours.",
+        "orcaStopCrash": "Orca sur {{machine}} s'est arrêté de manière inattendue pendant que cette réponse était en cours.",
+        "orcaStopCanContinue": "Vous pouvez continuer dans cette conversation."
       },
       "providerFrame": {
         "byteLength": "{{value0}} octets"
@@ -18085,7 +18085,8 @@
       "structuredSessionHostUnreachableDescription": "Orca n'a pas ouvert de discussion {{value0}}. Vérifiez la connexion au serveur et réessayez.",
       "interruptedContinue": {
         "continue": "Continuer",
-        "failed": "Impossible de poursuivre cette conversation. Réessayez ou envoyez un message."
+        "failed": "Impossible de poursuivre cette conversation. Réessayez ou envoyez un message.",
+        "explanation": "Continuez, et l'agent vérifiera d'abord si sa dernière étape s'est terminée."
       }
     },
     "tab": {

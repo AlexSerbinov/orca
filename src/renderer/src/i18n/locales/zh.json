@@ -17835,10 +17835,10 @@
         "plan": "计划",
         "historyRepaired": "此聊天的部分历史记录无法加载。",
         "historyItemTooLarge": "聊天的这一部分过大，无法显示。",
-        "orcaStopUpdate": "已停止：{{machine}} 上的 Orca 为更新而重新启动",
-        "orcaStopQuit": "已停止：{{machine}} 上的 Orca 已重新启动",
-        "orcaStopCrash": "已停止：{{machine}} 上的 Orca 意外停止",
-        "orcaStopDetail": "回复在中途被截断。继续后，代理会先检查其上一步是否已完成。"
+        "orcaStopUpdate": "此回复进行期间，{{machine}} 上的 Orca 为更新而重新启动。",
+        "orcaStopQuit": "此回复进行期间，{{machine}} 上的 Orca 已关闭。",
+        "orcaStopCrash": "此回复进行期间，{{machine}} 上的 Orca 意外停止。",
+        "orcaStopCanContinue": "你可以在此对话中继续。"
       },
       "providerFrame": {
         "byteLength": "{{value0}} 字节"
@@ -17986,7 +17986,8 @@
       "structuredSessionHostUnreachableDescription": "Orca 未打开 {{value0}} 聊天。请检查与服务器的连接，然后重试。",
       "interruptedContinue": {
         "continue": "继续",
-        "failed": "无法继续此聊天。请重试，或发送一条消息。"
+        "failed": "无法继续此聊天。请重试，或发送一条消息。",
+        "explanation": "继续后，代理会先检查其上一步是否已完成。"
       }
     },
     "tab": {

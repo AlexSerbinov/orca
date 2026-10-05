@@ -127,7 +127,7 @@ function itemBlocks(item: AgentJournalRenderItem): {
   if (body.kind !== 'status' || body.turnLifecycle) {
     return null
   }
-  return { role: 'system', blocks: [structuredAgentSessionStatusBlock(body)] }
+  return { role: 'system', blocks: [structuredAgentSessionStatusBlock(body, item.turnScope)] }
 }
 
 function isAgentJournalMessageSendMode(value: string): value is AgentJournalMessageSendMode {
