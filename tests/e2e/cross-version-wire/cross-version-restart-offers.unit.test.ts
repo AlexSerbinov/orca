@@ -49,7 +49,7 @@ async function dismissNamed(build: AgentSessionWireBuild): Promise<RpcReply[]> {
       method: 'agentSession.restartResumableDismiss',
       params: { sessionIds: [SESSION] }
     },
-    (raw) => replies.push(JSON.parse(raw) as RpcReply),
+    (raw) => replies.push(JSON.parse(raw)),
     { clientKind: 'runtime', clientCapabilities: current.capabilities }
   )
   return replies

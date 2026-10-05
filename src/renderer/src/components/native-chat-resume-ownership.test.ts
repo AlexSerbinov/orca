@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { AUTOMATION_PROVENANCE } from './native-chat-restart-offer-test-support'
 import {
   classifyResumeWorkspaceOwnership,
   parseResumeOwnership,
@@ -35,10 +36,10 @@ describe('whose interrupted chat this is', () => {
   it('calls an automation’s workspace an automation’s, on either machine', () => {
     const robot = {
       creatorProvenance: { kind: 'paired-device' as const, deviceId: ME },
-      automationProvenance: { kind: 'created-by-automation' as const }
+      automationProvenance: AUTOMATION_PROVENANCE
     }
-    expect(classifyResumeWorkspaceOwnership(robot as never, SERVER, ME)).toBe('automation')
-    expect(classifyResumeWorkspaceOwnership(robot as never, LOCAL, undefined)).toBe('automation')
+    expect(classifyResumeWorkspaceOwnership(robot, SERVER, ME)).toBe('automation')
+    expect(classifyResumeWorkspaceOwnership(robot, LOCAL, undefined)).toBe('automation')
   })
 
   it('on this computer, is the user’s unless another device made the workspace', () => {

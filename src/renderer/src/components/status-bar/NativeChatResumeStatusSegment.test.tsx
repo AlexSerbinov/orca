@@ -17,6 +17,7 @@ import {
   NativeChatResumeStatusSegment
 } from './NativeChatResumeStatusSegment'
 import { readNativeChatRestartMachine } from '../native-chat-resume-on-restart-store'
+import { pairedEnvironment } from '../native-chat-restart-offer-test-support'
 
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/structured-agent-session-client', () => ({
@@ -261,12 +262,12 @@ describe('NativeChatResumeStatusSegment', () => {
   })
 
   // One entry across machines: it names the machine only when there is just one.
-  it("names a paired server when it is the only machine with chats, and opens on it", async () => {
+  it('names a paired server when it is the only machine with chats, and opens on it', async () => {
     rpc.mockImplementation(async (target) =>
       target.kind === 'environment' ? { sessions: candidates } : { sessions: [] }
     )
     useAppStore.setState({
-      runtimeEnvironments: [{ id: 'studio', name: 'studio-mac' }] as never
+      runtimeEnvironments: [pairedEnvironment('studio', 'studio-mac')]
     })
     await mount()
     await act(async () => {
@@ -282,7 +283,7 @@ describe('NativeChatResumeStatusSegment', () => {
       target.kind === 'environment' ? { sessions: candidates } : { sessions: [candidates[0]] }
     )
     useAppStore.setState({
-      runtimeEnvironments: [{ id: 'studio', name: 'studio-mac' }] as never
+      runtimeEnvironments: [pairedEnvironment('studio', 'studio-mac')]
     })
     await mount()
     await act(async () => {

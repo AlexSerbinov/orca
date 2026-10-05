@@ -14,6 +14,7 @@ import {
 } from './native-chat-resume-on-restart-dialog'
 import { readNativeChatRestartMachine } from './native-chat-resume-on-restart-store'
 import { _resetNativeChatRestartOffer } from './native-chat-restart-offer-triggers'
+import { pairedEnvironment } from './native-chat-restart-offer-test-support'
 
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/structured-agent-session-client', () => ({
@@ -24,11 +25,15 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
 vi.mock('sonner', () => ({ toast: vi.fn() }))
 // Who made each workspace, by name; the modal's cards then fall back to plain headers.
 vi.mock('./native-chat-resume-ownership', async (importActual) => {
-  const actual = await importActual<typeof import('./native-chat-resume-ownership')>()
+  const actual: object = await importActual()
   return {
     ...actual,
     resumeCandidateOwnership: (_state: unknown, _machine: unknown, row: ResumeCandidate) =>
-      row.workspaceId.startsWith('mine') ? 'own' : row.workspaceId.startsWith('robot') ? 'automation' : 'other-device'
+      row.workspaceId.startsWith('mine')
+        ? 'own'
+        : row.workspaceId.startsWith('robot')
+          ? 'automation'
+          : 'other-device'
   }
 })
 
@@ -121,9 +126,9 @@ beforeEach(() => {
   useAppStore.setState({
     settings: { ...getDefaultSettings(''), experimentalStructuredNativeChat: false },
     runtimeEnvironments: [
-      { id: 'studio', name: 'studio-mac' },
-      { id: 'build', name: 'build-box' }
-    ] as never
+      pairedEnvironment('studio', 'studio-mac'),
+      pairedEnvironment('build', 'build-box')
+    ]
   })
   container = document.createElement('div')
   document.body.append(container)

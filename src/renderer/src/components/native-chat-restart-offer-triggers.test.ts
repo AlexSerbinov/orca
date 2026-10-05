@@ -20,6 +20,13 @@ import {
   useNativeChatRestartOfferSources
 } from './native-chat-restart-offer-triggers'
 import { renderHook } from '@testing-library/react'
+import type { Worktree } from '../../../shared/worktree/types'
+import { makeWorktree } from '../store/slices/store-test-helpers'
+import {
+  AUTOMATION_PROVENANCE,
+  pairedEnvironment,
+  verifiedConnection
+} from './native-chat-restart-offer-test-support'
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), supported: vi.fn(async () => true) }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
@@ -48,32 +55,38 @@ function row(sessionId: string, workspaceId: string, trigger: 'quit' | 'update' 
 }
 
 /** Workspaces as this desktop knows them on the server, by who created them. */
-const workspaces: Record<string, unknown> = {
+type Provenance = Pick<Worktree, 'creatorProvenance' | 'automationProvenance'>
+const provenance: Record<string, Provenance> = {
   mine: { creatorProvenance: { kind: 'paired-device', deviceId: MY_DEVICE } },
   theirs: { creatorProvenance: { kind: 'paired-device', deviceId: 'device-other' } },
   robot: {
     creatorProvenance: { kind: 'paired-device', deviceId: MY_DEVICE },
-    automationProvenance: { kind: 'created-by-automation' }
+    automationProvenance: AUTOMATION_PROVENANCE
   },
   server: { creatorProvenance: { kind: 'host' } },
   legacy: {}
 }
 const lookups: [string, string | undefined][] = []
 
-function stageServer(status: { runtimeId: string; epoch?: number; priorRuntimeId?: string | null }) {
+function stageServer(status: {
+  runtimeId: string
+  epoch?: number
+  priorRuntimeId?: string | null
+}) {
   useAppStore.setState({
-    runtimeEnvironments: [{ id: SERVER, name: 'studio-mac', pairedDeviceId: MY_DEVICE }] as never,
+    runtimeEnvironments: [pairedEnvironment(SERVER, 'studio-mac', MY_DEVICE)],
     runtimeStatusByEnvironmentId: new Map([
       [
         SERVER,
-        {
-          status: { runtimeId: status.runtimeId, pairedDeviceId: MY_DEVICE },
-          snapshot: { priorRuntimeId: status.priorRuntimeId ?? null },
-          hostContactEpoch: status.epoch ?? 0,
-          checkedAt: 1
-        }
+        verifiedConnection({
+          environmentId: SERVER,
+          runtimeId: status.runtimeId,
+          pairedDeviceId: MY_DEVICE,
+          hostContactEpoch: status.epoch,
+          priorRuntimeId: status.priorRuntimeId
+        })
       ]
-    ]) as never
+    ])
   })
 }
 
@@ -86,6 +99,24 @@ function continueCalls(): unknown[] {
 function offerReads(): number {
   return mocks.rpc.mock.calls.filter(([, method]) => method === 'agentSession.restartResumable')
     .length
+}
+
+/** Sonner types a toast button as a labelled action or arbitrary content; only the former can be
+ *  pressed. */
+function press(entry: unknown): void {
+  if (
+    typeof entry !== 'object' ||
+    entry === null ||
+    !('onClick' in entry) ||
+    typeof entry.onClick !== 'function'
+  ) {
+    throw new Error('toast button is not clickable')
+  }
+  entry.onClick()
+}
+
+function label(entry: unknown): unknown {
+  return typeof entry === 'object' && entry !== null && 'label' in entry ? entry.label : undefined
 }
 
 async function settle(): Promise<void> {
@@ -105,10 +136,12 @@ beforeEach(() => {
   useAppStore.setState(useAppStore.getInitialState(), true)
   useAppStore.setState({
     settings: { ...getDefaultSettings(''), experimentalStructuredNativeChat: false },
-    getKnownWorktreeById: ((id: string, hostId?: string) => {
+    getKnownWorktreeById: (id, hostId) => {
       lookups.push([id, hostId])
-      return workspaces[id]
-    }) as never
+      const known = provenance[id]
+      // Only who made it matters here; the rest of the row is the sidebar's.
+      return known ? makeWorktree({ id, repoId: 'repo', ...known }) : undefined
+    }
   })
   mocks.rpc.mockImplementation(async (_target, method) =>
     method === 'agentSession.restartResumable'
@@ -178,14 +211,11 @@ it('raises no toast when none of the chats are provably the user’s', async () 
 it("the toast's buttons resume exactly the own chats there, or open the dialog on that server", async () => {
   stageServer({ runtimeId: 'r2' })
   await readPairedMachineOnConnection(SERVER, true)
-  const options = vi.mocked(toast).mock.calls[0]?.[1] as {
-    action: { label: string; onClick: () => void }
-    cancel: { label: string; onClick: () => void }
-  }
-  expect([options.action.label, options.cancel.label]).toEqual(['Resume 1 chat', 'Show chats'])
-  options.cancel.onClick()
+  const options = vi.mocked(toast).mock.calls[0]?.[1]
+  expect([label(options?.action), label(options?.cancel)]).toEqual(['Resume 1 chat', 'Show chats'])
+  press(options?.cancel)
   expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ focus: MACHINE })
-  options.action.onClick()
+  press(options?.action)
   await settle()
   expect(continueCalls()).toEqual([
     [{ kind: 'environment', environmentId: SERVER }, { sessionIds: ['a'] }]
@@ -225,16 +255,16 @@ it("keeps a server's offer through a failed read, and drops it only for an unsup
   stageServer({ runtimeId: 'r2' })
   await readPairedMachineOnConnection(SERVER, false)
   mocks.rpc.mockRejectedValueOnce(new Error('connection lost'))
-  expect((await readNativeChatRestartMachine({ kind: 'environment', environmentId: SERVER })).kind).toBe(
-    'unavailable'
-  )
+  expect(
+    (await readNativeChatRestartMachine({ kind: 'environment', environmentId: SERVER })).kind
+  ).toBe('unavailable')
   expect(getNativeChatRestartOffers().get(MACHINE)?.candidates).toHaveLength(2)
   mocks.rpc.mockRejectedValueOnce(
     Object.assign(new Error('Unknown method'), { code: 'method_not_found' })
   )
-  expect((await readNativeChatRestartMachine({ kind: 'environment', environmentId: SERVER })).kind).toBe(
-    'unsupported'
-  )
+  expect(
+    (await readNativeChatRestartMachine({ kind: 'environment', environmentId: SERVER })).kind
+  ).toBe('unsupported')
   expect(getNativeChatRestartOffers().has(MACHINE)).toBe(false)
 })
 
