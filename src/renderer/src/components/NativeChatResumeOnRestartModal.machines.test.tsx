@@ -9,6 +9,7 @@ import { getDefaultSettings } from '../../../shared/constants'
 import type { RestartOfferOrigin } from '../../../shared/restart-offer-origin'
 import { NativeChatResumeOnRestartModal } from './NativeChatResumeOnRestartModal'
 import { TooltipProvider } from './ui/tooltip'
+import { Dialog, DialogContent, DialogTitle } from './ui/dialog'
 import type { ResumeCandidate } from './native-chat-resume-on-restart-grouping'
 import {
   consumeNativeChatResumeOnRestartDialogRequest,
@@ -278,4 +279,27 @@ it('keeps the flat list when only this computer has chats', async () => {
   await open('local')
   expect(document.querySelector('button[aria-expanded]')).toBeNull()
   expect(button('Resume 1 chat')).toBeTruthy()
+})
+
+// A dialog the user opened is never the app's own prompt: another dialog does not hide it.
+it('keeps a user-opened dialog on screen when another dialog opens over it', async () => {
+  await stage({ studio: SERVER_ROWS })
+  await act(async () =>
+    root.render(
+      <TooltipProvider>
+        <NativeChatResumeOnRestartModal />
+        <Dialog open>
+          <DialogContent>
+            <DialogTitle>Another dialog</DialogTitle>
+          </DialogContent>
+        </Dialog>
+      </TooltipProvider>
+    )
+  )
+  await act(async () => requestNativeChatResumeOnRestartDialog('user', 'environment:studio'))
+  const resume = [...document.querySelectorAll('[role="dialog"]')].find((entry) =>
+    entry.textContent?.includes('Resume interrupted chats?')
+  )
+  expect(resume).toBeTruthy()
+  expect(resume?.hasAttribute('data-stepped-aside')).toBe(false)
 })
