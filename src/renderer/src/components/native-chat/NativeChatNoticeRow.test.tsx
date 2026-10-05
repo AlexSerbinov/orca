@@ -78,10 +78,13 @@ describe('the row an Orca stop leaves', () => {
 
   // A client that re-words unnamed host rows keeps this row's presentation and cause, neutral.
   it('stays neutral, naming the cause, as a reader that re-presented it neutral hands it on', () => {
+    // Its words and tone replaced, and the failure fact the old words came from dropped with them.
     const represented: AgentJournalStatusItem = {
-      ...orcaStopRow('crash'),
+      kind: 'status',
       text: 'This response was interrupted. You can continue in this conversation.',
-      tone: 'notice'
+      tone: 'notice',
+      presentation: 'orca-stop',
+      orcaStop: { cause: 'crash' }
     }
     renderStatus(represented, 'studio-mac', true)
     expect(
