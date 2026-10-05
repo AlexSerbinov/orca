@@ -123,6 +123,16 @@ it('sends nothing for a turn that is not the cut the chat sits on', async () => 
   expect(dispatch).not.toHaveBeenCalled()
 })
 
+it('continues when reading the restart offer hangs', async () => {
+  const { host, dispatch } = await interruptedRestart()
+  const turnItemId = await cutTurn(host)
+  vi.spyOn(host.deps.recoveryCapsule!, 'list').mockReturnValue(new Promise(() => {}))
+
+  await host.restartResume.continueInterrupted(SESSION, turnItemId)
+
+  await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
+}, 10_000)
+
 it('continues when the restart offer cannot be read', async () => {
   const { host, dispatch } = await interruptedRestart()
   const turnItemId = await cutTurn(host)
