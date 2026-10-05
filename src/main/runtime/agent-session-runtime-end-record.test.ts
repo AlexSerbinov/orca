@@ -67,7 +67,7 @@ describe('the word a quitting runtime leaves', () => {
 
   it('is written before the quit waits on anything, so a quit that never finishes is still a quit', async () => {
     const installed = {
-      host: { flushAllStreamedEvents: vi.fn() },
+      host: { stopDelivery: vi.fn(), flushAllStreamedEvents: vi.fn() },
       adapter: { closeAll: vi.fn() },
       journalDatabase: { stateDirectory: directory, close: vi.fn() },
       // A recovery that never drains: the quit's deadline ends the process here.
