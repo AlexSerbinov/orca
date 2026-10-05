@@ -153,7 +153,7 @@ describe('createMainWindow', () => {
       const { windowHandlers } = setupCloseWindow()
 
       createMainWindow(null)
-      windowHandlers['session-end']?.({ reasons: ['logoff'] } as never)
+      windowHandlers['session-end']?.({ reasons: ['logoff'] })
 
       expect(recordAgentSessionRuntimeEndMock).toHaveBeenCalledExactlyOnceWith('quit')
     })
