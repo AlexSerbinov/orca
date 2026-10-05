@@ -153,6 +153,10 @@ type RowProps = {
   busy: boolean
   selected: ReadonlySet<string>
   onToggle: (sessionId: string, checked: boolean) => void
+  /** Leaves the machine off each workspace when a machine row above already names it. */
+  hideHostChip?: boolean
+  /** Where a chat that does not start ticked came from ("Automation", "Another device"). */
+  originLabelFor?: (sessionId: string) => string | undefined
 } & FailureProps
 
 function WorkspaceCard({
@@ -173,8 +177,11 @@ function WorkspaceCard({
   const name = worktree?.displayName ?? group.workspaceId
   // Shown for every workspace, local included. The sidebar hides it on a single-host install; this
   // list is a one-off prompt with no surrounding context, so the machine is always worth naming.
-  const hostLabel = getHostContextLabel(hostId ?? LOCAL_EXECUTION_HOST_ID)
-  const { listedAt, busy, selected, onToggle, failureFor, onFailureAction } = rowProps
+  const hostLabel = rowProps.hideHostChip
+    ? undefined
+    : getHostContextLabel(hostId ?? LOCAL_EXECUTION_HOST_ID)
+  const { listedAt, busy, selected, onToggle, failureFor, onFailureAction, originLabelFor } =
+    rowProps
   const rows = (
     <ul className="flex flex-col">
       {group.candidates.map((candidate) => (
@@ -188,6 +195,7 @@ function WorkspaceCard({
           onCheckedChange={(checked) => onToggle(candidate.sessionId, checked)}
           failure={failureFor?.(candidate.sessionId)}
           onFailureAction={onFailureAction}
+          originLabel={originLabelFor?.(candidate.sessionId)}
         />
       ))}
     </ul>
@@ -213,7 +221,7 @@ function WorkspaceCard({
         <div className="flex items-center gap-1.5 px-0.5">
           <WorkspaceKindGlyph kind={kind} />
           <span className="min-w-0 truncate text-xs font-medium">{name}</span>
-          <WorktreeHostContextBadge label={hostLabel} />
+          {hostLabel && <WorktreeHostContextBadge label={hostLabel} />}
         </div>
         <div className="pl-1">{rows}</div>
         {children.length > 0 && <div className="flex flex-col gap-1 pl-3">{children}</div>}
@@ -252,14 +260,12 @@ export function ResumeOnRestartGroups({
   selected,
   onToggle,
   failureFor,
-  onFailureAction
+  onFailureAction,
+  hideHostChip,
+  originLabelFor
 }: {
   candidates: readonly ResumeCandidate[]
-  listedAt: number
-  busy: boolean
-  selected: ReadonlySet<string>
-  onToggle: (sessionId: string, checked: boolean) => void
-} & FailureProps): React.JSX.Element {
+} & RowProps): React.JSX.Element {
   const workspaces = useMemo(() => groupResumeCandidates(candidates), [candidates])
   const repoIdFor = useRepoIdByWorkspace(workspaces)
   const ancestorsOf = useLineageAncestors(workspaces)
@@ -281,6 +287,8 @@ export function ResumeOnRestartGroups({
                 onToggle={onToggle}
                 failureFor={failureFor}
                 onFailureAction={onFailureAction}
+                hideHostChip={hideHostChip}
+                originLabelFor={originLabelFor}
               />
             ))}
           </div>

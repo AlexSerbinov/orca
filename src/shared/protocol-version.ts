@@ -254,12 +254,13 @@ export const AGENT_SESSION_TURN_COMPLETION_RUNTIME_CAPABILITY =
 // older host leaves the message rail on loaded messages instead of answering method_not_found.
 export const AGENT_SESSION_CONVERSATION_OUTLINE_RUNTIME_CAPABILITY =
   'agent-session.conversation-outline.v1' as const
-// Why: hosts before this registered `agentSession.restartResumableDismiss` with a strict empty
-// params schema, so naming sessions was refused, and the only dismissal they knew deleted every
-// offer the host held — other devices' included. A client dismisses on a paired host only when
-// this is advertised, and always names the sessions.
-export const AGENT_SESSION_RESTART_SELECTIVE_DISMISS_RUNTIME_CAPABILITY =
-  'agent-session.restart-selective-dismiss.v1' as const
+// Why: a paired desktop may ask a host for its restart offers on every connection only when the
+// host answers that read without building its chat host (a server that never ran a chat stays
+// untouched), and may dismiss there only when the host takes named chats: an older host's dismiss
+// params were strict and empty, and its only dismissal deleted every device's offers. A host
+// without this is never asked by a paired desktop.
+export const AGENT_SESSION_PAIRED_RESTART_OFFERS_RUNTIME_CAPABILITY =
+  'agent-session.paired-restart-offers.v1' as const
 // The RPC is registered unconditionally; per-session rewind support is a separate check.
 export const AGENT_SESSION_REWIND_RUNTIME_CAPABILITY = 'agent-session.rewind.v1' as const
 // Readers must understand a monitoring roster with no available stop control.
@@ -430,7 +431,7 @@ export const RUNTIME_CAPABILITIES = [
   AGENT_SESSION_TURN_COMPLETION_RUNTIME_CAPABILITY,
   AGENT_SESSION_REWIND_RUNTIME_CAPABILITY,
   AGENT_SESSION_CONVERSATION_OUTLINE_RUNTIME_CAPABILITY,
-  AGENT_SESSION_RESTART_SELECTIVE_DISMISS_RUNTIME_CAPABILITY,
+  AGENT_SESSION_PAIRED_RESTART_OFFERS_RUNTIME_CAPABILITY,
   AGENT_SESSION_BACKGROUND_TASK_STOP_CAPABILITY,
   AGENT_SESSION_QUESTION_ANSWERS_RUNTIME_CAPABILITY,
   AGENT_SESSION_TURN_ITEM_CAPABILITY,

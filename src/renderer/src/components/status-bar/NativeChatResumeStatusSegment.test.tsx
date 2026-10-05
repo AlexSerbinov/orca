@@ -11,7 +11,7 @@ import {
   consumeNativeChatResumeOnRestartDialogRequest,
   getNativeChatResumeOnRestartDialogRequest
 } from '../native-chat-resume-on-restart-dialog'
-import { _resetNativeChatRestartOffer } from '../native-chat-resume-on-restart-store'
+import { _resetNativeChatRestartOffer } from '../native-chat-restart-offer-triggers'
 import { NativeChatResumeStatusSegment } from './NativeChatResumeStatusSegment'
 
 const rpc = vi.hoisted(() => vi.fn())
@@ -93,14 +93,14 @@ describe('NativeChatResumeStatusSegment', () => {
     expect(screen.getByRole('button', { name: '2 chats available to resume' })).toBeTruthy()
     expect(screen.getByText('2 chats to resume')).toBeTruthy()
 
-    expect(getNativeChatResumeOnRestartDialogRequest()).toBe(false)
+    expect(getNativeChatResumeOnRestartDialogRequest()).toBeNull()
     await act(async () => screen.getByRole('button').click())
     // The launch read, then a second one taken before the dialog is allowed to reopen.
     expect(rpc.mock.calls.map((call) => call[1])).toEqual([
       'agentSession.restartResumable',
       'agentSession.restartResumable'
     ])
-    expect(getNativeChatResumeOnRestartDialogRequest()).toBe(true)
+    expect(getNativeChatResumeOnRestartDialogRequest()).not.toBeNull()
   })
 
   // The offer is spent once acted on, so without this entry a failed resume would leave the bar
@@ -123,7 +123,7 @@ describe('NativeChatResumeStatusSegment', () => {
 
     rpc.mockResolvedValue({ sessions: [], failed: [failed] })
     await act(async () => entry.click())
-    expect(getNativeChatResumeOnRestartDialogRequest()).toBe(true)
+    expect(getNativeChatResumeOnRestartDialogRequest()).not.toBeNull()
     // With the offer gone, only the failure entry is left — and it stays.
     expect(screen.queryByText('1 chat to resume')).toBeNull()
     expect(screen.getByText('1 chat failed to resume')).toBeTruthy()
@@ -164,9 +164,9 @@ describe('NativeChatResumeStatusSegment', () => {
     rpc.mockResolvedValueOnce({ sessions: candidates }).mockResolvedValue({ sessions: [] })
     await mount()
 
-    expect(getNativeChatResumeOnRestartDialogRequest()).toBe(false)
+    expect(getNativeChatResumeOnRestartDialogRequest()).toBeNull()
     await act(async () => screen.getByRole('button').click())
-    expect(getNativeChatResumeOnRestartDialogRequest()).toBe(false)
+    expect(getNativeChatResumeOnRestartDialogRequest()).toBeNull()
     expect(screen.queryByRole('button')).toBeNull()
   })
 

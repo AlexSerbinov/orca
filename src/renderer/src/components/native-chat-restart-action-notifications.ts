@@ -15,8 +15,25 @@ export type RestartContinuationOutcome = {
   outcome: 'continued' | 'pending' | 'unknown' | 'refused'
 }
 
-function announceContinued(count: number): void {
+/** `machineName` names a paired server; this computer's own chats need no "where". */
+function announceContinued(count: number, machineName: string | undefined): void {
   if (count <= 0) {
+    return
+  }
+  if (machineName !== undefined) {
+    toast(
+      count === 1
+        ? translate(
+            'auto.components.NativeChatResumeOnRestartModal.continuedOneOnMachine',
+            'Resumed 1 chat on {{value0}} and asked it to continue',
+            { value0: machineName }
+          )
+        : translate(
+            'auto.components.NativeChatResumeOnRestartModal.continuedManyOnMachine',
+            'Resumed {{value0}} chats on {{value1}} and asked them to continue',
+            { value0: count, value1: machineName }
+          )
+    )
     return
   }
   toast(
@@ -141,6 +158,18 @@ export function announceRestartDismissUnconfirmed(): void {
   )
 }
 
+/** A paired server too old to dismiss by name. Nothing was sent: its only dismissal would also
+ *  delete other devices' offers. */
+export function announceRestartDismissNeedsUpdate(machineName: string): void {
+  toast(
+    translate(
+      'auto.components.NativeChatResumeOnRestartModal.dismissNeedsUpdate',
+      'Update Orca on {{value0}} to dismiss its chats from here.',
+      { value0: machineName }
+    )
+  )
+}
+
 /** Which of the requested chats the host did not carry on: refused, unconfirmed, or — since
  *  eligibility can change after listing — omitted from the answer altogether. */
 export function restartChatsNotContinued(
@@ -156,7 +185,9 @@ export function announceRestartResults(
   results: readonly RestartContinuationOutcome[],
   /** The host's own failure list after the action; undefined from an older host. */
   hostFailed: readonly Pick<ResumeFailure, 'sessionId' | 'outcome'>[] | undefined,
-  actions: RestartFailureActions
+  actions: RestartFailureActions,
+  /** The paired server the chats are on; omitted for this computer. */
+  machineName?: string
 ): void {
   const notContinued = restartChatsNotContinued(requested, results)
   const failed = new Map(hostFailed?.map((failure) => [failure.sessionId, failure.outcome]))
@@ -178,7 +209,10 @@ export function announceRestartResults(
   const unconfirmed = (sessionId: string): boolean =>
     (failed.get(sessionId) ?? (sentUnconfirmed(sessionId) ? 'unconfirmed' : 'refused')) ===
     'unconfirmed'
-  announceContinued(new Set(requested).size - notContinued.length + seenCarryingOn.length)
+  announceContinued(
+    new Set(requested).size - notContinued.length + seenCarryingOn.length,
+    machineName
+  )
   announceNotContinued(
     reported.filter((sessionId) => !unconfirmed(sessionId)),
     reported.filter(unconfirmed),

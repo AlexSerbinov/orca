@@ -12,6 +12,7 @@ import {
   AGENT_SESSION_QUESTION_ANSWERS_RUNTIME_CAPABILITY,
   AGENT_SESSION_REWIND_RUNTIME_CAPABILITY,
   AGENT_SESSION_REPEATED_STOP_RUNTIME_CAPABILITY,
+  AGENT_SESSION_PAIRED_RESTART_OFFERS_RUNTIME_CAPABILITY,
   type RuntimeCapability
 } from '../../../shared/protocol-version'
 import {
@@ -53,6 +54,16 @@ export function supportsStructuredAgentSessionQuietRepeatedStop(
   target: RuntimeClientTarget
 ): Promise<boolean> {
   return structuredAgentSessionHostSupports(target, AGENT_SESSION_REPEATED_STOP_RUNTIME_CAPABILITY)
+}
+
+/** Whether a paired desktop may read this host's restart offers on connect and dismiss them by name. */
+export function supportsStructuredAgentSessionPairedRestartOffers(
+  target: RuntimeClientTarget
+): Promise<boolean> {
+  return structuredAgentSessionHostSupports(
+    target,
+    AGENT_SESSION_PAIRED_RESTART_OFFERS_RUNTIME_CAPABILITY
+  )
 }
 
 export function supportsStructuredAgentSessionQuestionAnswers(

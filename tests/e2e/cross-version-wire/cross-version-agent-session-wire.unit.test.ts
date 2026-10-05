@@ -29,7 +29,7 @@ import {
   AGENT_SESSION_QUESTION_ANSWERS_RUNTIME_CAPABILITY,
   AGENT_SESSION_REWIND_RUNTIME_CAPABILITY,
   AGENT_SESSION_CONVERSATION_OUTLINE_RUNTIME_CAPABILITY,
-  AGENT_SESSION_RESTART_SELECTIVE_DISMISS_RUNTIME_CAPABILITY,
+  AGENT_SESSION_PAIRED_RESTART_OFFERS_RUNTIME_CAPABILITY,
   AGENT_SESSION_STATUS_FEED_RUNTIME_CAPABILITY,
   STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY,
   STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
@@ -406,9 +406,9 @@ describe('cross-version structured agent sessions', () => {
     // A paired desktop dismisses only with this advertised, and always names the chats: an older
     // host's dismiss params were strict and empty, and its only dismissal cleared every device's
     // offers. A build may accept names without advertising; it must never advertise without.
-    it('advertises selective dismiss only where a dismiss naming chats is accepted', async () => {
+    it('advertises paired restart offers only where a dismiss naming chats is accepted', async () => {
       for (const build of [current, baseline]) {
-        if (!build.capabilities.includes(AGENT_SESSION_RESTART_SELECTIVE_DISMISS_RUNTIME_CAPABILITY)) {
+        if (!build.capabilities.includes(AGENT_SESSION_PAIRED_RESTART_OFFERS_RUNTIME_CAPABILITY)) {
           continue
         }
         const hostCalls = structuredHostStub(SESSION, WORKSPACE)
@@ -427,7 +427,7 @@ describe('cross-version structured agent sessions', () => {
           await build.installStructuredHost(null)
         }
       }
-      expect(current.capabilities).toContain(AGENT_SESSION_RESTART_SELECTIVE_DISMISS_RUNTIME_CAPABILITY)
+      expect(current.capabilities).toContain(AGENT_SESSION_PAIRED_RESTART_OFFERS_RUNTIME_CAPABILITY)
     })
 
     it('gets a clean answer from the old dispatcher rather than silence', async () => {

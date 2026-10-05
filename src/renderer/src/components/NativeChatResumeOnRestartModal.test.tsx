@@ -16,10 +16,10 @@ import {
   requestNativeChatResumeOnRestartDialog
 } from './native-chat-resume-on-restart-dialog'
 import {
-  _resetNativeChatRestartOffer,
-  getNativeChatRestartOffer,
-  refreshNativeChatRestartOffer
+  getNativeChatRestartOffers,
+  readNativeChatRestartMachine
 } from './native-chat-resume-on-restart-store'
+import { _resetNativeChatRestartOffer } from './native-chat-restart-offer-triggers'
 
 const rpc = vi.hoisted(() => vi.fn())
 const activate = vi.hoisted(() => vi.fn(async () => true))
@@ -91,7 +91,9 @@ function checkbox(index: number): HTMLElement {
 }
 
 function offerIds(): string[] {
-  return getNativeChatRestartOffer().candidates.map((candidate) => candidate.sessionId)
+  return (getNativeChatRestartOffers().get('local')?.candidates ?? []).map(
+    (candidate) => candidate.sessionId
+  )
 }
 
 beforeEach(() => {
@@ -308,7 +310,7 @@ it('closes on Resume and shows the resume in the status bar until the host answe
   expect(document.body.textContent).not.toContain('Resuming')
   expect(document.querySelector('[role="dialog"]')).toBeNull()
   // Nothing is left to show, so the reopen request is retired rather than left to latch.
-  expect(getNativeChatResumeOnRestartDialogRequest()).toBe(false)
+  expect(getNativeChatResumeOnRestartDialogRequest()).toBeNull()
   expect(toast).toHaveBeenCalledWith('Resumed 2 chats and asked them to continue')
 })
 
@@ -426,7 +428,8 @@ it('resumes and continues once when the launch begins opted in', async () => {
   )
   expect(rpc.mock.calls.map((call) => [call[1], call[2]])).toEqual([
     ['agentSession.restartResumable', undefined],
-    ['agentSession.restartContinue', {}]
+    // Named, never "everything": only the user's own chats are continued without asking.
+    ['agentSession.restartContinue', { sessionIds: ['a', 'b'] }]
   ])
   // Automatic is never silent, and the offer shrinks by what the host says it reattached.
   expect(toast).toHaveBeenCalledWith('Resumed 2 chats and asked them to continue')
@@ -679,7 +682,8 @@ it('lists a chat the resume could not carry on when the dialog reopens, with wha
 
   await act(async () => button('Open chat').click())
   expect(activate).toHaveBeenCalledWith({
-    structuredSession: { workspaceId: 'workspace', sessionId: 'b' }
+    // The machine that listed it rides along, so the reveal asks that machine and no other.
+    structuredSession: { workspaceId: 'workspace', sessionId: 'b', executionHostId: 'local' }
   })
   // Opening is read-only: the record stays with the host, the dialog just gets out of the way.
   expect(rpc.mock.calls.map((call) => call[1])).not.toContain(
@@ -799,7 +803,7 @@ it('keeps a failure the host marks unretryable out of Resume, even after a tick'
   expect(button('Resume 1 chat').disabled).toBe(false)
 
   failed = [{ ...failure('b'), retryable: false }]
-  await act(async () => void (await refreshNativeChatRestartOffer()))
+  await act(async () => void (await readNativeChatRestartMachine({ kind: 'local' })))
   expect(checkbox(0).hasAttribute('disabled')).toBe(true)
   expect(button('Resume 0 chats').disabled).toBe(true)
   expect(button('Open chat').disabled).toBe(false)
