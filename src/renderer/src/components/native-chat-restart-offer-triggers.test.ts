@@ -345,6 +345,26 @@ it('publishes and decides only the newest answer for a machine', async () => {
   expect(toast).toHaveBeenCalledTimes(1)
 })
 
+// A read issued before a dismiss must not restore what the dismiss removed.
+it('lets a dismiss issued after a read outrank that read’s late answer', async () => {
+  await connect({ runtimeId: 'r2' })
+  let answerRead: (value: unknown) => void = () => {}
+  mocks.rpc.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        answerRead = resolve
+      })
+  )
+  const reading = readNativeChatRestartMachine(TARGET)
+  await settle()
+  mocks.rpc.mockResolvedValue({ dismissed: 2, sessions: [], failed: [] })
+  await dismissNativeChatRestartOffer(MACHINE)
+  expect(getNativeChatRestartOffers().has(MACHINE)).toBe(false)
+  answerRead({ sessions: [row('a', 'own'), row('b', 'other-device')], failed: [] })
+  expect(await reading).toMatchObject({ kind: 'answered', published: false })
+  expect(getNativeChatRestartOffers().has(MACHINE)).toBe(false)
+})
+
 it('names every chat with the interruption it listed when dismissing on a server', async () => {
   await connect({ runtimeId: 'r2' })
   mocks.rpc.mockResolvedValue({ dismissed: 2, sessions: [], failed: [] })
