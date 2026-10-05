@@ -36,7 +36,7 @@ export function WorktreeCardSecondaryRows({
     childWorkspaceShortLabel,
     isDeleting
   } = card
-  const { hasMetaRow } = presentation
+  const { hasMetaRow, showCombinedStatusSlot } = presentation
 
   return (
     <>
@@ -140,7 +140,14 @@ export function WorktreeCardSecondaryRows({
       )}
 
       {!newCardStyle && lineageChildren && (
-        <div className="-ml-[1.125rem] mt-1.5 w-[calc(100%+1.125rem)] space-y-1">
+        <div
+          className={cn(
+            'mt-1.5 space-y-1',
+            // Why: the outdent cancels the status lane (unread button + gap = 1.125rem) so children
+            // step from the title; a read-only card has no lane, so there is nothing to cancel.
+            showCombinedStatusSlot && '-ml-[1.125rem] w-[calc(100%+1.125rem)]'
+          )}
+        >
           {lineageChildren}
         </div>
       )}
