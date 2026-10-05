@@ -14,9 +14,12 @@ import {
   normalizeState,
   shouldReplaceMarker,
   splitDismissedAll,
+  splitDismissedListed,
+  withoutSuperseded,
   type AgentSessionResumeFailureInput,
   type AgentSessionResumeFailureRecord,
   type KeepRecord,
+  type ListedRestartOffer,
   type RecoveryCapsuleState,
   type RecoveryEntry
 } from './agent-session-recovery-capsule-entries'
@@ -27,7 +30,8 @@ import {
 
 export type {
   AgentSessionResumeFailureInput,
-  AgentSessionResumeFailureRecord
+  AgentSessionResumeFailureRecord,
+  ListedRestartOffer
 } from './agent-session-recovery-capsule-entries'
 
 export const AGENT_SESSION_RECOVERY_CAPSULE_FILE = 'agent-session-recovery.json'
@@ -246,6 +250,19 @@ export class AgentSessionRecoveryCapsule {
     })
   }
 
+  /** Forgets offers exactly as a client listed them. A chat interrupted again since, or being
+   *  resumed by another action right now, keeps its record: the listing never named those. */
+  dismissListed(listed: readonly ListedRestartOffer[], now: number): Promise<number> {
+    return withFileTransactionLock(this.filePath, async () => {
+      const state = await this.readState()
+      const { kept, dismissed } = splitDismissedListed(normalizeState(state, now), listed)
+      if (dismissed.size > 0) {
+        await this.publish(kept, now, state.dismissedAt)
+      }
+      return dismissed.size
+    })
+  }
+
   /** Drops records the chat itself has since superseded — the user's own newer message ends both a
    *  pending offer and a recorded failure. Witness-keyed (`recordedAt`, and `failedAt` for a
    *  failure) so a fresh record written after the caller read the stale one is kept. */
@@ -256,25 +273,9 @@ export class AgentSessionRecoveryCapsule {
     return withFileTransactionLock(this.filePath, async () => {
       const state = await this.readState()
       const { entries, failed } = normalizeState(state, now)
-      const keptEntries = entries.filter(
-        (entry) =>
-          entry.state !== 'pending' ||
-          !superseded.some(
-            (gone) =>
-              gone.failedAt === undefined &&
-              gone.sessionId === entry.marker.sessionId &&
-              gone.recordedAt === entry.marker.recordedAt
-          )
-      )
-      const keptFailures = failed.filter(
-        (failure) =>
-          !superseded.some(
-            (gone) =>
-              gone.sessionId === failure.marker.sessionId && gone.failedAt === failure.failedAt
-          )
-      )
-      if (keptEntries.length !== entries.length || keptFailures.length !== failed.length) {
-        await this.publish({ entries: keptEntries, failed: keptFailures }, now, state.dismissedAt)
+      const kept = withoutSuperseded({ entries, failed }, superseded)
+      if (kept.entries.length !== entries.length || kept.failed.length !== failed.length) {
+        await this.publish(kept, now, state.dismissedAt)
       }
     })
   }

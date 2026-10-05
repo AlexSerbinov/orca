@@ -228,3 +228,61 @@ export function splitDismissedAll(
     ).length
   }
 }
+
+/** One offer as a client listed it: the chat and the interruption it was shown. */
+export type ListedRestartOffer = { sessionId: string; recordedAt: number }
+
+/** What dismissing listed offers keeps: a record no longer the one listed (a newer interruption),
+ *  and every record of a chat another action is resuming right now. */
+export function splitDismissedListed(
+  state: Pick<RecoveryCapsuleState, 'entries' | 'failed'>,
+  listed: readonly ListedRestartOffer[]
+): { kept: Pick<RecoveryCapsuleState, 'entries' | 'failed'>; dismissed: Set<string> } {
+  const shown = new Map(listed.map((offer) => [offer.sessionId, offer.recordedAt]))
+  const resuming = new Set(
+    state.entries
+      .filter((entry) => entry.state === 'in-progress')
+      .map((entry) => entry.marker.sessionId)
+  )
+  const dismissed = new Set<string>()
+  const keep = (marker: AgentSessionResumeMarker): boolean => {
+    if (resuming.has(marker.sessionId) || shown.get(marker.sessionId) !== marker.recordedAt) {
+      return true
+    }
+    dismissed.add(marker.sessionId)
+    return false
+  }
+  return {
+    kept: {
+      entries: state.entries.filter((entry) => keep(entry.marker)),
+      failed: state.failed.filter((failure) => keep(failure.marker))
+    },
+    dismissed
+  }
+}
+
+/** Records the chat itself has since superseded go; witness-keyed, so a newer record stays. */
+export function withoutSuperseded(
+  state: Pick<RecoveryCapsuleState, 'entries' | 'failed'>,
+  superseded: readonly { sessionId: string; recordedAt: number; failedAt?: number }[]
+): Pick<RecoveryCapsuleState, 'entries' | 'failed'> {
+  return {
+    entries: state.entries.filter(
+      (entry) =>
+        entry.state !== 'pending' ||
+        !superseded.some(
+          (gone) =>
+            gone.failedAt === undefined &&
+            gone.sessionId === entry.marker.sessionId &&
+            gone.recordedAt === entry.marker.recordedAt
+        )
+    ),
+    failed: state.failed.filter(
+      (failure) =>
+        !superseded.some(
+          (gone) =>
+            gone.sessionId === failure.marker.sessionId && gone.failedAt === failure.failedAt
+        )
+    )
+  }
+}

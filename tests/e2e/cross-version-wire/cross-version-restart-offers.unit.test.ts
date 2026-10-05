@@ -1,5 +1,5 @@
 // A paired desktop asks a server for its restart offers on every connection and dismisses them
-// there by name, but only where the server advertises it can: an older server builds its chat host
+// there by name and listed interruption, but only where the server advertises it can: an older server builds its chat host
 // to answer the read, and its strict, empty dismiss params refuse names — its only dismissal
 // deletes every device's offers.
 
@@ -40,14 +40,17 @@ function runtimeStub(): unknown {
   }
 }
 
-async function dismissNamed(build: AgentSessionWireBuild): Promise<RpcReply[]> {
+async function dismissNamed(
+  build: AgentSessionWireBuild,
+  params: Record<string, unknown> = { sessionIds: [SESSION] }
+): Promise<RpcReply[]> {
   const replies: RpcReply[] = []
   await build.createDispatcher(runtimeStub()).dispatchStreaming(
     {
       id: 'request-dismiss',
       authToken: 'cross-version-token',
       method: 'agentSession.restartResumableDismiss',
-      params: { sessionIds: [SESSION] }
+      params
     },
     (raw) => replies.push(JSON.parse(raw)),
     { clientKind: 'runtime', clientCapabilities: current.capabilities }
@@ -71,6 +74,14 @@ describe('paired restart offers across versions', () => {
           expect(replies, `${build.label}: a dismiss naming a chat`).toHaveLength(1)
           expect(replies[0], `${build.label}: a dismiss naming a chat`).toMatchObject({ ok: true })
           expect(hostCalls.restartResumableDismiss).toHaveBeenCalledWith([SESSION])
+          // A desktop names each chat with the interruption it listed; `sessionIds` rides along.
+          const listed = [{ sessionId: SESSION, recordedAt: 1 }]
+          const witnessed = await dismissNamed(build, { sessionIds: [SESSION], offers: listed })
+          expect(witnessed[0], `${build.label}: a dismiss naming listed offers`).toMatchObject({
+            ok: true
+          })
+          expect(hostCalls.restartResumableDismissListed).toHaveBeenCalledWith(listed)
+          expect(hostCalls.restartResumableDismiss).toHaveBeenCalledTimes(1)
         } finally {
           await build.installStructuredHost(null)
         }

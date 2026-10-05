@@ -8,7 +8,10 @@ import {
   agentSessionRefusalFromReference
 } from '../../../shared/agent-session-wire-refusals'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
-import type { AgentSessionRecoveryCapsule } from '../../runtime/agent-session-recovery-capsule'
+import type {
+  AgentSessionRecoveryCapsule,
+  ListedRestartOffer
+} from '../../runtime/agent-session-recovery-capsule'
 import type {
   AgentSessionResumeMarker,
   AgentSessionResumeTrigger
@@ -74,6 +77,9 @@ export type StructuredAgentSessionRestartResume = {
   /** Named sessions forget their offer or failure; unnamed, every record this host
    *  lists goes (a newer Orca's stay). */
   dismiss: (sessionIds?: readonly string[]) => Promise<number>
+  /** Forgets offers exactly as a client listed them: a chat interrupted again since, or being
+   *  resumed by another action right now, keeps its record. */
+  dismissListed: (listed: readonly ListedRestartOffer[]) => Promise<number>
   /** The chat's agent proved a start: its offer ends unless the start is a resume's own. */
   onAgentStarted: (sessionId: string) => void
 }
@@ -327,6 +333,7 @@ export function createStructuredAgentSessionRestartResume(
         witnesses.clear()
         await revealEvery()
       }),
+    dismissListed: failures.dismissListed,
     continueAfterRestart,
     onAgentStarted: withdrawal.onAgentStarted
   }

@@ -20,6 +20,7 @@ export {
   QueuedMessagesResumeParams,
   RespondParams,
   RespondToQuestionParams,
+  RestartDismissParams,
   RestartResumableParams,
   RestartResumeParams,
   RewindParams,

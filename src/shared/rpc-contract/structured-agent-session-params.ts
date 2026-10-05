@@ -344,6 +344,20 @@ export const RestartResumableParams = z
   .object({ sessionIds: z.array(SessionId).max(MAX_RESTART_RESUME_SESSIONS).optional() })
   .strict()
 
+/** Dismissing: `sessionIds` as before, or `offers` naming each chat with the interruption the
+ *  client listed. A host that reads `offers` forgets only records still matching them and leaves a
+ *  chat another action is resuming; it is sent only to a host advertising paired restart offers,
+ *  and `sessionIds` rides along for one that predates `offers`. */
+export const RestartDismissParams = z
+  .object({
+    sessionIds: z.array(SessionId).max(MAX_RESTART_RESUME_SESSIONS).optional(),
+    offers: z
+      .array(z.object({ sessionId: SessionId, recordedAt: z.number().finite() }).strict())
+      .max(MAX_RESTART_RESUME_SESSIONS)
+      .optional()
+  })
+  .strict()
+
 /** Omitting `sessionIds` takes the whole offered set; naming them takes that subset. Either way the
  *  host re-derives eligibility, so an id a client invents is simply not in the set. */
 export const RestartResumeParams = z

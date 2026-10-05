@@ -13,7 +13,12 @@ import {
   structuredCallerFor
 } from './structured-agent-session-gate'
 import { restartOffersProvablyEmpty } from './structured-agent-session-restart-offer-read'
-import { RestartResumableParams, RestartResumeParams } from './structured-agent-session-schemas'
+import { withRestartOfferPayloadOrigins } from './structured-agent-session-restart-offer-origin'
+import {
+  RestartDismissParams,
+  RestartResumableParams,
+  RestartResumeParams
+} from './structured-agent-session-schemas'
 
 export const STRUCTURED_AGENT_SESSION_RESTART_RESUME_METHODS = [
   defineMethod({
@@ -28,32 +33,36 @@ export const STRUCTURED_AGENT_SESSION_RESTART_RESUME_METHODS = [
       }
       await ensureStructuredHostInstalled(ctx)
       const host = requireStructuredHost(ctx)
-      return {
+      return withRestartOfferPayloadOrigins(ctx, {
         sessions: await host.restartResume.list(),
         // Acted-on offers whose agent did not carry on. Optional on the wire; older clients ignore it.
         failed: await host.restartResume.listFailures()
-      }
+      })
     }
   }),
   defineMethod({
     // Explicitly abandons the markers without resuming. Closing the dialog is a snooze and does
     // not call this method, so the status-bar entry can reopen the offer later.
     name: 'agentSession.restartResumableDismiss',
-    params: RestartResumableParams,
+    params: RestartDismissParams,
     handler: async (params, ctx) => {
       await ensureStructuredHostInstalled(ctx)
       const host = requireStructuredHost(ctx)
-      const dismissed = await host.restartResume.dismiss(params.sessionIds)
-      if (params.sessionIds === undefined) {
+      // `offers` names each chat with the interruption the client listed; read before `sessionIds`,
+      // which rides along for a host that predates it.
+      const dismissed = params.offers
+        ? await host.restartResume.dismissListed(params.offers)
+        : await host.restartResume.dismiss(params.sessionIds)
+      if (!params.offers && params.sessionIds === undefined) {
         // clearAll is the authoritative mutation: it removes pending and in-flight records, so a
         // second read would only add a new failure point after the user's explicit dismissal.
         return { dismissed, sessions: [], failed: [] }
       }
-      return {
+      return withRestartOfferPayloadOrigins(ctx, {
         dismissed,
         sessions: await host.restartResume.list(),
         failed: await host.restartResume.listFailures()
-      }
+      })
     }
   }),
   defineMethod({
@@ -65,9 +74,12 @@ export const STRUCTURED_AGENT_SESSION_RESTART_RESUME_METHODS = [
     handler: async (params, ctx) => {
       await ensureStructuredHostInstalled(ctx)
       const host = requireStructuredHost(ctx)
-      return host.restartResume.continueAfterRestart(
-        params.sessionIds,
-        structuredCallerFor(ctx).callerKey
+      return withRestartOfferPayloadOrigins(
+        ctx,
+        await host.restartResume.continueAfterRestart(
+          params.sessionIds,
+          structuredCallerFor(ctx).callerKey
+        )
       )
     }
   }),

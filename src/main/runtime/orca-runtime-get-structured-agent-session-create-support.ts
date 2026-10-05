@@ -24,8 +24,15 @@ import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
 import { parseWslUncPath } from '../../shared/wsl-paths'
 import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import { applyStructuredCodexWorkspaceTrust } from '../agent-workspace-trust-spawn'
+import { readRestartOfferWorkspaceProvenance } from './restart-offer-workspace-provenance'
+import type { RestartOfferWorkspaceProvenance } from '../../shared/restart-offer-origin'
 
 export class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaRuntimeWithGetWorktreePs {
+  /** Who made the workspace an offered restart chat ran in; see `restartOfferOrigin`. */
+  restartOfferWorkspaceProvenance(workspaceId: string): RestartOfferWorkspaceProvenance | undefined {
+    return readRestartOfferWorkspaceProvenance(this.store, workspaceId)
+  }
+
   async getStructuredAgentSessionCreateSupport(
     worktreeSelector: string,
     agent: 'claude' | 'codex'

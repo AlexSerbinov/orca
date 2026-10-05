@@ -270,6 +270,33 @@ describe('durable restart offers', () => {
     expect(await capsule.list(NOW)).toEqual([marker({ sessionId: 'third' }), marker()])
   })
 
+  it('forgets listed records only while they are still the interruption the client listed', async () => {
+    await capsule.record(
+      [marker(), marker({ sessionId: 'second' }), marker({ sessionId: 'third' })],
+      NOW
+    )
+    // Interrupted again after the listing: the newer offer was never shown, so it stays.
+    await capsule.record([marker({ sessionId: 'second', recordedAt: NOW + 5 })], NOW + 5)
+
+    const listed = [SESSION, 'second', 'third'].map((sessionId) => ({ sessionId, recordedAt: NOW }))
+    expect(await capsule.dismissListed(listed, NOW + 6)).toBe(2)
+    expect(await capsule.list(NOW + 6)).toEqual([
+      marker({ sessionId: 'second', recordedAt: NOW + 5 })
+    ])
+  })
+
+  it('leaves a listed chat another action is resuming, and its earlier failure, to that action', async () => {
+    await capsule.record([marker()], NOW)
+    await fileFailure()
+    // A retry on another desktop reserves the failed chat; this desktop listed it before that.
+    await capsule.beginResume([SESSION], 'operation-b', NOW)
+
+    expect(await capsule.dismissListed([{ sessionId: SESSION, recordedAt: NOW }], NOW)).toBe(0)
+    expect(await capsule.listFailed(NOW)).toHaveLength(1)
+    await capsule.failResume('operation-b', [failure({ reason: 'retry_failed' })], NOW)
+    expect(await capsule.listFailed(NOW)).toMatchObject([{ reason: 'retry_failed' }])
+  })
+
   // A failure record has no expiry either; it ends only with the user's own actions.
   it('keeps a months-old failure on record', async () => {
     await capsule.record([marker()], NOW)

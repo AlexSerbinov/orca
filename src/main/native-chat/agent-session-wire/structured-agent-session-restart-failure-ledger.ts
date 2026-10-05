@@ -10,7 +10,8 @@
 import type {
   AgentSessionRecoveryCapsule,
   AgentSessionResumeFailureInput,
-  AgentSessionResumeFailureRecord
+  AgentSessionResumeFailureRecord,
+  ListedRestartOffer
 } from '../../runtime/agent-session-recovery-capsule'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type {
@@ -35,7 +36,13 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 
 type FailureCapsule = Pick<
   AgentSessionRecoveryCapsule,
-  'listFailed' | 'completeResume' | 'failResume' | 'rollbackResume' | 'dismiss' | 'clearAll'
+  | 'listFailed'
+  | 'completeResume'
+  | 'failResume'
+  | 'rollbackResume'
+  | 'dismiss'
+  | 'dismissListed'
+  | 'clearAll'
 >
 
 export type StructuredAgentSessionRestartFailureLedger = {
@@ -64,6 +71,8 @@ export type StructuredAgentSessionRestartFailureLedger = {
     sessionIds: readonly string[] | undefined,
     beforeClearAll: () => void | Promise<void>
   ) => Promise<number>
+  /** Forgets offers exactly as a client listed them; see the capsule's `dismissListed`. */
+  dismissListed: (listed: readonly ListedRestartOffer[]) => Promise<number>
 }
 
 /** Which continuation outcomes count as the agent not carrying on, and how each is filed. */
@@ -237,6 +246,8 @@ export function createStructuredAgentSessionRestartFailureLedger(deps: {
         // A newer Orca's offers and failures were never shown here, so "dismiss all" keeps them.
         const keep = (marker: AgentSessionResumeMarker) => deps.savedByNewerOrca(marker.sessionId)
         return (await deps.capsule?.clearAll(deps.now(), keep)) ?? 0
-      })
+      }),
+    dismissListed: (listed) =>
+      deps.enqueue(async () => (await deps.capsule?.dismissListed(listed, deps.now())) ?? 0)
   }
 }

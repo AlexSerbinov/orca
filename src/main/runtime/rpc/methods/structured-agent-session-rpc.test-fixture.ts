@@ -265,6 +265,7 @@ export async function call(
     clientId?: string
     clientKind?: 'mobile' | 'runtime'
     clientCapabilities?: string[]
+    pairedDeviceId?: string
     signal?: AbortSignal
   },
   runtimeOverrides: Record<string, unknown> = {}

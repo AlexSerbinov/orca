@@ -21,6 +21,7 @@ export function structuredHostStub(
     restartResumableList: vi.fn(async () => []),
     restartResumableFailures: vi.fn(async () => []),
     restartResumableDismiss: vi.fn(async () => 0),
+    restartResumableDismissListed: vi.fn(async () => 0),
     restartResumeAll: vi.fn(async () => []),
     restartContinueAll: vi.fn(async () => ({ resumed: [], continued: [] })),
     attach: vi.fn(async () => ({ ok: true, replayed: false, value: { sessionId } })),
@@ -111,6 +112,7 @@ export function installableHost(
       list: hostCalls.restartResumableList,
       listFailures: hostCalls.restartResumableFailures,
       dismiss: hostCalls.restartResumableDismiss,
+      dismissListed: hostCalls.restartResumableDismissListed,
       resume: hostCalls.restartResumeAll,
       continueAfterRestart: hostCalls.restartContinueAll
     }

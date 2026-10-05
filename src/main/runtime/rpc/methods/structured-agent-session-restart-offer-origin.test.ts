@@ -1,0 +1,119 @@
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import type { RestartOfferWorkspaceProvenance } from '../../../../shared/restart-offer-origin'
+import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
+import type { RpcResponse } from '../core'
+import {
+  call,
+  hostStub,
+  SESSION,
+  STRUCTURED_CLIENT
+} from './structured-agent-session-rpc.test-fixture'
+
+const shortcut = vi.hoisted(() => ({ empty: vi.fn(async () => false) }))
+vi.mock('./structured-agent-session-restart-offer-read', () => ({
+  restartOffersProvablyEmpty: shortcut.empty
+}))
+
+const WORKSPACES: Record<string, RestartOfferWorkspaceProvenance> = {
+  mine: { creatorProvenance: { kind: 'paired-device', deviceId: 'device-mine' } },
+  theirs: { creatorProvenance: { kind: 'paired-device', deviceId: 'device-theirs' } },
+  'host-made': { creatorProvenance: { kind: 'host' } },
+  automated: {
+    automationProvenance: {
+      kind: 'created-by-automation',
+      automationId: 'automation-1',
+      automationNameSnapshot: 'Nightly',
+      automationRunId: 'run-1',
+      automationRunTitleSnapshot: 'Nightly',
+      createdAt: 1,
+      executionTargetType: 'local',
+      executionTargetId: 'local',
+      projectId: 'project-1'
+    }
+  }
+}
+const row = (sessionId: string, workspaceId: string) => ({ sessionId, workspaceId, recordedAt: 1 })
+const restartResume = {
+  list: vi.fn(async () => [
+    row('a', 'mine'),
+    row('b', 'theirs'),
+    row('c', 'host-made'),
+    row('d', 'main-checkout'),
+    row('e', 'automated')
+  ]),
+  listFailures: vi.fn(async () => [row('f', 'theirs')]),
+  dismiss: vi.fn(async () => 1),
+  dismissListed: vi.fn(async () => 1)
+}
+const RUNTIME = {
+  restartOfferWorkspaceProvenance: (workspaceId: string) => WORKSPACES[workspaceId]
+}
+
+beforeEach(() => {
+  setStructuredAgentSessionHost(Object.assign(hostStub(), { restartResume }))
+})
+
+afterEach(() => {
+  setStructuredAgentSessionHost(null)
+  vi.clearAllMocks()
+})
+
+function rowsOf(result: unknown, key: 'sessions' | 'failed'): unknown[] {
+  const value = typeof result === 'object' && result !== null && key in result ? result[key] : []
+  return Array.isArray(value) ? value : []
+}
+
+/** Each listed row's origin by session, from a reply. */
+function origins(response: RpcResponse): Record<string, unknown> {
+  const result = response.ok ? response.result : null
+  return Object.fromEntries(
+    [...rowsOf(result, 'sessions'), ...rowsOf(result, 'failed')].map((entry) =>
+      typeof entry === 'object' && entry !== null && 'sessionId' in entry
+        ? [entry.sessionId, 'origin' in entry ? entry.origin : undefined]
+        : []
+    )
+  )
+}
+
+it('says whose each offer is for the paired desktop asking, by the sidebar rule', async () => {
+  const response = await call(
+    'agentSession.restartResumable',
+    {},
+    { ...STRUCTURED_CLIENT, pairedDeviceId: 'device-mine' },
+    RUNTIME
+  )
+  expect(response).toMatchObject({ ok: true })
+  expect(origins(response)).toEqual({
+    a: 'own',
+    b: 'other-device',
+    c: 'server-made',
+    // No creator record: the sidebar shows it as the asker's, so the offer is theirs too.
+    d: 'own',
+    e: 'automation',
+    f: 'other-device'
+  })
+})
+
+it("counts the host's own user as the owner of what the host made", async () => {
+  const response = await call('agentSession.restartResumable', {}, undefined, RUNTIME)
+  expect(origins(response)).toMatchObject({
+    a: 'other-device',
+    c: 'own',
+    d: 'own',
+    e: 'automation'
+  })
+})
+
+it('forgets listed offers by the interruption the client saw, with sessionIds riding along', async () => {
+  const offers = [{ sessionId: SESSION, recordedAt: 1 }]
+  const response = await call(
+    'agentSession.restartResumableDismiss',
+    { sessionIds: [SESSION], offers },
+    { ...STRUCTURED_CLIENT, pairedDeviceId: 'device-mine' },
+    RUNTIME
+  )
+  expect(response).toMatchObject({ ok: true, result: { dismissed: 1 } })
+  expect(restartResume.dismissListed).toHaveBeenCalledWith(offers)
+  expect(restartResume.dismiss).not.toHaveBeenCalled()
+  expect(origins(response)).toMatchObject({ a: 'own' })
+})
