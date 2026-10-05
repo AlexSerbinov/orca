@@ -7,7 +7,13 @@ const mocks = vi.hoisted(() => {
   const hostLabel = (): string | null => 'studio-mac'
   const capability = (): 'unknown' | 'supported' | 'unsupported' => 'supported'
   const resuming: readonly string[] = []
-  return { call: vi.fn(), capability: capability(), hostLabel: hostLabel(), resuming }
+  return {
+    call: vi.fn(),
+    capability: capability(),
+    hostLabel: hostLabel(),
+    resuming,
+    launchPending: false
+  }
 })
 
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
@@ -19,6 +25,9 @@ vi.mock('@/runtime/structured-agent-session-host-capability', () => ({
 }))
 vi.mock('../native-chat-resume-on-restart-store', () => ({
   useNativeChatRestartResuming: () => mocks.resuming
+}))
+vi.mock('../native-chat-launch-resume-decision', () => ({
+  useNativeChatLaunchResumePending: () => mocks.launchPending
 }))
 vi.mock('./use-structured-agent-session-host-label', () => ({
   useStructuredAgentSessionHostLabel: () => mocks.hostLabel
@@ -61,11 +70,12 @@ type Props = {
   journalItems?: readonly AgentJournalRenderItem[]
   submissions?: readonly Pick<AgentJournalSubmission, 'dispatchState'>[]
   isWorking?: boolean
+  target?: RuntimeClientTarget
 }
 
 function Harness(props: Props): React.JSX.Element {
   const continuation = useNativeChatInterruptedContinuation({
-    target: PAIRED,
+    target: props.target ?? PAIRED,
     sessionId: 'session-1',
     journalItems: props.journalItems ?? cutChat,
     submissions: props.submissions ?? [],
@@ -87,6 +97,7 @@ const FAILED = "Couldn't continue this chat. Try again, or send a message."
 beforeEach(() => {
   mocks.capability = 'supported'
   mocks.resuming = []
+  mocks.launchPending = false
   mocks.hostLabel = 'studio-mac'
   mocks.call.mockReset()
 })
@@ -143,6 +154,16 @@ describe('Continue on a reply an Orca stop cut off', () => {
     mocks.resuming = ['session-1']
     render(<Harness />)
     expect(continueButton()).toBeNull()
+  })
+
+  it("is not offered on this machine's chats while the launch may still resume them", () => {
+    mocks.launchPending = true
+    render(<Harness target={{ kind: 'local' }} />)
+    expect(continueButton()).toBeNull()
+    cleanup()
+    // The launch resumes only this machine's chats; a paired server's chat is its own.
+    render(<Harness />)
+    expect(continueButton()).toBeInTheDocument()
   })
 
   it('is not offered once anything was sent, or while the agent works', () => {

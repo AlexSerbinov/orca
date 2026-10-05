@@ -6,6 +6,7 @@ import {
 } from '@/runtime/structured-agent-session-status-feed'
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
 import { useAppStore } from '../store'
+import { markNativeChatLaunchResumeDecided } from './native-chat-launch-resume-decision'
 import {
   announceRestartDismissUnconfirmed,
   announceRestartResults,
@@ -381,7 +382,10 @@ async function loadLaunchOffer(): Promise<void> {
     requestNativeChatResumeOnRestartDialog()
     return
   }
-  await continueNativeChatRestartOffer(undefined, allResumeSessionIds(offered))
+  // Its batch names the chats before the first await, so `resuming` takes over with no gap.
+  const continuing = continueNativeChatRestartOffer(undefined, allResumeSessionIds(offered))
+  markNativeChatLaunchResumeDecided()
+  await continuing
 }
 
 /**
@@ -394,7 +398,7 @@ export function useNativeChatRestartOffer(enabled: boolean): NativeChatRestartOf
   useEffect(() => {
     if (enabled) {
       // Fetched after mount, never awaited by startup: the workspace is usable first.
-      launch ??= loadLaunchOffer()
+      launch ??= loadLaunchOffer().finally(markNativeChatLaunchResumeDecided)
     }
   }, [enabled])
   return useSyncExternalStore(subscribe, getNativeChatRestartOffer, getNativeChatRestartOffer)

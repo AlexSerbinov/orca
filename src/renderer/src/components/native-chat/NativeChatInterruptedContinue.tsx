@@ -15,6 +15,7 @@ import { AGENT_SESSION_CONTINUE_INTERRUPTED_RUNTIME_CAPABILITY } from '../../../
 import type { NativeChatOrcaStopView } from './native-chat-orca-stop-context'
 import { useStructuredAgentSessionHostLabel } from './use-structured-agent-session-host-label'
 import { useNativeChatRestartResuming } from '../native-chat-resume-on-restart-store'
+import { useNativeChatLaunchResumePending } from '../native-chat-launch-resume-decision'
 
 type ContinueAnswer = { outcome?: string }
 
@@ -47,8 +48,10 @@ export function useNativeChatInterruptedContinuation(input: {
     target,
     AGENT_SESSION_CONTINUE_INTERRUPTED_RUNTIME_CAPABILITY
   )
-  // The restart prompt or the launch's own resume is already carrying this chat on.
-  const resuming = useNativeChatRestartResuming().includes(sessionId)
+  // The restart prompt or the launch's own resume is carrying this chat on, or the launch may still
+  // decide to; it resumes only this machine's chats.
+  const launchPending = useNativeChatLaunchResumePending() && target.kind === 'local'
+  const resuming = useNativeChatRestartResuming().includes(sessionId) || launchPending
   const cut = useMemo(
     () => latestNativeChatOrcaStopCut(input.journalItems, input.submissions),
     [input.journalItems, input.submissions]
