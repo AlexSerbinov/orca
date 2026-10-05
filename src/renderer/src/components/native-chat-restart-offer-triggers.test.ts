@@ -331,9 +331,8 @@ it('retires the old pairing’s offers and toast on a re-pair, even with the sam
   renderHook(() => useNativeChatRestartOfferSources(false))
   await vi.waitFor(() => expect(toast).toHaveBeenCalledTimes(1))
   const options = vi.mocked(toast).mock.calls[0]?.[1]
-  mocks.rpc.mockImplementation(async (_target, method) =>
-    method === 'agentSession.restartResumable' ? { sessions: [], failed: [] } : {}
-  )
+  // The new pairing cannot be read yet: nothing from the old one may stand in for its answer.
+  mocks.rpc.mockRejectedValue(new Error('connection lost'))
   stageServer({ runtimeId: 'r2', priorRuntimeId: 'r1', pairingRevision: 2 })
   await vi.waitFor(() => expect(getNativeChatRestartOffers().has(MACHINE)).toBe(false))
   press(options?.action)

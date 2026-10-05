@@ -76,9 +76,10 @@ describe('activateAiVaultStructuredSession', () => {
       },
       parts
     )
-    expect(parts.refresh).toHaveBeenCalledTimes(2)
+    // Settled before asserting, so a failure here never strands an activation for later cases.
     pending.resolve()
     await Promise.all([here, there])
+    expect(parts.refresh).toHaveBeenCalledTimes(2)
   })
 
   it('refreshes an unpublished structured tab before activating it', async () => {
