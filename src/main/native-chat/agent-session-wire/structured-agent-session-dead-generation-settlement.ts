@@ -36,7 +36,7 @@ import {
 } from './structured-agent-session-stale-turn-verdict'
 import {
   exitedRootTurnScope,
-  runningRootTurnScope
+  settledRootTurnScope
 } from './structured-agent-session-exit-turn-scope'
 import { orcaStopRowBody } from './structured-agent-session-orca-stop-row'
 import {
@@ -268,7 +268,7 @@ export async function settleStaleStructuredAgentSessionState(input: {
       // The death evidence is Orca's log text, never a sentence for a person: the row says only
       // that the provider stopped, and how Orca ended when the provider died with it.
       body: orcaStopRowBody(input.failureTextContext, evidence.runtimeEnd),
-      turnScope: runningRootTurnScope(items)
+      turnScope: settledRootTurnScope(items, turnEnds)
     })
   }
   for (const chunk of partitionJournalLifecycleMutations(settlementId, mutations)) {
