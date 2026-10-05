@@ -2,7 +2,7 @@
 // an owner tagged with an earlier runtime of this build can be attributed; anything unknown keeps
 // the death unattributed, so the chat keeps its generic words.
 
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -19,7 +19,10 @@ import {
   agentSessionRuntimeIncarnation,
   beginAgentSessionRuntimeIncarnationForTest
 } from './agent-session-runtime-attribution'
-import { recordAgentSessionRuntimeEnd } from './agent-session-runtime-end-record'
+import {
+  beginAgentSessionRuntimeRecord,
+  recordAgentSessionRuntimeEnd
+} from './agent-session-runtime-end-record'
 
 const SESSION = 'session-alpha-1'
 const OWNER = {
@@ -54,6 +57,14 @@ async function seedHeldBy(runtime: string | null, lease: Partial<AgentSessionLea
   })
 }
 
+/** What that runtime recorded about itself: its start, and its end when it ended gracefully. */
+function recorded(runtime: string, end?: 'quit' | 'update') {
+  beginAgentSessionRuntimeRecord(directory, runtime, 1_000)
+  if (end) {
+    recordAgentSessionRuntimeEnd(end, 50_000)
+  }
+}
+
 async function restartEvidence() {
   const store = await openTestAgentSessionRecordStore(directory)
   await store.reconcileOnRestart({ probe: async () => ({ outcome: 'pid-absent' }), now: 90_000 })
@@ -61,8 +72,9 @@ async function restartEvidence() {
 }
 
 describe("an agent that died with Orca's previous runtime", () => {
-  it('died in a crash when that runtime began no quit', async () => {
+  it('died in a crash when that runtime started and never ended', async () => {
     await seedHeldBy('runtime-a')
+    recorded('runtime-a')
     expect(await restartEvidence()).toMatchObject({ kind: 'pid-absent', runtimeEnd: 'crash' })
   })
 
@@ -70,20 +82,28 @@ describe("an agent that died with Orca's previous runtime", () => {
     'died with the %s that runtime began, when the quit did not finish',
     async (trigger) => {
       await seedHeldBy('runtime-a')
-      await recordAgentSessionRuntimeEnd(directory, 'runtime-a', trigger, 50_000)
+      recorded('runtime-a', trigger)
       expect(await restartEvidence()).toMatchObject({ runtimeEnd: trigger })
     }
   )
 
-  it("is never told by another runtime's quit", async () => {
+  it("is never told by another runtime's end", async () => {
     await seedHeldBy('runtime-b')
-    await recordAgentSessionRuntimeEnd(directory, 'runtime-a', 'update', 50_000)
+    recorded('runtime-b')
+    recorded('runtime-a', 'update')
     expect(await restartEvidence()).toMatchObject({ runtimeEnd: 'crash' })
   })
 
-  it('names no cause when the quit records cannot be read', async () => {
+  it('names no cause when that runtime left no record', async () => {
     await seedHeldBy('runtime-a')
-    await writeFile(join(directory, 'agent-session-runtime-ends.json'), '{not json')
+    recorded('runtime-b', 'quit')
+    expect(await restartEvidence()).not.toHaveProperty('runtimeEnd')
+  })
+
+  it("names no cause when that runtime's record cannot be read", async () => {
+    await seedHeldBy('runtime-a')
+    await mkdir(join(directory, 'agent-session-runtimes'), { recursive: true })
+    await writeFile(join(directory, 'agent-session-runtimes', 'runtime-a.json'), '{not json')
     expect(await restartEvidence()).not.toHaveProperty('runtimeEnd')
   })
 
@@ -99,6 +119,7 @@ describe("an agent that died with Orca's previous runtime", () => {
 
   it('is told once a survivor that outlived the runtime is stopped and proven gone', async () => {
     await seedHeldBy('runtime-a')
+    recorded('runtime-a')
     const store = await openTestAgentSessionRecordStore(directory)
     // The owner was still alive at restart, so it waits in recovery for its stop.
     await store.reconcileOnRestart({
@@ -121,6 +142,8 @@ describe("an agent that died with Orca's previous runtime", () => {
 describe('an agent this runtime ran', () => {
   it("becomes an earlier runtime's after a relaunch", async () => {
     await seedHeldBy(agentSessionRuntimeIncarnation())
+    // This runtime's store opened, so it recorded its start; it then died without a quit.
+    await openTestAgentSessionRecordStore(directory)
     beginAgentSessionRuntimeIncarnationForTest()
     expect(await restartEvidence()).toMatchObject({ runtimeEnd: 'crash' })
   })

@@ -2,6 +2,8 @@
 // prints, with the cause beside them. A turn that finished, a person's Stop and an idle eviction
 // write none.
 
+import { rm } from 'node:fs/promises'
+import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
@@ -204,18 +206,25 @@ describe('the row a restart writes for a reply its Orca died in', () => {
 
   it('names the update an unfinished quit began, never a crash', async () => {
     await runningTurn()
-    // The quit wrote its first word, then died before it stopped the agent.
-    await recordAgentSessionRuntimeEnd(
-      hostTestState().root,
-      agentSessionRuntimeIncarnation(),
-      'update',
-      HOST_TEST_NOW
-    )
+    // The quit recorded its end, then died before it stopped the agent.
+    recordAgentSessionRuntimeEnd('update', HOST_TEST_NOW)
 
     await restartAfterDeath()
 
     const { stopRows } = await reread()
     expect(stopRows.map((row) => row.body)).toMatchObject([{ orcaStop: { cause: 'update' } }])
+  })
+
+  it('names no cause when the Orca before left no record of itself', async () => {
+    await runningTurn()
+    await rm(join(hostTestState().root, 'agent-session-runtimes'), { recursive: true, force: true })
+
+    await restartAfterDeath()
+
+    const { stopRows, readerErrors } = await reread()
+    expect(stopRows).toEqual([])
+    // The cut keeps today's words.
+    expect(readerErrors).toEqual([LEGACY_TEXT])
   })
 })
 

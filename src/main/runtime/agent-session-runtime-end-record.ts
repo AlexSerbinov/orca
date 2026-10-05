@@ -1,89 +1,151 @@
-// The durable word each Orca runtime leaves as it begins quitting: which runtime, and why (a quit
-// or an update). A later start reads it to tell an owner that died with a quit that did not finish
-// from one that died in a crash. Keyed by runtime, never deleted, and capped, so no later run can
-// read an earlier run's word as its own.
+// What each Orca runtime that ran chats here says about itself: that it started, and, when it ends
+// gracefully, how (a quit or an update). A later start reads them to tell an owner that died with a
+// quit from one that died in a crash. A crash is only ever concluded from a runtime known to have
+// started and never ended; a runtime with no readable record names no cause.
 //
-// Written apart from the chat database on purpose: that database is synchronous SQLite, and a
-// stalled disk there would park the quit's event loop. This write is asynchronous and bounded, and
-// its failure only costs that distinction.
+// One file per runtime, written only by that runtime, so two processes sharing the directory never
+// lose each other's word to a read-modify-write. Pruned to the newest few, and losing a record only
+// costs the distinction.
 
-import { readFileSync } from 'node:fs'
-import { readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { durableWriteTempPath, writeFileDurableSync } from '../durable-file-write'
+import { readNodeFileSyncWithinLimit } from '../../shared/node-bounded-file-reader'
+import type { AgentSessionOrcaStopCause } from '../../shared/agent-session-orca-stop'
 import {
   AGENT_SESSION_RESUME_TRIGGERS,
   type AgentSessionResumeTrigger
 } from '../../shared/agent-session-resume-marker'
-import { withTimeout } from '../../shared/promise-timeout-fallback'
 
-const RUNTIME_ENDS_FILE = 'agent-session-runtime-ends.json'
-/** Enough runtimes that an owner a few restarts old still finds its runtime's word. */
-const MAX_RUNTIME_ENDS = 16
-export const RUNTIME_END_RECORD_TIMEOUT_MS = 1_000
+const RUNTIMES_DIRECTORY = 'agent-session-runtimes'
+/** Enough runtimes that an owner a few restarts old still finds its runtime's record. */
+const MAX_RUNTIME_RECORDS = 16
+const MAX_RUNTIME_RECORD_BYTES = 4 * 1024
+/** A temp file older than this belongs to a writer that died between write and rename. */
+const STALE_TEMP_FILE_MS = 60_000
+const RECORD_FILE = /^([A-Za-z0-9-]{1,64})\.json$/
 
-type RuntimeEnd = { runtime: string; trigger: AgentSessionResumeTrigger; at: number }
+type RuntimeRecord = {
+  runtime: string
+  startedAt: number
+  end?: { trigger: AgentSessionResumeTrigger; at: number }
+}
+
+/** This process's runtime, once its store opened: the one record a graceful end rewrites. */
+let current: { path: string; record: RuntimeRecord } | null = null
+
+function writeRecord(path: string, record: RuntimeRecord): void {
+  writeFileDurableSync(durableWriteTempPath(path), path, JSON.stringify(record))
+}
+
+function prune(directory: string, keep: string): void {
+  const records: { name: string; modifiedAt: number }[] = []
+  for (const name of readdirSync(directory)) {
+    const modifiedAt = statSync(join(directory, name), { throwIfNoEntry: false })?.mtimeMs ?? 0
+    if (name.endsWith('.tmp')) {
+      if (Date.now() - modifiedAt > STALE_TEMP_FILE_MS) {
+        rmSync(join(directory, name), { force: true })
+      }
+    } else if (name !== keep) {
+      records.push({ name, modifiedAt })
+    }
+  }
+  records.sort((a, b) => b.modifiedAt - a.modifiedAt)
+  for (const { name } of records.slice(MAX_RUNTIME_RECORDS - 1)) {
+    rmSync(join(directory, name), { force: true })
+  }
+}
+
+/** Records that this runtime started. Never throws: a runtime with no record reads as unknown. */
+export function beginAgentSessionRuntimeRecord(
+  stateDirectory: string,
+  runtime: string,
+  now: number
+): void {
+  const directory = join(stateDirectory, RUNTIMES_DIRECTORY)
+  const name = `${runtime}.json`
+  current = { path: join(directory, name), record: { runtime, startedAt: now } }
+  try {
+    mkdirSync(directory, { recursive: true })
+    writeRecord(current.path, current.record)
+    prune(directory, name)
+  } catch {
+    // Unwritten, this runtime's owners name no cause when they die.
+  }
+}
+
+/**
+ * The one "this Orca runtime is ending" entry point, for every graceful exit. Synchronous, so an
+ * exit that cannot await still records it; the first call wins. Never throws.
+ */
+export function recordAgentSessionRuntimeEnd(
+  trigger: AgentSessionResumeTrigger,
+  now = Date.now()
+): void {
+  if (!current || current.record.end) {
+    return
+  }
+  current.record = { ...current.record, end: { trigger, at: now } }
+  try {
+    writeRecord(current.path, current.record)
+  } catch {
+    // Unwritten, a death of this runtime's owners reads as a crash.
+  }
+}
 
 function readTrigger(value: unknown): AgentSessionResumeTrigger | undefined {
   return AGENT_SESSION_RESUME_TRIGGERS.find((trigger) => trigger === value)
 }
 
-function runtimeEndsOf(raw: string): RuntimeEnd[] {
-  const parsed: unknown = JSON.parse(raw)
-  const ends =
-    typeof parsed === 'object' && parsed !== null && 'ends' in parsed ? parsed.ends : null
-  if (!Array.isArray(ends)) {
-    throw new Error('agent session runtime ends are unreadable')
-  }
-  return ends.flatMap((end: unknown) => {
-    if (typeof end !== 'object' || end === null) {
-      return []
+/** How a recorded runtime ended: its quit or update, else a crash. Undefined when unreadable. */
+function readRecordedEnd(path: string, runtime: string): AgentSessionOrcaStopCause | undefined {
+  try {
+    const parsed: unknown = JSON.parse(
+      readNodeFileSyncWithinLimit(path, MAX_RUNTIME_RECORD_BYTES).buffer.toString('utf8')
+    )
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      !('runtime' in parsed) ||
+      parsed.runtime !== runtime ||
+      !('startedAt' in parsed) ||
+      typeof parsed.startedAt !== 'number'
+    ) {
+      return undefined
     }
-    const runtime = 'runtime' in end ? end.runtime : undefined
-    const trigger = readTrigger('trigger' in end ? end.trigger : undefined)
-    const at = 'at' in end ? end.at : undefined
-    return typeof runtime === 'string' && trigger && typeof at === 'number'
-      ? [{ runtime, trigger, at }]
-      : []
-  })
+    if (!('end' in parsed) || parsed.end === undefined) {
+      return 'crash'
+    }
+    const end = parsed.end
+    return readTrigger(
+      typeof end === 'object' && end !== null && 'trigger' in end ? end.trigger : undefined
+    )
+  } catch {
+    return undefined
+  }
 }
 
 /**
- * Each recorded runtime's quit trigger. Empty when no runtime ever began a quit here; null when the
- * word cannot be read, so nothing is ever called a crash on a failed read.
+ * How each recorded runtime ended. A runtime missing from the map (never recorded, pruned, or
+ * unreadable) names no cause. Null when the records cannot be listed at all.
  */
 export function readAgentSessionRuntimeEnds(
   stateDirectory: string
-): ReadonlyMap<string, AgentSessionResumeTrigger> | null {
+): ReadonlyMap<string, AgentSessionOrcaStopCause> | null {
+  const directory = join(stateDirectory, RUNTIMES_DIRECTORY)
+  let names: string[]
   try {
-    const ends = runtimeEndsOf(readFileSync(join(stateDirectory, RUNTIME_ENDS_FILE), 'utf8'))
-    return new Map(ends.map((end) => [end.runtime, end.trigger]))
+    names = readdirSync(directory)
   } catch (error) {
     return error instanceof Error && 'code' in error && error.code === 'ENOENT' ? new Map() : null
   }
-}
-
-async function appendRuntimeEnd(stateDirectory: string, end: RuntimeEnd): Promise<void> {
-  const path = join(stateDirectory, RUNTIME_ENDS_FILE)
-  const earlier = await readFile(path, 'utf8').then(runtimeEndsOf, () => [])
-  const ends = [...earlier.filter((entry) => entry.runtime !== end.runtime), end].slice(
-    -MAX_RUNTIME_ENDS
-  )
-  const temporary = `${path}.${process.pid}.tmp`
-  await writeFile(temporary, JSON.stringify({ ends }))
-  await rename(temporary, path)
-}
-
-/** Resolves once the word landed, failed, or ran out of time; never rejects. */
-export function recordAgentSessionRuntimeEnd(
-  stateDirectory: string,
-  runtime: string,
-  trigger: AgentSessionResumeTrigger,
-  now: number,
-  timeoutMs = RUNTIME_END_RECORD_TIMEOUT_MS
-): Promise<void> {
-  return withTimeout(
-    appendRuntimeEnd(stateDirectory, { runtime, trigger, at: now }).catch(() => undefined),
-    timeoutMs,
-    undefined
-  )
+  const ends = new Map<string, AgentSessionOrcaStopCause>()
+  for (const name of names) {
+    const runtime = RECORD_FILE.exec(name)?.[1]
+    const end = runtime ? readRecordedEnd(join(directory, name), runtime) : undefined
+    if (runtime && end) {
+      ends.set(runtime, end)
+    }
+  }
+  return ends
 }

@@ -1,8 +1,8 @@
 // Which Orca runtime held each chat's agent, and, when that agent is later proven dead, whether it
 // died with that runtime and how the runtime ended. Applied to every store transaction, so a death
 // any transition proves (a restart's adjudication, recovery's stop of a survivor) is told the same
-// way. When anything is unknown (an owner an older build recorded, a terminal's claim, unreadable
-// quit records) the death names no cause and the chat keeps its generic words.
+// way. When anything is unknown (an owner an older build recorded, a terminal's claim, a runtime
+// with no readable record) the death names no cause and the chat keeps its generic words.
 
 import { randomUUID } from 'node:crypto'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
@@ -46,7 +46,11 @@ function attributed(
   ) {
     return after
   }
-  const runtimeEnd = runtimeEnds.get(heldBy) ?? 'crash'
+  // Unrecorded, pruned or unreadable: no cause. A crash is only a runtime that started and never ended.
+  const runtimeEnd = runtimeEnds.get(heldBy)
+  if (!runtimeEnd) {
+    return after
+  }
   return { ...after, lease: { ...after.lease, deathEvidence: { ...deathEvidence, runtimeEnd } } }
 }
 

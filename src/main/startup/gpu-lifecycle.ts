@@ -24,6 +24,7 @@ import {
 } from './windows-install-dir-acl-recovery'
 import { mainProcessState as state, gpuFallbackEnvironment } from './main-process-state'
 import { createGpuAccelerationAboutPanelOptions } from '../menu/gpu-acceleration-about-panel'
+import { recordAgentSessionRuntimeEnd } from '../runtime/agent-session-runtime-end-record'
 
 export function updateGpuAccelerationAboutPanel(): void {
   app.setAboutPanelOptions(
@@ -127,6 +128,8 @@ export async function presentGpuFallbackRecoveredLaunchPrompt(
         crashesInWindow: marker.crashesInWindow
       })
       destroySystemTray()
+      // app.exit skips will-quit, whose teardown would otherwise record this.
+      recordAgentSessionRuntimeEnd('quit')
       app.exit(0)
     }
   })
@@ -255,6 +258,7 @@ export async function handleGpuChildCrash(
         state.isQuitting = true
         relaunchApp('gpu-fallback', fallbackData)
         destroySystemTray()
+        recordAgentSessionRuntimeEnd('quit')
         app.exit(0)
       }
     }

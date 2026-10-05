@@ -3,6 +3,7 @@ import { resolveOrcadBrowserProvider } from './orcad-browser-provider'
 import { acquireOrcadInstanceLock } from './orcad-instance-lock'
 import { ORCAD_BUNDLED_LAUNCHER_ENV } from './orcad-bundled-runtime'
 import { resolveOrcadExitCode } from './orcad-exit-code'
+import { recordAgentSessionRuntimeEnd } from '../runtime/agent-session-runtime-end-record'
 import {
   acquireProfileStateRuntimeAdmission,
   type ProfileStateRuntimeAdmission
@@ -63,6 +64,8 @@ export async function startOrcadWithLifecycle<T extends object>(
 ): Promise<T & { stop(): Promise<void> }> {
   let cleanupRuntime = async (): Promise<void> => {}
   const cleanup = createIdempotentOrcadCleanup(async () => {
+    // First, before any wait: chats whose agent dies with this stop read as a restart, not a crash.
+    recordAgentSessionRuntimeEnd('quit')
     let runtimeCleanupSucceeded = false
     try {
       await cleanupRuntime()

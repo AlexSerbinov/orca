@@ -1,34 +1,24 @@
-// The word a quitting runtime leaves: written before anything the quit waits on, and never able to
-// hold the quit, however slow or broken the disk.
+// What a runtime records about itself: a start when its store opens, and its end on a graceful exit.
+// A crash is only a runtime known to have started and never ended; anything else names no cause.
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type * as NodeFsPromises from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-const fsMocks = vi.hoisted(() => ({ hangWrites: false }))
-
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof NodeFsPromises>()
-  return {
-    ...actual,
-    writeFile: (...args: Parameters<typeof actual.writeFile>) =>
-      fsMocks.hangWrites ? new Promise<void>(() => {}) : actual.writeFile(...args)
-  }
-})
-
 import {
+  beginAgentSessionRuntimeRecord,
   readAgentSessionRuntimeEnds,
   recordAgentSessionRuntimeEnd
 } from './agent-session-runtime-end-record'
 import { tearDownRuntime, type InstalledRuntime } from './structured-agent-session-runtime-teardown'
-import { agentSessionRuntimeIncarnation } from './agent-session-runtime-attribution'
+
+const RUNTIME_A = '0000000a-0000-4000-8000-000000000000'
+const RUNTIME_B = '0000000b-0000-4000-8000-000000000000'
 
 let directory: string
 
 beforeEach(async () => {
-  fsMocks.hangWrites = false
   directory = await mkdtemp(join(tmpdir(), 'orca-runtime-end-'))
 })
 
@@ -36,36 +26,94 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true })
 })
 
-describe('the word a quitting runtime leaves', () => {
-  it('is kept per runtime, newest last', async () => {
-    await recordAgentSessionRuntimeEnd(directory, 'runtime-a', 'quit', 1)
-    await recordAgentSessionRuntimeEnd(directory, 'runtime-b', 'update', 2)
+function runtimesDirectory(): string {
+  return join(directory, 'agent-session-runtimes')
+}
+
+describe('what a runtime records about itself', () => {
+  it('reads as a crash once it started and never ended', () => {
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 1)
+    expect(readAgentSessionRuntimeEnds(directory)?.get(RUNTIME_A)).toBe('crash')
+  })
+
+  it.each(['quit', 'update'] as const)('reads as the %s it recorded as it ended', (trigger) => {
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 1)
+    recordAgentSessionRuntimeEnd(trigger, 2)
+    expect(readAgentSessionRuntimeEnds(directory)?.get(RUNTIME_A)).toBe(trigger)
+  })
+
+  it('keeps the first end it recorded', () => {
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 1)
+    recordAgentSessionRuntimeEnd('update', 2)
+    recordAgentSessionRuntimeEnd('quit', 3)
+    expect(readAgentSessionRuntimeEnds(directory)?.get(RUNTIME_A)).toBe('update')
+  })
+
+  it('names no cause for a runtime it has no record of', () => {
+    expect(readAgentSessionRuntimeEnds(directory)).toEqual(new Map())
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 1)
+    expect(readAgentSessionRuntimeEnds(directory)?.has(RUNTIME_B)).toBe(false)
+  })
+
+  it('names no cause for a record it cannot read, and the next start writes its own', async () => {
+    await mkdir(runtimesDirectory(), { recursive: true })
+    await writeFile(join(runtimesDirectory(), `${RUNTIME_A}.json`), '{not json')
+    expect(readAgentSessionRuntimeEnds(directory)?.has(RUNTIME_A)).toBe(false)
+
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_B, 1)
+    recordAgentSessionRuntimeEnd('quit', 2)
+    expect(readAgentSessionRuntimeEnds(directory)?.get(RUNTIME_B)).toBe('quit')
+  })
+
+  it('names no cause when the records cannot be listed', async () => {
+    await writeFile(runtimesDirectory(), 'not a directory')
+    expect(readAgentSessionRuntimeEnds(directory)).toBeNull()
+  })
+
+  it('keeps only the newest records, so a pruned runtime names no cause', async () => {
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 1)
+    // The oldest record by far.
+    await utimes(join(runtimesDirectory(), `${RUNTIME_A}.json`), 1, 1)
+    for (let index = 0; index < 16; index += 1) {
+      beginAgentSessionRuntimeRecord(
+        directory,
+        `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        index
+      )
+    }
+    const ends = readAgentSessionRuntimeEnds(directory)
+    expect(ends?.size).toBe(16)
+    expect(ends?.has(RUNTIME_A)).toBe(false)
+  })
+
+  it("never loses another runtime's record to its own writes", () => {
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 1)
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_B, 2)
+    recordAgentSessionRuntimeEnd('quit', 3)
     expect(readAgentSessionRuntimeEnds(directory)).toEqual(
       new Map([
-        ['runtime-a', 'quit'],
-        ['runtime-b', 'update']
+        [RUNTIME_A, 'crash'],
+        [RUNTIME_B, 'quit']
       ])
     )
   })
 
-  it('is empty before any runtime quit here', () => {
-    expect(readAgentSessionRuntimeEnds(directory)).toEqual(new Map())
+  it('never fails the exit when it cannot be written', async () => {
+    await writeFile(runtimesDirectory(), 'not a directory')
+    expect(() => beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 1)).not.toThrow()
+    expect(() => recordAgentSessionRuntimeEnd('quit', 2)).not.toThrow()
   })
 
-  it('never fails the quit when it cannot be written', async () => {
-    await expect(
-      recordAgentSessionRuntimeEnd(join(directory, 'missing'), 'runtime-a', 'quit', 1)
-    ).resolves.toBeUndefined()
+  it('leaves no temp files behind', async () => {
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 1)
+    recordAgentSessionRuntimeEnd('quit', 2)
+    expect(await readdir(runtimesDirectory())).toEqual([`${RUNTIME_A}.json`])
   })
+})
 
-  it('never holds the quit on a disk that does not answer', async () => {
-    fsMocks.hangWrites = true
-    await expect(
-      recordAgentSessionRuntimeEnd(directory, 'runtime-a', 'quit', 1, 20)
-    ).resolves.toBeUndefined()
-  })
-
-  it('is written before the quit waits on anything, so a quit that never finishes is still a quit', async () => {
+describe('a quit', () => {
+  it('records its end before it waits on anything, so a quit that never finishes is still a quit', () => {
+    beginAgentSessionRuntimeRecord(directory, RUNTIME_A, 1)
     const installed = {
       host: { stopDelivery: vi.fn(), flushAllStreamedEvents: vi.fn() },
       adapter: { closeAll: vi.fn() },
@@ -76,11 +124,8 @@ describe('the word a quitting runtime leaves', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: teardown reads only the members stubbed above before it parks on the recovery wait.
     void tearDownRuntime(installed as unknown as InstalledRuntime, 'update')
 
-    await vi.waitFor(() =>
-      expect(readAgentSessionRuntimeEnds(directory)?.get(agentSessionRuntimeIncarnation())).toBe(
-        'update'
-      )
-    )
+    expect(readAgentSessionRuntimeEnds(directory)?.get(RUNTIME_A)).toBe('update')
     expect(installed.host.flushAllStreamedEvents).not.toHaveBeenCalled()
+    expect(existsSync(join(runtimesDirectory(), `${RUNTIME_A}.json`))).toBe(true)
   })
 })

@@ -13,8 +13,14 @@ import { journalOpenRefusalError } from '../native-chat/agent-session-journal/jo
 import { AgentSessionJournalError } from '../native-chat/agent-session-journal/journal-write-guards'
 import type { AgentSessionStoreState } from './agent-session-record-store-file'
 import { writeAgentSessionStoreRows } from './agent-session-record-rows'
-import { attributeAgentSessionRuntime } from './agent-session-runtime-attribution'
-import { readAgentSessionRuntimeEnds } from './agent-session-runtime-end-record'
+import {
+  agentSessionRuntimeIncarnation,
+  attributeAgentSessionRuntime
+} from './agent-session-runtime-attribution'
+import {
+  beginAgentSessionRuntimeRecord,
+  readAgentSessionRuntimeEnds
+} from './agent-session-runtime-end-record'
 import {
   agentSessionStoreDraftRowWrites,
   draftAgentSessionStoreState,
@@ -85,6 +91,12 @@ export class AgentSessionStoreTransactions {
       ...loaded,
       runtimeEnds: readAgentSessionRuntimeEnds(journalDatabase.stateDirectory)
     }
+    // Before any owner this runtime records: a crash is concluded only from a recorded start.
+    beginAgentSessionRuntimeRecord(
+      journalDatabase.stateDirectory,
+      agentSessionRuntimeIncarnation(),
+      Date.now()
+    )
   }
 
   /** The committed state. A transaction in flight never shows here until its rows have landed. */

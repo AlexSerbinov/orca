@@ -7,7 +7,6 @@
 import type { AgentSessionResumeTrigger } from '../../shared/agent-session-resume-marker'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import type { JournalHostDatabase } from '../native-chat/agent-session-journal/journal-host-database'
-import { agentSessionRuntimeIncarnation } from './agent-session-runtime-attribution'
 import { recordAgentSessionRuntimeEnd } from './agent-session-runtime-end-record'
 
 export type InstalledRuntime = {
@@ -38,20 +37,14 @@ export async function tearDownRuntime(
   trigger: AgentSessionResumeTrigger
 ): Promise<void> {
   // First, before any wait: should this quit not finish, the next start must still know it was a
-  // quit and not a crash. Bounded and never rejects.
-  const runtimeEndRecorded = recordAgentSessionRuntimeEnd(
-    installed.journalDatabase.stateDirectory,
-    agentSessionRuntimeIncarnation(),
-    trigger,
-    Date.now()
-  )
+  // quit and not a crash.
+  recordAgentSessionRuntimeEnd(trigger)
   // An exit settled while recovery drains wakes delivery, which would start a fresh child for
   // teardown to kill; queued messages wait for the next launch instead.
   installed.host.stopDelivery()
   // Drain an in-flight recovery before stopping children; recovery may still
   // be writing lifecycle rows or acquiring a replacement child.
   await installed.waitForRecovery()
-  await runtimeEndRecorded
   const failures: unknown[] = []
   // Host teardown runs FIRST, which inverts the older order. It is what stops this host's
   // provider children now: it evicts each owned session through the adapter, and that eviction

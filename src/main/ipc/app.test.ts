@@ -12,7 +12,8 @@ const {
   showOpenDialogMock,
   trustFloatingWorkspaceDirectoryMock,
   registerRendererShutdownCheckpointHandlerMock,
-  registerMacKeyboardLayoutChangeNotificationsMock
+  registerMacKeyboardLayoutChangeNotificationsMock,
+  recordAgentSessionRuntimeEndMock
 } = vi.hoisted(() => ({
   handlers: new Map<string, (_event: unknown, args?: unknown) => unknown>(),
   appExitMock: vi.fn(),
@@ -24,7 +25,8 @@ const {
   showOpenDialogMock: vi.fn(),
   trustFloatingWorkspaceDirectoryMock: vi.fn(),
   registerRendererShutdownCheckpointHandlerMock: vi.fn(),
-  registerMacKeyboardLayoutChangeNotificationsMock: vi.fn()
+  registerMacKeyboardLayoutChangeNotificationsMock: vi.fn(),
+  recordAgentSessionRuntimeEndMock: vi.fn()
 }))
 
 vi.mock('node:child_process', () => ({
@@ -101,6 +103,10 @@ vi.mock('../app-relaunch', () => ({
   relaunchApp: relaunchAppMock
 }))
 
+vi.mock('../runtime/agent-session-runtime-end-record', () => ({
+  recordAgentSessionRuntimeEnd: recordAgentSessionRuntimeEndMock
+}))
+
 vi.mock('./floating-workspace-directory', () => ({
   ensureDefaultFloatingWorkspacePath: vi.fn(),
   trustFloatingWorkspaceDirectory: trustFloatingWorkspaceDirectoryMock,
@@ -158,6 +164,7 @@ describe('registerAppHandlers', () => {
     trustFloatingWorkspaceDirectoryMock.mockReset()
     registerRendererShutdownCheckpointHandlerMock.mockReset()
     registerMacKeyboardLayoutChangeNotificationsMock.mockReset()
+    recordAgentSessionRuntimeEndMock.mockReset()
     for (const probe of Object.values(windowsProbes)) {
       probe.mockClear()
     }
@@ -198,6 +205,11 @@ describe('registerAppHandlers', () => {
     expect(appRelaunchMock).toHaveBeenCalledTimes(1)
     expect(appExitMock).toHaveBeenCalledWith(0)
     expect(destroySystemTrayMock.mock.invocationCallOrder[0]).toBeLessThan(
+      appExitMock.mock.invocationCallOrder[0]
+    )
+    // app.exit skips will-quit, so the relaunch records the runtime's end itself.
+    expect(recordAgentSessionRuntimeEndMock).toHaveBeenCalledExactlyOnceWith('quit')
+    expect(recordAgentSessionRuntimeEndMock.mock.invocationCallOrder[0]).toBeLessThan(
       appExitMock.mock.invocationCallOrder[0]
     )
   })
