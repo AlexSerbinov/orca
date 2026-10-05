@@ -13,6 +13,7 @@ import {
 import type { NativeChatTextBlock } from '../../../../shared/native-chat-types'
 import { useNativeChatOrcaStopView } from './native-chat-orca-stop-context'
 import { nativeChatOrcaStopRowText } from './native-chat-orca-stop-words'
+import { AGENT_SESSION_ORCA_STOP_PRESENTATION } from '../../../../shared/agent-session-orca-stop'
 import { ProviderFrameRow } from './NativeChatTranscriptChrome'
 
 const HOST_STATUS_WORDS: Record<AgentSessionHostStatusPresentation, () => string> = {
@@ -97,7 +98,8 @@ export function NativeChatNoticeRow({
   const text = named
     ? nativeChatOrcaStopRowText(orcaStop.cause, hostLabel, { continueAvailable })
     : block.text
-  const tone = named ? 'notice' : block.tone
+  const tone =
+    named || block.presentation === AGENT_SESSION_ORCA_STOP_PRESENTATION ? 'notice' : block.tone
   const Icon =
     tone === 'warning'
       ? AlertTriangle

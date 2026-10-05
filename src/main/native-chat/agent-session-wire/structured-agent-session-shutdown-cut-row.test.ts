@@ -146,6 +146,7 @@ describe('the row a quit writes for the reply it cut', () => {
       text: LEGACY_TEXT,
       tone: 'error',
       failure: { kind: 'providerExited' },
+      presentation: 'orca-stop',
       orcaStop: { cause: trigger }
     })
     expect(row?.turnScope).toEqual({ kind: 'turn', turnItemId })

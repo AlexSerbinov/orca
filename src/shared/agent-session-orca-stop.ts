@@ -3,6 +3,8 @@
 // Open on the wire: a cause this build does not know reads as none, and the row keeps its words.
 
 export const AGENT_SESSION_ORCA_STOP_CAUSES = ['update', 'quit', 'crash'] as const
+/** The row's presentation, so a client that re-words host rows it can't name passes it through. */
+export const AGENT_SESSION_ORCA_STOP_PRESENTATION = 'orca-stop'
 export type AgentSessionOrcaStopCause = (typeof AGENT_SESSION_ORCA_STOP_CAUSES)[number]
 export type AgentSessionOrcaStop = { cause: AgentSessionOrcaStopCause }
 

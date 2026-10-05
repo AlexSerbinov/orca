@@ -3,7 +3,10 @@
 // name it (`AgentSessionOrcaStop`).
 
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
-import { isAgentSessionOrcaStopCause } from '../../../shared/agent-session-orca-stop'
+import {
+  AGENT_SESSION_ORCA_STOP_PRESENTATION,
+  isAgentSessionOrcaStopCause
+} from '../../../shared/agent-session-orca-stop'
 import type { AgentSessionResumeTrigger } from '../../../shared/agent-session-resume-marker'
 import {
   agentSessionFailureWords,
@@ -26,8 +29,9 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 
 type OrcaStopRowJournal = Pick<AgentSessionJournal, 'snapshot' | 'appendItem'>
 
-/** The row about an owner gone from under a turn: today's words, which every client prints, and
- *  why Orca stopped when it was Orca, which a client that knows the cause names instead. */
+/** The row about an owner gone from under a turn: today's words and tone, which every client prints
+ *  as it always has, and why Orca stopped when it was Orca, which a client that knows the cause names
+ *  instead, muted. */
 export function orcaStopRowBody(
   context: AgentSessionFailureWordsContext | undefined,
   orcaEnd: unknown
@@ -39,7 +43,9 @@ export function orcaStopRowBody(
       surface: 'row'
     }),
     tone: 'error',
-    ...(isAgentSessionOrcaStopCause(orcaEnd) ? { orcaStop: { cause: orcaEnd } } : {})
+    ...(isAgentSessionOrcaStopCause(orcaEnd)
+      ? { presentation: AGENT_SESSION_ORCA_STOP_PRESENTATION, orcaStop: { cause: orcaEnd } }
+      : {})
   }
 }
 

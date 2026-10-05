@@ -264,6 +264,31 @@ describe('a turn no message opened', () => {
     ])
   })
 
+  // Stored red for clients that predate it, but Orca stopped, not the agent: no failure, never folded.
+  it("keeps the row about Orca's stop on screen beside the reply it cut, which stays the answer", () => {
+    const orcaStop: NativeChatMessage = {
+      ...failure('orca-stop'),
+      blocks: [
+        {
+          type: 'text' as const,
+          text: 'Codex stopped while this response was in progress.',
+          tone: 'error',
+          presentation: 'orca-stop',
+          orcaStop: { cause: 'update' }
+        }
+      ]
+    }
+    const messages = [text('u1', 'go', 'user'), text('a1', 'Looking.'), toolRun('work'), orcaStop]
+    const slots = build(messages, {
+      turnStatuses: { active: settled(3), completedByTurn: { u1: settled(3) } }
+    })
+    expect(slots.map((slot) => [slot.message.id, slot.folded])).toEqual([
+      ['u1', false],
+      ['a1', false],
+      ['orca-stop', false]
+    ])
+  })
+
   it('folds an error the agent recovered from behind the answer that followed it', () => {
     const messages = [text('u1', 'go', 'user'), failure('retry'), text('a1', 'Done.')]
     const slots = build(messages, {

@@ -50,6 +50,7 @@ function orcaStopRow(cause: string): AgentJournalStatusItem {
     kind: 'status',
     text: LEGACY_TEXT,
     tone: 'error',
+    presentation: 'orca-stop',
     orcaStop: { cause }
   }
 }
@@ -80,15 +81,19 @@ describe('the row an Orca stop leaves', () => {
     expect(screen.getByText(LEGACY_TEXT)).toBeInTheDocument()
   })
 
-  it('keeps the host words when the chat has no machine to name', () => {
+  it('keeps the host words when the chat has no machine to name, muted all the same', () => {
     renderStatus(orcaStopRow('update'), null)
-    expect(screen.getByText(LEGACY_TEXT)).toBeInTheDocument()
+    expect(screen.getByText(LEGACY_TEXT).parentElement?.parentElement).toHaveClass(
+      'text-muted-foreground'
+    )
   })
 
   it('keeps the host words for a stop Orca did not cause', () => {
-    const { orcaStop: _orcaStop, ...agentExit } = orcaStopRow('update')
+    const { orcaStop: _orcaStop, presentation: _presentation, ...agentExit } = orcaStopRow('update')
     renderStatus(agentExit, 'studio-mac')
-    expect(screen.getByText(LEGACY_TEXT)).toBeInTheDocument()
+    expect(screen.getByText(LEGACY_TEXT).parentElement?.parentElement).toHaveClass(
+      'text-destructive'
+    )
   })
 })
 
