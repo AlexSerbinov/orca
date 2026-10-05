@@ -21,6 +21,7 @@ import {
   statusNotes
 } from './structured-agent-session-restart-interruption-test-harness'
 import type { StructuredAgentSessionHost } from './structured-agent-session-host'
+import { previousExitUnverifiableRefusal } from './structured-agent-session-child-close'
 
 type Restarted = Awaited<ReturnType<typeof interruptedRestart>>
 
@@ -205,4 +206,22 @@ it('continues a reply the user had steered before Orca stopped', async () => {
   expect(answer).toEqual({ sessionId: SESSION, outcome: 'pending' })
   await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
   expect(sentTexts(dispatch)).toEqual([restartContinuationMessage(marker!)])
+})
+
+it('answers a refusal before anything was accepted, and a retry adds no note to the chat', async () => {
+  const { host, dispatch } = await interruptedRestart()
+  const turnItemId = await cutTurn(host)
+  const notesBefore = await statusNotes(host)
+  vi.spyOn(host, 'send').mockResolvedValue({
+    ok: false,
+    refusal: previousExitUnverifiableRefusal()
+  })
+
+  const first = await host.restartResume.continueInterrupted(SESSION, turnItemId)
+  const retry = await host.restartResume.continueInterrupted(SESSION, turnItemId)
+
+  expect([first.outcome, retry.outcome]).toEqual(['refused', 'refused'])
+  // The click's answer is the one report; the chat stays as it was.
+  expect(await statusNotes(host)).toEqual(notesBefore)
+  expect(dispatch).not.toHaveBeenCalled()
 })

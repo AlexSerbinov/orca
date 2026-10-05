@@ -193,7 +193,8 @@ export type StructuredAgentSessionContinuationDeps = {
   /** Where a note that could not be written is reported. The note is best effort, but its failure
    *  is not allowed to be silent — a swallowed append is how this regressed unnoticed once already. */
   logger: StructuredAgentSessionLogger
-  /** Answer once Orca accepted the message, as a send does, not once the agent took it. */
+  /** Answer once Orca accepted the message, as a send does, not once the agent took it. A refusal
+   *  before acceptance is then the caller's to report, not a note: a retry adds none. */
   answerAtAcceptance?: true
 }
 
@@ -221,13 +222,15 @@ export async function startStructuredAgentSessionContinuation(
     started = await sendContinuation(deps, sessionId, marker, continuationId)
   } catch (error) {
     // The user's own message came first: nothing failed, so the chat says nothing.
-    if (!(error instanceof RestartContinuationSupersededError)) {
+    if (!(error instanceof RestartContinuationSupersededError) && !deps.answerAtAcceptance) {
       await noteNotContinued(deps, sessionId, 'refused')
     }
     throw error
   }
   if ('done' in started) {
-    await noteOutcome(deps, sessionId, started.done)
+    if (!(deps.answerAtAcceptance && started.done.outcome === 'refused')) {
+      await noteOutcome(deps, sessionId, started.done)
+    }
     return started
   }
   const { verdict } = started

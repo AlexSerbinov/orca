@@ -158,6 +158,25 @@ describe('Continue on a reply an Orca stop cut off', () => {
     expect(continueButton()).toBeNull()
   })
 
+  it('says so once, in the composer, and offers it again when the host refuses', async () => {
+    mocks.call.mockResolvedValue({ outcome: 'refused', reason: 'agent_session_not_attached' })
+    const onError = vi.fn()
+    render(<Harness onError={onError} />)
+
+    fireEvent.click(continueButton()!)
+    await waitFor(() => expect(continueButton()).toBeInTheDocument())
+    fireEvent.click(continueButton()!)
+    await waitFor(() => expect(continueButton()).toBeInTheDocument())
+
+    // One slot: each click clears it, and the refusal sets the same line again.
+    expect(onError.mock.calls).toEqual([
+      [null],
+      ["Couldn't continue this chat. Try again, or send a message."],
+      [null],
+      ["Couldn't continue this chat. Try again, or send a message."]
+    ])
+  })
+
   it('says so and offers it again when the request fails', async () => {
     mocks.call.mockRejectedValue(new Error('offline'))
     const onError = vi.fn()

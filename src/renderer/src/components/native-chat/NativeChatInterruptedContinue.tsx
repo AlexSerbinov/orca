@@ -62,25 +62,22 @@ export function useNativeChatInterruptedContinuation(input: {
       return
     }
     const turnItemId = offered
-    const retryable = (): void => setAsked((current) => (current === turnItemId ? null : current))
+    // Nothing was accepted: one line in the composer, which a retry replaces rather than repeats.
+    const failed = (): void => {
+      setAsked((current) => (current === turnItemId ? null : current))
+      onError(
+        translate(
+          'components.native-chat.interruptedContinue.failed',
+          "Couldn't continue this chat. Try again, or send a message."
+        )
+      )
+    }
     setAsked(turnItemId)
     onError(null)
     void callStructuredAgentSession<ContinueAnswer>(target, 'agentSession.continueInterrupted', {
       sessionId,
       turnItemId
-    }).then(
-      // Refused before anything was sent: the host's note says why, and Continue may try again.
-      (answer) => (answer.outcome === 'refused' ? retryable() : undefined),
-      () => {
-        retryable()
-        onError(
-          translate(
-            'components.native-chat.interruptedContinue.failed',
-            "Couldn't continue this chat. Try again, or send a message."
-          )
-        )
-      }
-    )
+    }).then((answer) => (answer.outcome === 'refused' ? failed() : undefined), failed)
   }
   // Unknown counts as able: a host that writes cause rows has Continue, and the words stay put.
   const continueAvailable = capability !== 'unsupported'
