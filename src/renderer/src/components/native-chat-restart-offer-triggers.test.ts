@@ -477,6 +477,11 @@ it('reads the machine again when a later read overtook an action’s answer', as
 })
 
 it('forgets a server this desktop no longer pairs with', async () => {
+  // Decided about in an earlier run, and unpaired since.
+  window.localStorage.setItem(
+    'orca.nativeChatRestartDecided.v1',
+    JSON.stringify({ 'unpaired-earlier': ['a\u00001'] })
+  )
   await connect({ runtimeId: 'r2' })
   expect(window.localStorage.length).toBe(1)
   useAppStore.setState({ runtimeEnvironments: [] })
