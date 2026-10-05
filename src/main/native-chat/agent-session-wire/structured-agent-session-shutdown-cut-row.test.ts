@@ -49,7 +49,11 @@ beforeEach(() => {
     adapter: {
       ...adapter(),
       closeSession: async () => {
-        state.acquire.mock.calls.at(-1)?.[0].events.appendItem(
+        const events = state.acquire.mock.calls.at(-1)?.[0]?.events
+        if (!events) {
+          throw new Error('missing provider event sink')
+        }
+        events.appendItem(
           CUT_TURN,
           {
             kind: 'turn',

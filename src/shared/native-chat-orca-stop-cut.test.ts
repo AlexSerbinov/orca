@@ -3,7 +3,7 @@ import { agentSessionFailureFact } from './agent-session-failure'
 import { agentSessionFailureWords } from './agent-session-failure-words'
 import { readAgentSessionOrcaStop } from './agent-session-orca-stop'
 import { agentJournalItemKey } from './agent-session-journal-item-key'
-import type { AgentJournalRenderItem } from './agent-session-journal-types'
+import type { AgentJournalRenderItem, AgentJournalTurnOutcome } from './agent-session-journal-types'
 import { withNativeChatCutTurnNotices } from './native-chat-cut-turn-notice'
 import {
   latestNativeChatOrcaStopCut,
@@ -25,7 +25,7 @@ function userMessage(sequence: number): AgentJournalRenderItem {
   }
 }
 
-function cutTurn(outcome?: string): AgentJournalRenderItem {
+function cutTurn(outcome?: AgentJournalTurnOutcome): AgentJournalRenderItem {
   return {
     itemId: turnId,
     revision: 2,
