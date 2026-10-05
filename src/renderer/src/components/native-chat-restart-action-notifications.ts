@@ -17,51 +17,38 @@ export type RestartContinuationOutcome = {
 }
 
 /** `machineName` names a paired server; this computer's own chats need no "where". */
-function announceContinued(count: number, machineName: string | undefined): void {
-  if (count <= 0) {
-    return
-  }
+function continuedText(count: number, machineName: string | undefined): string {
   if (machineName !== undefined) {
-    toast(
-      count === 1
-        ? translate(
-            'auto.components.NativeChatResumeOnRestartModal.continuedOneOnMachine',
-            'Resumed 1 chat on {{value0}} and asked it to continue',
-            { value0: machineName }
-          )
-        : translate(
-            'auto.components.NativeChatResumeOnRestartModal.continuedManyOnMachine',
-            'Resumed {{value0}} chats on {{value1}} and asked them to continue',
-            { value0: count, value1: machineName }
-          )
-    )
-    return
-  }
-  toast(
-    count === 1
+    return count === 1
       ? translate(
-          'auto.components.NativeChatResumeOnRestartModal.continuedOne',
-          'Resumed 1 chat and asked it to continue'
+          'auto.components.NativeChatResumeOnRestartModal.continuedOneOnMachine',
+          'Resumed 1 chat on {{value0}} and asked it to continue',
+          { value0: machineName }
         )
       : translate(
-          'auto.components.NativeChatResumeOnRestartModal.continuedMany',
-          'Resumed {{value0}} chats and asked them to continue',
-          { value0: count }
+          'auto.components.NativeChatResumeOnRestartModal.continuedManyOnMachine',
+          'Resumed {{value0}} chats on {{value1}} and asked them to continue',
+          { value0: count, value1: machineName }
         )
-  )
+  }
+  return count === 1
+    ? translate(
+        'auto.components.NativeChatResumeOnRestartModal.continuedOne',
+        'Resumed 1 chat and asked it to continue'
+      )
+    : translate(
+        'auto.components.NativeChatResumeOnRestartModal.continuedMany',
+        'Resumed {{value0}} chats and asked them to continue',
+        { value0: count }
+      )
 }
 
 /** Delivery the host never confirmed. Reported, never retried — a second send is the user's call. */
-export function announceRestartUnconfirmed(count: number): void {
-  if (count <= 0) {
-    return
-  }
-  toast(
-    translate(
-      'auto.components.NativeChatResumeOnRestartModal.continueUnconfirmed',
-      'Continuation delivery is unconfirmed for {{value0}} chats. Open them to check before sending another message.',
-      { value0: count, count }
-    )
+function deliveryUnknownText(count: number): string {
+  return translate(
+    'auto.components.NativeChatResumeOnRestartModal.continueUnconfirmed',
+    'Continuation delivery is unconfirmed for {{value0}} chats. Open them to check before sending another message.',
+    { value0: count, count }
   )
 }
 
@@ -159,19 +146,17 @@ function otherUnconfirmedCountText(count: number): string {
 
 /** Chats that dropped out of the offer before this resume reached them: another device resumed or
  *  dismissed them, or the chat moved on. Nothing failed, and nothing was sent. */
-function announceNoLongerNeeded(count: number): void {
-  toast(
-    count === 1
-      ? translate(
-          'auto.components.NativeChatResumeOnRestartModal.noLongerNeededOne',
-          '1 chat no longer needs resuming'
-        )
-      : translate(
-          'auto.components.NativeChatResumeOnRestartModal.noLongerNeededMany',
-          '{{value0}} chats no longer need resuming',
-          { value0: count }
-        )
-  )
+function noLongerNeededText(count: number): string {
+  return count === 1
+    ? translate(
+        'auto.components.NativeChatResumeOnRestartModal.noLongerNeededOne',
+        '1 chat no longer needs resuming'
+      )
+    : translate(
+        'auto.components.NativeChatResumeOnRestartModal.noLongerNeededMany',
+        '{{value0}} chats no longer need resuming',
+        { value0: count }
+      )
 }
 
 /** A dismissal Orca could not confirm. The offer belongs to the host, so say it may still be there. */
@@ -263,26 +248,59 @@ function soleMachineName(tallies: readonly MachineTally[]): string | undefined {
   return tallies.length === 1 ? tallies[0]!.machineName : undefined
 }
 
-/** The chats an action did not carry on, as one notice across every machine. No chat names: the
- *  modal has the list. Unconfirmed chats get their own count because the agent may well be
- *  working; "couldn't be resumed" would invite a duplicate send. */
-function announceNotContinued(tallies: readonly MachineTally[], actions: RestartFailureActions) {
+function sum(tallies: readonly MachineTally[], count: (entry: MachineTally) => number): number {
+  return tallies.reduce((total, entry) => total + count(entry), 0)
+}
+
+/**
+ * What one resume did, across every machine it reached, as ONE notice: what went wrong leads, and
+ * the rest of the outcome rides beneath it. No chat names: the dialog has the list. Unconfirmed
+ * chats are counted apart from refused ones because the agent may well be working; "couldn't be
+ * resumed" would invite a duplicate send.
+ *
+ * `quiet` is a resume nobody clicked (opted in): chats that no longer needed it go unmentioned.
+ */
+export function announceRestartResults(
+  results: readonly RestartContinueResult[],
+  actions: RestartFailureActions,
+  options: { quiet?: boolean } = {}
+): void {
+  const tallies = results.map(tally)
   const failing = tallies.filter((entry) => entry.refused.length + entry.unconfirmed.length > 0)
-  if (failing.length === 0) {
+  const continuing = tallies.filter((entry) => entry.continued > 0)
+  const refused = sum(failing, (entry) => entry.refused.length)
+  const unconfirmed = sum(failing, (entry) => entry.unconfirmed.length)
+  const continued = sum(continuing, (entry) => entry.continued)
+  const deliveryUnknown = sum(tallies, (entry) => entry.deliveryUnknown)
+  const noLonger = options.quiet ? 0 : sum(tallies, (entry) => entry.noLonger)
+  const parts = [
+    ...(failing.length > 0
+      ? [
+          refused > 0
+            ? refusedCountText(refused, soleMachineName(failing))
+            : unconfirmedCountText(unconfirmed, soleMachineName(failing))
+        ]
+      : []),
+    ...(refused > 0 && unconfirmed > 0 ? [otherUnconfirmedCountText(unconfirmed)] : []),
+    ...(deliveryUnknown > 0 ? [deliveryUnknownText(deliveryUnknown)] : []),
+    ...(continued > 0 ? [continuedText(continued, soleMachineName(continuing))] : []),
+    ...(noLonger > 0 ? [noLongerNeededText(noLonger)] : [])
+  ]
+  const [title, ...rest] = parts
+  if (title === undefined) {
     return
   }
-  const refused = failing.reduce((total, entry) => total + entry.refused.length, 0)
-  const unconfirmed = failing.reduce((total, entry) => total + entry.unconfirmed.length, 0)
-  const name = soleMachineName(failing)
   const dismissable = failing.filter((entry) => entry.dismissable.length > 0)
-  toast(refused > 0 ? refusedCountText(refused, name) : unconfirmedCountText(unconfirmed, name), {
-    ...(refused > 0 && unconfirmed > 0
-      ? { description: otherUnconfirmedCountText(unconfirmed) }
-      : {}),
-    action: {
-      label: translate('auto.components.NativeChatResumeOnRestartModal.show', 'Show'),
-      onClick: () => actions.show(failing.length === 1 ? failing[0]!.machine : null)
-    },
+  const details = {
+    ...(rest.length > 0 ? { description: rest.join(' · ') } : {}),
+    ...(failing.length === 0
+      ? {}
+      : {
+          action: {
+            label: translate('auto.components.NativeChatResumeOnRestartModal.show', 'Show'),
+            onClick: () => actions.show(failing.length === 1 ? failing[0]!.machine : null)
+          }
+        }),
     ...(dismissable.length === 0
       ? {}
       : {
@@ -295,28 +313,10 @@ function announceNotContinued(tallies: readonly MachineTally[], actions: Restart
             }
           }
         })
-  })
-}
-
-/** What one resume did, across every machine it reached: at most one notice per kind of result. */
-export function announceRestartResults(
-  results: readonly RestartContinueResult[],
-  actions: RestartFailureActions
-): void {
-  const tallies = results.map(tally)
-  const continuing = tallies.filter((entry) => entry.continued > 0)
-  const continued = continuing.reduce((total, entry) => total + entry.continued, 0)
-  announceContinued(continued, soleMachineName(continuing))
-  announceNotContinued(tallies, actions)
-  const deliveryUnknown = tallies.reduce((total, entry) => total + entry.deliveryUnknown, 0)
-  announceRestartUnconfirmed(deliveryUnknown)
-  const failures = tallies.reduce(
-    (total, entry) => total + entry.refused.length + entry.unconfirmed.length,
-    0
-  )
-  const noLonger = tallies.reduce((total, entry) => total + entry.noLonger, 0)
-  // Said only when nothing else was: a click must not end in silence.
-  if (noLonger > 0 && continued === 0 && failures === 0 && deliveryUnknown === 0) {
-    announceNoLongerNeeded(noLonger)
+  }
+  if (Object.keys(details).length === 0) {
+    toast(title)
+  } else {
+    toast(title, details)
   }
 }

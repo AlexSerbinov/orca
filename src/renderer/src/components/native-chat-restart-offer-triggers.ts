@@ -77,10 +77,12 @@ function ownCandidates(
   )
 }
 
+/** "Resume automatically": nobody clicked, so the notice says only what resumed or failed. */
 function resumeOwn(machine: RestartMachineKey, own: readonly ResumeCandidate[]): Promise<void> {
-  return continueNativeChatRestartOffers([
-    { machine, sessionIds: own.map((candidate) => candidate.sessionId) }
-  ])
+  return continueNativeChatRestartOffers(
+    [{ machine, sessionIds: own.map((candidate) => candidate.sessionId) }],
+    { quiet: true }
+  )
 }
 
 /**
@@ -147,7 +149,8 @@ function decidePairedAnswer(target: RuntimeClientTarget, candidates: readonly Re
     machine,
     machineName: restartMachineName(machine),
     own: fresh,
-    resume: (sessionIds) => void continueNativeChatRestartOffers([{ machine, sessionIds }], fence),
+    resume: (sessionIds) =>
+      void continueNativeChatRestartOffers([{ machine, sessionIds }], { expected: fence }),
     show: () => requestNativeChatResumeOnRestartDialog('user', machine)
   })
 }

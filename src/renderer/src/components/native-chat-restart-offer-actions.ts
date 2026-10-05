@@ -166,21 +166,22 @@ async function continueOnMachine(
  *
  * `sessionIds` always names the chats: an action never continues one this side did not choose,
  * which on a shared server could be another device's. `expected` is the listing a caller saw (a
- * toast), which acts only while the machine is still paired that way.
+ * toast), which acts only while the machine is still paired that way. `quiet` is a resume nobody
+ * clicked (opted in), whose notice leaves out chats that no longer needed it.
  *
  * Never rejects. The payload is unvalidated, and a shape this side did not expect is reported as
  * an unconfirmed delivery — the message may well have gone out.
  */
 export async function continueNativeChatRestartOffers(
   requests: readonly RestartContinueRequest[],
-  expected?: RestartMachineFence
+  options: { expected?: RestartMachineFence; quiet?: boolean } = {}
 ): Promise<void> {
   const results = await Promise.all(
     requests
       .filter((request) => request.sessionIds.length > 0)
-      .map((request) => continueOnMachine(request, expected))
+      .map((request) => continueOnMachine(request, options.expected))
   )
-  announceRestartResults(results, failureToastActions)
+  announceRestartResults(results, failureToastActions, { quiet: options.quiet })
 }
 
 /** The offers a named dismissal lists back to the host, each with the interruption it showed. */

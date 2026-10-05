@@ -226,7 +226,8 @@ it('resumes only own chats without asking, once per interruption, when the prefe
   await vi.waitFor(() => expect(offerReads()).toBeGreaterThanOrEqual(2))
   await settle()
   expect(continueCalls()).toEqual([[TARGET, { sessionIds: ['a'] }]])
-  expect(toastTitles()).not.toContain('studio-mac restarted for an update')
+  // No reconnect toast, and no "no longer needs resuming" for a resume nobody clicked.
+  expect(toast).not.toHaveBeenCalled()
 })
 
 // A fresh window (a reload, or a reopened window on macOS) reads the same offer again.

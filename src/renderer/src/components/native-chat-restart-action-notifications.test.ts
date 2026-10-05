@@ -116,10 +116,11 @@ it('leads with the unconfirmed count when nothing was refused', () => {
   ])
 })
 
-it('reports one resume across machines in one notice per kind of result', () => {
+// One click, one notice: what went wrong leads, and the rest of the outcome rides beneath it.
+it('reports one resume across machines in a single notice', () => {
   announceRestartResults(
     [
-      answered(['l1'], [{ sessionId: 'l1', outcome: 'continued' }], []),
+      answered(['l1', 'l2'], [{ sessionId: 'l1', outcome: 'continued' }], []),
       answered(
         ['s1', 's2'],
         [{ sessionId: 's1', outcome: 'continued' }],
@@ -136,11 +137,40 @@ it('reports one resume across machines in one notice per kind of result', () => 
     ],
     actions
   )
-  expect(titles()).toEqual([
-    'Resumed 2 chats and asked them to continue',
-    '1 chat on studio-mac couldn’t be resumed',
-    'Continuation delivery is unconfirmed for 1 chat. Open it to check before sending another message.'
+  expect(vi.mocked(toast).mock.calls).toEqual([
+    [
+      '1 chat on studio-mac couldn’t be resumed',
+      expect.objectContaining({
+        description:
+          'Continuation delivery is unconfirmed for 1 chat. Open it to check before sending another message. · Resumed 2 chats and asked them to continue · 1 chat no longer needs resuming'
+      })
+    ]
   ])
+})
+
+it('says beneath the result how many chats no longer needed resuming', () => {
+  announceRestartResults(
+    [answered(['a', 'b'], [{ sessionId: 'a', outcome: 'continued' }], [])],
+    actions
+  )
+  expect(vi.mocked(toast).mock.calls).toEqual([
+    [
+      'Resumed 1 chat and asked it to continue',
+      expect.objectContaining({ description: '1 chat no longer needs resuming' })
+    ]
+  ])
+})
+
+// Nobody clicked an opted-in resume, so chats someone else already resumed go unmentioned.
+it('says nothing about chats that no longer needed it when the resume ran by itself', () => {
+  announceRestartResults([answered(['a', 'b'], refusedBoth, [])], actions, { quiet: true })
+  expect(toast).not.toHaveBeenCalled()
+  announceRestartResults(
+    [answered(['a', 'b'], [{ sessionId: 'a', outcome: 'continued' }], [])],
+    actions,
+    { quiet: true }
+  )
+  expect(vi.mocked(toast).mock.calls).toEqual([['Resumed 1 chat and asked it to continue']])
 })
 
 it('names the server when its chats alone are counted, and opens the dialog on it', () => {
