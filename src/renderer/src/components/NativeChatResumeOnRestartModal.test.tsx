@@ -171,7 +171,7 @@ it('uses the sidebar surface without a border around the resume list', async () 
 it('keeps initial focus inside the dialog with no resumable chats', async () => {
   rpc.mockResolvedValue({ sessions: [], failed: [failure('b')] })
   await mount(<NativeChatResumeOnRestartModal />)
-  await act(async () => requestNativeChatResumeOnRestartDialog())
+  await act(async () => requestNativeChatResumeOnRestartDialog('user'))
   const dialog = document.querySelector('[role="dialog"]')
   expect(button('Resume 0 chats').disabled).toBe(true)
   expect(dialog).not.toBeNull()
