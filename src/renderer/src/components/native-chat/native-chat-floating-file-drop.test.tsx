@@ -60,8 +60,12 @@ beforeEach(() => {
     ]
   }
   vi.stubGlobal('api', {
-    getPathForFile: (file: File) => `/drop/${file.name}`,
-    fs: { stat, prepareDroppedPaths: prepare, resolveDroppedPathsForAgent: upload },
+    fs: {
+      getPathForFile: (file: File) => `/drop/${file.name}`,
+      stat,
+      prepareDroppedPaths: prepare,
+      resolveDroppedPathsForAgent: upload
+    },
     shell: { pickAttachment: pick }
   })
 })

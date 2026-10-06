@@ -121,8 +121,7 @@ beforeAll(() => installNativeFileDropHandlers())
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubGlobal('api', {
-    getPathForFile: electron.getPathForFile,
-    fs: { prepareDroppedPaths: prepare }
+    fs: { getPathForFile: electron.getPathForFile, prepareDroppedPaths: prepare }
   })
 })
 afterEach(() => {

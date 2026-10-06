@@ -180,11 +180,11 @@ describe('native chat composer drop scoping', () => {
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: {
-        getPathForFile: electron.getPathForFile,
         ui: { onFileDrop: subscribeNativeFileDrop },
         shell: { pickAttachment: intake.pick },
         fs: {
           ...intake,
+          getPathForFile: electron.getPathForFile,
           prepareDroppedPaths: intake.prepare
         }
       }

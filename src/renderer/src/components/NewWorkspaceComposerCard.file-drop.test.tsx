@@ -69,8 +69,10 @@ beforeEach(() => {
     ]
   })
   vi.stubGlobal('api', {
-    getPathForFile: (file: File) => `/drop/${file.name}`,
-    fs: { prepareDroppedPaths: prepare }
+    fs: {
+      getPathForFile: (file: File) => `/drop/${file.name}`,
+      prepareDroppedPaths: prepare
+    }
   })
 })
 afterEach(() => {
