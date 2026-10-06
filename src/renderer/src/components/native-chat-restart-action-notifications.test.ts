@@ -252,10 +252,10 @@ it('names the machine of a resume whose answer was lost, and opens the dialog on
   )
   expect(titles()).toEqual(['Couldn’t confirm 2 chats on studio-mac were resumed'])
   const options = vi.mocked(toast).mock.calls[0]?.[1]
-  const show = options && typeof options === 'object' && 'action' in options ? options.action : null
+  const show: unknown = options?.action
   if (
-    !show ||
     typeof show !== 'object' ||
+    show === null ||
     !('onClick' in show) ||
     typeof show.onClick !== 'function'
   ) {
