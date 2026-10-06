@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, render } from '@testing-library/react'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PreparedDroppedPaths } from '../../../shared/native-file-drop-preparation'
 
@@ -17,7 +17,7 @@ vi.mock('electron', () => ({
 }))
 
 import { installNativeFileDropHandlers } from '../../../preload/preload-runtime-support'
-import { useOsFileDropOwner } from '../hooks/use-os-file-drop-owner'
+import { createOsFileDropSequence, useOsFileDropOwner } from '../hooks/use-os-file-drop-owner'
 import { installOsFileDropCancellationGuard } from './os-file-drop-cancellation-guard'
 
 const prepareDroppedPaths = vi.fn(
@@ -32,8 +32,10 @@ function OwnerProbe({
   legacyChild?: boolean
 }): React.JSX.Element {
   const ownerElementRef = useRef<HTMLElement | null>(null)
+  const [sequence] = useState(createOsFileDropSequence)
   const attach = useOsFileDropOwner(ownerElementRef, {
     consumer: 'agent',
+    sequence,
     onDrop: (prepared) => onDrop(prepared)
   })
   return (

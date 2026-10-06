@@ -12,12 +12,26 @@ import {
 } from '../../../shared/native-file-drop-preparation'
 import { hasOsFileDragTypes } from '../lib/os-file-drop-cancellation-guard'
 
-type OsFileDropOwnerOptions = {
+export type OsFileDropSequence = { deliveryTail: Promise<void> }
+
+/** Create once per destination and share across its sibling roots. */
+export function createOsFileDropSequence(): OsFileDropSequence {
+  return { deliveryTail: Promise.resolve() }
+}
+
+type OsFileDropContext<Destination> = {
+  target: EventTarget | null
+  destination?: Destination
+}
+
+type OsFileDropOwnerOptions<Destination> = {
   consumer: DroppedPathConsumer
+  sequence: OsFileDropSequence
   canAccept?: boolean
+  captureDestination?: (event: DragEvent) => Destination
   onDrop: (
     prepared: PreparedDroppedPaths,
-    context: { target: EventTarget | null }
+    context: OsFileDropContext<Destination>
   ) => void | Promise<void>
 }
 
@@ -41,9 +55,9 @@ function rejectedDrop(
 }
 
 /** Attach the returned callback ref to the element that owns an OS file drop. */
-export function useOsFileDropOwner(
+export function useOsFileDropOwner<Destination = undefined>(
   ownerRef: RefObject<HTMLElement | null>,
-  options: OsFileDropOwnerOptions
+  options: OsFileDropOwnerOptions<Destination>
 ): (root: HTMLElement | null) => void {
   const optionsRef = useRef(options)
   const detachRef = useRef<(() => void) | null>(null)
@@ -62,21 +76,6 @@ export function useOsFileDropOwner(
       }
 
       let attached = true
-      let deliveryTail = Promise.resolve()
-      const queueDelivery = (
-        prepared: PreparedDroppedPaths | Promise<PreparedDroppedPaths>,
-        deliver: OsFileDropOwnerOptions['onDrop'],
-        target: EventTarget | null
-      ): void => {
-        deliveryTail = deliveryTail
-          .then(async () => {
-            const result = await prepared
-            if (attached) {
-              await deliver(result, { target })
-            }
-          })
-          .catch((error: unknown) => console.error('OS file drop owner callback failed', error))
-      }
 
       const onDragOver = (event: DragEvent): void => {
         if (!hasOsFileDragTypes(event.dataTransfer?.types) || !isNearestOwner(root, event)) {
@@ -99,31 +98,42 @@ export function useOsFileDropOwner(
           return
         }
 
-        const { consumer, onDrop: deliver } = optionsRef.current
-        const target = event.target
+        const { consumer, sequence, onDrop: deliver, captureDestination } = optionsRef.current
+        const context: OsFileDropContext<Destination> = { target: event.target }
+        if (captureDestination) {
+          context.destination = captureDestination(event)
+        }
+        const queueDelivery = (
+          prepared: PreparedDroppedPaths | Promise<PreparedDroppedPaths>
+        ): void => {
+          sequence.deliveryTail = sequence.deliveryTail
+            .then(async () => {
+              const result = await prepared
+              if (attached) {
+                await deliver(result, context)
+              }
+            })
+            .catch((error: unknown) => console.error('OS file drop owner callback failed', error))
+        }
         const files = Array.from(event.dataTransfer?.files ?? [])
         if (files.length > NATIVE_FILE_DROP_MAX_PATHS) {
-          queueDelivery(
-            {
-              paths: [],
-              failures: [
-                createRejectedNativeFileDropPayload({
-                  status: 'rejected',
-                  reason: 'too-many-paths',
-                  pathCount: files.length,
-                  byteLength: 0
-                })
-              ]
-            },
-            deliver,
-            target
-          )
+          queueDelivery({
+            paths: [],
+            failures: [
+              createRejectedNativeFileDropPayload({
+                status: 'rejected',
+                reason: 'too-many-paths',
+                pathCount: files.length,
+                byteLength: 0
+              })
+            ]
+          })
           return
         }
 
         const getPathForFile = window.api?.getPathForFile
         if (!getPathForFile) {
-          queueDelivery(rejectedDrop('unresolved-paths', files.length), deliver, target)
+          queueDelivery(rejectedDrop('unresolved-paths', files.length))
           return
         }
 
@@ -139,17 +149,20 @@ export function useOsFileDropOwner(
           }
         }
         if (paths.length === 0) {
-          queueDelivery(rejectedDrop('unresolved-paths', files.length), deliver, target)
+          queueDelivery(rejectedDrop('unresolved-paths', files.length))
           return
         }
 
+        const unresolvedCount = files.length - paths.length
+        const resolutionFailures = unresolvedCount
+          ? rejectedDrop('unresolved-paths', unresolvedCount).failures
+          : []
         const validation = validateNativeFileDropPaths(paths)
         if (validation.status === 'rejected') {
-          queueDelivery(
-            { paths: [], failures: [createRejectedNativeFileDropPayload(validation)] },
-            deliver,
-            target
-          )
+          queueDelivery({
+            paths: [],
+            failures: [...resolutionFailures, createRejectedNativeFileDropPayload(validation)]
+          })
           return
         }
 
@@ -171,9 +184,9 @@ export function useOsFileDropOwner(
               ]
             }
           }
-          return prepared
+          return { paths: prepared.paths, failures: [...resolutionFailures, ...prepared.failures] }
         })()
-        queueDelivery(preparation, deliver, target)
+        queueDelivery(preparation)
       }
 
       root.setAttribute(OS_FILE_DROP_OWNER_ATTRIBUTE, '')

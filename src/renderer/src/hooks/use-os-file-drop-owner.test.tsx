@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, render } from '@testing-library/react'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ORCA_INTERNAL_FILE_DRAG_TYPE } from '../../../shared/native-file-drop'
 import {
@@ -8,9 +8,16 @@ import {
   WORKSPACE_FILE_PATHS_MIME
 } from '../lib/workspace-file-drag'
 import type { PreparedDroppedPaths } from '../../../shared/native-file-drop-preparation'
-import { useOsFileDropOwner } from './use-os-file-drop-owner'
+import {
+  createOsFileDropSequence,
+  useOsFileDropOwner,
+  type OsFileDropSequence
+} from './use-os-file-drop-owner'
 
-type DropHandler = (prepared: PreparedDroppedPaths, context: { target: EventTarget | null }) => void
+type DropHandler<Destination = undefined> = (
+  prepared: PreparedDroppedPaths,
+  context: { target: EventTarget | null; destination?: Destination }
+) => void | Promise<void>
 
 const getPathForFile = vi.fn((file: File) => `/dropped/${file.name}`)
 const prepareDroppedPaths = vi.fn(
@@ -20,21 +27,49 @@ const prepareDroppedPaths = vi.fn(
   })
 )
 
-function Owner({
+function Owner<Destination = undefined>({
   onDrop,
   canAccept,
+  sequence,
+  captureDestination,
   children
 }: {
-  onDrop: DropHandler
+  onDrop: DropHandler<Destination>
   canAccept?: boolean
+  sequence?: OsFileDropSequence
+  captureDestination?: (event: DragEvent) => Destination
   children?: React.ReactNode
 }): React.JSX.Element {
   const ownerElementRef = useRef<HTMLElement | null>(null)
-  const ownerRef = useOsFileDropOwner(ownerElementRef, { consumer: 'agent', onDrop, canAccept })
+  const [ownSequence] = useState(createOsFileDropSequence)
+  const options = {
+    consumer: 'agent' as const,
+    onDrop,
+    canAccept,
+    sequence: sequence ?? ownSequence,
+    captureDestination
+  }
+  const ownerRef = useOsFileDropOwner(ownerElementRef, options)
   return (
     <div ref={ownerRef} data-testid="owner">
       {children}
     </div>
+  )
+}
+
+function SiblingOwner({
+  onDrop,
+  titleMounted = true
+}: {
+  onDrop: DropHandler
+  titleMounted?: boolean
+}): React.JSX.Element {
+  const [sequence] = useState(createOsFileDropSequence)
+  return (
+    <>
+      {titleMounted && <Owner onDrop={onDrop} sequence={sequence} />}
+      <Owner onDrop={onDrop} sequence={sequence} />
+    </>
   )
 }
 
@@ -167,6 +202,65 @@ describe('useOsFileDropOwner', () => {
     expect(prepareDroppedPaths).not.toHaveBeenCalled()
   })
 
+  it.each(['empty', 'throwing'])(
+    'keeps resolved paths and reports %s resolutions with preparation failures in order',
+    async (resolution) => {
+      const onDrop = vi.fn<DropHandler>()
+      let finishFirst: ((prepared: PreparedDroppedPaths) => void) | undefined
+      prepareDroppedPaths.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishFirst = resolve
+          })
+      )
+      getPathForFile
+        .mockReturnValueOnce('/dropped/notes.txt')
+        .mockImplementationOnce(() => {
+          if (resolution === 'throwing') {
+            throw new Error('virtual file has no path')
+          }
+          return ''
+        })
+        .mockReturnValueOnce('')
+        .mockReturnValueOnce('/dropped/temp.png')
+      const view = render(<Owner onDrop={onDrop} />)
+      const root = view.getByTestId('owner')
+      drag(
+        root,
+        'drop',
+        ['notes.txt', 'virtual.png', 'missing.png', 'temp.png'].map((name) => new File([], name))
+      )
+      drag(root, 'drop', [new File([], 'later.txt')])
+      await act(async () => undefined)
+      expect(onDrop).not.toHaveBeenCalled()
+      expect(prepareDroppedPaths.mock.calls[0][0]).toEqual({
+        paths: ['/dropped/notes.txt', '/dropped/temp.png'],
+        consumer: 'agent'
+      })
+      const copyFailure = {
+        target: 'rejected',
+        reason: 'temp-copy-failed',
+        commonReason: 'copy-failed',
+        pathCount: 1,
+        byteLength: 0
+      } as const
+      await act(async () => {
+        finishFirst?.({ paths: ['/dropped/notes.txt'], failures: [copyFailure] })
+      })
+      expect(onDrop).toHaveBeenCalledTimes(2)
+      expect(onDrop.mock.calls.map(([prepared]) => prepared)).toEqual([
+        {
+          paths: ['/dropped/notes.txt'],
+          failures: [
+            { target: 'rejected', reason: 'unresolved-paths', pathCount: 2, byteLength: 0 },
+            copyFailure
+          ]
+        },
+        { paths: ['/dropped/later.txt'], failures: [] }
+      ])
+    }
+  )
+
   it('reports a preparation failure once without passing unprepared paths', async () => {
     const onDrop = vi.fn<DropHandler>()
     prepareDroppedPaths.mockRejectedValueOnce(new Error('copy failed'))
@@ -250,6 +344,117 @@ describe('useOsFileDropOwner', () => {
       finish?.({ paths: ['/dropped/a.txt'], failures: [] })
     })
     expect(onDrop).not.toHaveBeenCalled()
+  })
+
+  it('orders sibling roots through preparation and asynchronous application while independent owners progress', async () => {
+    let finishPreparation: ((prepared: PreparedDroppedPaths) => void) | undefined
+    let finishApplication: (() => void) | undefined
+    prepareDroppedPaths.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishPreparation = resolve
+        })
+    )
+    const onDrop = vi.fn<DropHandler>().mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishApplication = resolve
+        })
+    )
+    const independentDrop = vi.fn<DropHandler>()
+    const view = render(
+      <>
+        <SiblingOwner onDrop={onDrop} />
+        <Owner onDrop={independentDrop} />
+      </>
+    )
+    const [title, content, independent] = view.getAllByTestId('owner')
+    drag(title, 'drop', [new File([], 'first.txt')])
+    drag(content, 'drop', [new File([], 'second.txt')])
+    drag(independent, 'drop', [new File([], 'other.txt')])
+    await act(async () => undefined)
+    expect(onDrop).not.toHaveBeenCalled()
+    expect(independentDrop).toHaveBeenCalledExactlyOnceWith(
+      { paths: ['/dropped/other.txt'], failures: [] },
+      { target: independent }
+    )
+    await act(async () => {
+      finishPreparation?.({ paths: ['/dropped/first.txt'], failures: [] })
+    })
+    expect(onDrop).toHaveBeenCalledExactlyOnceWith(
+      { paths: ['/dropped/first.txt'], failures: [] },
+      { target: title }
+    )
+    drag(independent, 'drop', [new File([], 'another.txt')])
+    await act(async () => undefined)
+    expect(independentDrop).toHaveBeenCalledTimes(2)
+    expect(onDrop).toHaveBeenCalledOnce()
+    await act(async () => {
+      finishApplication?.()
+    })
+    expect(onDrop.mock.calls.map(([prepared]) => prepared.paths)).toEqual([
+      ['/dropped/first.txt'],
+      ['/dropped/second.txt']
+    ])
+  })
+
+  it('suppresses only the detached sibling root and lets its destination sequence continue', async () => {
+    let finish: ((prepared: PreparedDroppedPaths) => void) | undefined
+    prepareDroppedPaths.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const onDrop = vi.fn<DropHandler>()
+    const view = render(<SiblingOwner onDrop={onDrop} />)
+    const [title, content] = view.getAllByTestId('owner')
+    drag(title, 'drop', [new File([], 'detached.txt')])
+    drag(content, 'drop', [new File([], 'kept.txt')])
+    view.rerender(<SiblingOwner onDrop={onDrop} titleMounted={false} />)
+    await act(async () => undefined)
+    expect(onDrop).not.toHaveBeenCalled()
+    await act(async () => {
+      finish?.({ paths: ['/dropped/detached.txt'], failures: [] })
+    })
+    expect(onDrop).toHaveBeenCalledExactlyOnceWith(
+      { paths: ['/dropped/kept.txt'], failures: [] },
+      { target: content }
+    )
+  })
+
+  it('captures a destination synchronously before preparation and retains it when the target row recycles', async () => {
+    let finish: ((prepared: PreparedDroppedPaths) => void) | undefined
+    const captureDestination = vi.fn((event: DragEvent) => {
+      expect(prepareDroppedPaths).not.toHaveBeenCalled()
+      return event.target instanceof HTMLElement ? (event.target.dataset.folder ?? null) : null
+    })
+    prepareDroppedPaths.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const onDrop = vi.fn<DropHandler<string | null>>()
+    const view = render(
+      <Owner onDrop={onDrop} captureDestination={captureDestination}>
+        <span data-testid="row" data-folder="original-folder" />
+      </Owner>
+    )
+    const row = view.getByTestId('row')
+    drag(row, 'drop')
+    expect(captureDestination).toHaveBeenCalledOnce()
+    expect(prepareDroppedPaths).toHaveBeenCalledOnce()
+    expect(onDrop).not.toHaveBeenCalled()
+    row.dataset.folder = 'recycled-folder'
+    await act(async () => {
+      finish?.({ paths: ['/dropped/a.txt'], failures: [] })
+    })
+    expect(captureDestination).toHaveBeenCalledOnce()
+    expect(onDrop).toHaveBeenCalledExactlyOnceWith(
+      { paths: ['/dropped/a.txt'], failures: [] },
+      { target: row, destination: 'original-folder' }
+    )
   })
 
   it('reports a callback failure and still delivers the next drop', async () => {
