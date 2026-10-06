@@ -51,7 +51,8 @@ const stop = (turnEnvelope = envelope('agentSession.cancel', { turnId: 'turn-1' 
 // T-corrupt-midsession.
 it('refuses a send as corrupt when SQLite reports damage, and still stops the agent', async () => {
   await attach()
-  const files = await readdir(root, { recursive: true })
+  // Order-free: recursive listing order is the runtime's, and only what exists matters.
+  const files = (await readdir(root, { recursive: true })).toSorted()
   const damaged = sqliteError('database disk image is malformed', 11)
   vi.spyOn(openTestJournalHostDatabase(root), 'transaction').mockImplementation(() => {
     throw damaged
@@ -80,7 +81,7 @@ it('refuses a send as corrupt when SQLite reports damage, and still stops the ag
   })
   // The restart-offer withdrawal the attach started holds its lock until it ends.
   await hostTestRecoveryCapsuleSettled()
-  expect(await readdir(root, { recursive: true })).toEqual(files)
+  expect((await readdir(root, { recursive: true })).toSorted()).toEqual(files)
 })
 
 it.each([
