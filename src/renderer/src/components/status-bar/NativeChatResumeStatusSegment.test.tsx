@@ -12,10 +12,8 @@ import {
   getNativeChatResumeOnRestartDialogRequest
 } from '../native-chat-resume-on-restart-dialog'
 import { _resetNativeChatRestartOffer } from '../native-chat-restart-offer-triggers'
-import {
-  nativeChatResumePendingText,
-  NativeChatResumeStatusSegment
-} from './NativeChatResumeStatusSegment'
+import { NativeChatResumeStatusSegment } from './NativeChatResumeStatusSegment'
+import { nativeChatResumePendingText } from './native-chat-resume-status-text'
 import { readNativeChatRestartMachine } from '../native-chat-resume-on-restart-store'
 import { pairedEnvironment } from '../native-chat-restart-offer-test-support'
 

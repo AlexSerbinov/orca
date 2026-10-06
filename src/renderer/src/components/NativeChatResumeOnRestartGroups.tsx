@@ -247,7 +247,7 @@ function WorkspaceCard({
         <div className="flex items-center gap-1.5 px-0.5">
           <WorkspaceKindGlyph kind={kind} />
           <span className="min-w-0 truncate text-xs font-medium">{name}</span>
-          {hostLabel && <WorktreeHostContextBadge label={hostLabel} />}
+          <WorktreeHostContextBadge label={hostLabel} />
         </div>
         <div className="pl-1">{rows}</div>
         {children.length > 0 && <div className="flex flex-col gap-1 pl-3">{children}</div>}

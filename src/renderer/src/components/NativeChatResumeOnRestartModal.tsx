@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { useNativeChatRestartOfferEnabled } from './native-chat-restart-offer-gate'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { Button } from './ui/button'
 import { Checkbox } from './ui/checkbox'
@@ -13,37 +12,18 @@ import {
 } from './ui/dialog'
 import { useAppStore } from '../store'
 import { translate } from '@/i18n/i18n'
-import { activateAiVaultStructuredSession } from '@/lib/activate-ai-vault-structured-session'
 import { ResumeOnRestartGroups } from './NativeChatResumeOnRestartGroups'
 import { ResumeMachineSection } from './NativeChatResumeOnRestartMachineSection'
 import type { ResumeFailureAction } from './native-chat-resume-failure-guidance'
-import {
-  consumeNativeChatResumeOnRestartDialogRequest,
-  getNativeChatResumeOnRestartDialogRequest,
-  markNativeChatResumeLaunchRequestShown,
-  subscribeNativeChatResumeOnRestartDialog
-} from './native-chat-resume-on-restart-dialog'
+import { consumeNativeChatResumeOnRestartDialogRequest } from './native-chat-resume-on-restart-dialog'
 import {
   continueNativeChatRestartOffers,
   dismissNativeChatRestartOffer
 } from './native-chat-restart-offer-actions'
-import { LOCAL_RESTART_MACHINE } from './native-chat-restart-machines'
-import { dismissReconnectRestartOffers } from './native-chat-restart-reconnect-toast'
-import {
-  hasOwnCandidate,
-  useNativeChatRestartOffers,
-  useNativeChatRestartResuming
-} from './native-chat-resume-on-restart-store'
-import { useMachineViews, type MachineView } from './native-chat-resume-machine-views'
-import {
-  markNativeChatRestartOffersShown,
-  useNativeChatRestartOfferSources
-} from './native-chat-restart-offer-triggers'
-import {
-  useAutomaticPromptTurn,
-  usePromptBlockingDialog
-} from './automatic-prompts/use-automatic-prompt-turn'
-import { useNativeChatResumeLaunchDiscovery } from './native-chat-resume-launch-discovery'
+import { useNativeChatRestartResuming } from './native-chat-resume-on-restart-store'
+import type { MachineView } from './native-chat-resume-machine-views'
+import { useNativeChatResumeDialogOpening } from './native-chat-resume-dialog-opening'
+import { actOnResumeRow } from './native-chat-resume-failure-action'
 import { AutomaticPromptDialogScope } from '@/lib/dialog-presence'
 import { resumeOwnershipLabel } from './native-chat-resume-ownership'
 import {
@@ -80,53 +60,41 @@ import {
  * it moves on, when its tab is closed, or by its own row's dismiss.
  */
 
-export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
-  const localEnabled = useNativeChatRestartOfferEnabled()
-  useNativeChatRestartOfferSources(localEnabled)
-  const offers = useNativeChatRestartOffers()
-  const machines = useMachineViews(offers)
-  // Open is an external request, never mirrored into local state: the launch load, the status-bar
-  // entry and a reconnect toast all raise it, and a copy here would go stale against the last one.
-  const request = useSyncExternalStore(
-    subscribeNativeChatResumeOnRestartDialog,
-    getNativeChatResumeOnRestartDialogRequest,
-    getNativeChatResumeOnRestartDialogRequest
-  )
-  // Only a dialog that can render asks for a turn, so a hidden one never holds others back.
-  const renderable = machines.length > 0
-  // Raised by this computer's launch, it takes its turn among the dialogs that open by themselves,
-  // and only while this computer offers the user's own chats: it never opens by itself for a
-  // server, an automation or another device. Once on screen it stays until the user closes it.
-  // Opened by the user (status bar, toast), it shows at once and the others wait for it.
-  const launchWanted =
-    request?.origin === 'launch' &&
-    (request.shown === true || hasOwnCandidate(offers.get(LOCAL_RESTART_MACHINE)))
-  const [launchTurn, markLaunchShown] = useAutomaticPromptTurn('native-chat-resume', launchWanted)
-  usePromptBlockingDialog('native-chat-resume', request?.origin === 'user' && renderable)
-  // After the turn request above (effects run in order), so nothing takes the first turn between.
-  // Only this computer's read is waited on; a paired server's read never holds the launch turn.
-  useNativeChatResumeLaunchDiscovery(localEnabled)
-  const open = request?.origin === 'user' || (launchTurn && launchWanted)
-  useEffect(() => {
-    if (launchTurn && launchWanted) {
-      markLaunchShown()
-      markNativeChatResumeLaunchRequestShown()
-    }
-  }, [launchTurn, markLaunchShown, launchWanted])
-  // What the open dialog shows is decided: a later read of a paired server does not announce it,
-  // and a restart toast still up goes, since the dialog lists its chats and blocks clicks on it.
-  const showing = Boolean(request && open && renderable)
-  useEffect(() => {
-    if (showing) {
-      markNativeChatRestartOffersShown(
-        machines.map((machine) => ({
-          machine: machine.machine,
-          candidates: machine.offer.candidates
-        }))
+/** Says where the chats were cut off: on several machines, by this computer's update, or its close. */
+function resumeDialogBody(flat: boolean, interruptedByUpdate: boolean): string {
+  if (!flat) {
+    return translate(
+      'auto.components.NativeChatResumeOnRestartModal.machinesBody',
+      'These chats were working when Orca on their machine closed or installed an update. Resuming restores each one where it stopped, with its full context, and asks the agent to check what it was doing before carrying on. Your own prompt is not re-sent.'
+    )
+  }
+  return interruptedByUpdate
+    ? translate(
+        'auto.components.NativeChatResumeOnRestartModal.updateBody',
+        'These chats were working when Orca installed an update. Resuming restores each one where it stopped, with its full context, and asks the agent to check what it was doing before carrying on. Your own prompt is not re-sent.'
       )
-      dismissReconnectRestartOffers(machines.map((machine) => machine.machine))
-    }
-  }, [showing, machines])
+    : translate(
+        'auto.components.NativeChatResumeOnRestartModal.body',
+        'These chats were working when Orca closed. Resuming restores each one where it stopped, with its full context, and asks the agent to check what it was doing before carrying on. Your own prompt is not re-sent.'
+      )
+}
+
+/** Mid-run with nothing left to choose, the button says the run is going rather than "Resume 0". */
+function resumeButtonLabel(chosenCount: number, running: boolean): string {
+  if (chosenCount === 0 && running) {
+    return translate('auto.components.NativeChatResumeOnRestartModal.resuming', 'Resuming…')
+  }
+  return chosenCount === 1
+    ? translate('auto.components.NativeChatResumeOnRestartModal.resumeSelectedOne', 'Resume 1 chat')
+    : translate(
+        'auto.components.NativeChatResumeOnRestartModal.resumeSelected',
+        'Resume {{value0}} chats',
+        { value0: chosenCount }
+      )
+}
+
+export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
+  const { machines, request, showing } = useNativeChatResumeDialogOpening()
   const updateSettings = useAppStore((store) => store.updateSettings)
   const [dontAskAgain, setDontAskAgain] = useState(false)
   const resumeButtonRef = useRef<HTMLButtonElement>(null)
@@ -204,42 +172,10 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
     )
   }
 
-  const actOnFailure = async (
-    machine: MachineView,
-    action: ResumeFailureAction,
-    sessionId: string
-  ): Promise<void> => {
-    if (action === 'dismiss') {
-      await dismissNativeChatRestartOffer(machine.machine, [sessionId])
-      return
-    }
-    if (action === 'retry') {
-      void persistPreference()
-      await continueNativeChatRestartOffers([{ machine: machine.machine, sessionIds: [sessionId] }])
-      return
-    }
-    const failure = machine.failureFor(sessionId)
-    if (!failure) {
-      return
-    }
-    // Opening is read-only and keeps the record: the user's own send in that chat settles it. The
-    // dialog gets out of the way of the chat it just opened.
-    consumeNativeChatResumeOnRestartDialogRequest()
-    await activateAiVaultStructuredSession({
-      structuredSession: {
-        workspaceId: failure.workspaceId,
-        sessionId,
-        // The machine that listed it and the pairing it listed under, never re-derived from
-        // whichever workspace shares its id.
-        executionHostId: failure.executionHostId,
-        ...(machine.offer.fence.pairingRevision === undefined
-          ? {}
-          : { pairingRevision: machine.offer.fence.pairingRevision })
-      }
-    })
-  }
+  const actOnFailure = (machine: MachineView, action: ResumeFailureAction, sessionId: string) =>
+    actOnResumeRow(machine, action, sessionId, persistPreference)
 
-  if (!request || !open || !renderable) {
+  if (!request || !showing) {
     return null
   }
 
@@ -292,22 +228,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
                 )}
               </span>
             </DialogTitle>
-            <DialogDescription>
-              {!flat
-                ? translate(
-                    'auto.components.NativeChatResumeOnRestartModal.machinesBody',
-                    'These chats were working when Orca on their machine closed or installed an update. Resuming restores each one where it stopped, with its full context, and asks the agent to check what it was doing before carrying on. Your own prompt is not re-sent.'
-                  )
-                : interruptedByUpdate
-                  ? translate(
-                      'auto.components.NativeChatResumeOnRestartModal.updateBody',
-                      'These chats were working when Orca installed an update. Resuming restores each one where it stopped, with its full context, and asks the agent to check what it was doing before carrying on. Your own prompt is not re-sent.'
-                    )
-                  : translate(
-                      'auto.components.NativeChatResumeOnRestartModal.body',
-                      'These chats were working when Orca closed. Resuming restores each one where it stopped, with its full context, and asks the agent to check what it was doing before carrying on. Your own prompt is not re-sent.'
-                    )}
-            </DialogDescription>
+            <DialogDescription>{resumeDialogBody(flat, interruptedByUpdate)}</DialogDescription>
           </DialogHeader>
 
           <div
@@ -440,18 +361,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
                 )
               }}
             >
-              {chosenCount === 0 && resuming.size > 0
-                ? translate('auto.components.NativeChatResumeOnRestartModal.resuming', 'Resuming…')
-                : chosenCount === 1
-                  ? translate(
-                      'auto.components.NativeChatResumeOnRestartModal.resumeSelectedOne',
-                      'Resume 1 chat'
-                    )
-                  : translate(
-                      'auto.components.NativeChatResumeOnRestartModal.resumeSelected',
-                      'Resume {{value0}} chats',
-                      { value0: chosenCount }
-                    )}
+              {resumeButtonLabel(chosenCount, resuming.size > 0)}
             </Button>
           </DialogFooter>
         </DialogContent>
