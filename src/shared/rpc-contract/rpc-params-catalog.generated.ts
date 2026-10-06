@@ -471,11 +471,11 @@ import {
   SpeechModelAction
 } from './speech-params'
 import { SshTarget } from './ssh-params'
+import { ContinueInterruptedParams } from './structured-agent-session-continue-params'
 import {
   AgentsParams,
   AttachParams,
   CancelParams,
-  ContinueInterruptedParams,
   ConversationCommandParams,
   CreateParams,
   CreateSupportParams,
