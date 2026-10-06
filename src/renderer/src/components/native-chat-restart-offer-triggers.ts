@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { isRuntimeHostContactRevoked } from '../../../shared/runtime-host-status'
 import { parseRestartOfferOrigin } from '../../../shared/restart-offer-origin'
 import { isWebClientLocation } from '@/lib/web-client-location'
+import { getRuntimeEnvironmentRevision } from '@/runtime/runtime-environment-revision'
 import type { RuntimeClientTarget } from '@/runtime/runtime-client-target'
 import { useAppStore } from '../store'
 import type { AppState } from '../store/types'
@@ -30,6 +31,7 @@ import {
   requestNativeChatResumeOnRestartDialog
 } from './native-chat-resume-on-restart-dialog'
 import {
+  _resetRestartDecidedMemory,
   decidedRestartInterruptions,
   forgetRestartInterruptions,
   restartDecidedEnvironments,
@@ -137,7 +139,8 @@ function decidePairedAnswer(target: RuntimeClientTarget, candidates: readonly Re
     candidates.map(restartInterruptionKey),
     fresh.map(restartInterruptionKey)
   )
-  if (fresh.length === 0 || getNativeChatResumeOnRestartDialogRequest()?.origin === 'user') {
+  // Any resume dialog, the launch's or the user's, lists every machine: what it shows needs no toast.
+  if (fresh.length === 0 || getNativeChatResumeOnRestartDialogRequest() !== null) {
     return
   }
   if (autoResumeEnabled()) {
@@ -151,7 +154,12 @@ function decidePairedAnswer(target: RuntimeClientTarget, candidates: readonly Re
     own: fresh,
     resume: (sessionIds) =>
       void continueNativeChatRestartOffers([{ machine, sessionIds }], { expected: fence }),
-    show: () => requestNativeChatResumeOnRestartDialog('user', machine)
+    show: () => {
+      // With nothing left to list, a request would wait and later open the dialog by itself.
+      if (getNativeChatRestartOffers().size > 0) {
+        requestNativeChatResumeOnRestartDialog('user', machine)
+      }
+    }
   })
 }
 
@@ -170,6 +178,8 @@ export function markNativeChatRestartOffersShown(
 
 type SeenConnection = { key: string; pairingRevision: number | undefined; generation: number }
 const seenConnections = new Map<string, SeenConnection>()
+/** Each paired server's pairing revision as the saved list last named it. */
+const knownPairingRevisions = new Map<string, number>()
 let stopWatchingConnections: (() => void) | null = null
 let connectionGenerations = 0
 
@@ -203,6 +213,18 @@ function forgetPairedMachine(environmentId: string): void {
  */
 function noticeConnections(state: AppState): void {
   const paired = new Set(state.runtimeEnvironments.map((environment) => environment.id))
+  for (const environmentId of paired) {
+    // A re-pair is known from the saved record before the new pairing ever connects: the old
+    // pairing's rows go now, not once the new one answers.
+    const revision = getRuntimeEnvironmentRevision(environmentId)
+    const known = knownPairingRevisions.get(environmentId)
+    if (revision !== undefined) {
+      if (known !== undefined && known !== revision) {
+        forgetPairedMachine(environmentId)
+      }
+      knownPairingRevisions.set(environmentId, revision)
+    }
+  }
   for (const [environmentId, entry] of state.runtimeStatusByEnvironmentId) {
     if (!paired.has(environmentId)) {
       continue
@@ -230,6 +252,10 @@ function noticeConnections(state: AppState): void {
     seenConnections.set(environmentId, { key, pairingRevision, generation })
     void readPairedMachineOnConnection(environmentId, generation)
   }
+  // Until the saved server list has loaded, a missing server is not a removed one.
+  if (!state.runtimeEnvironmentCatalogHydrated) {
+    return
+  }
   const removed = new Set(
     [
       ...[...getNativeChatRestartOffers().keys()].flatMap((machine) => {
@@ -242,6 +268,7 @@ function noticeConnections(state: AppState): void {
   )
   for (const environmentId of removed) {
     seenConnections.delete(environmentId)
+    knownPairingRevisions.delete(environmentId)
     forgetPairedMachine(environmentId)
   }
 }
@@ -290,8 +317,10 @@ export function useNativeChatRestartOfferSources(localEnabled: boolean): void {
 export function _resetNativeChatRestartOffer(): void {
   _resetNativeChatRestartOfferState()
   _resetNativeChatResumeOnRestartDialog()
+  _resetRestartDecidedMemory()
   launch = undefined
   seenConnections.clear()
+  knownPairingRevisions.clear()
   connectionGenerations = 0
   stopWatchingConnections?.()
   stopWatchingConnections = null

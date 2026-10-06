@@ -69,6 +69,7 @@ function stageServer(status: { runtimeId: string; epoch?: number; pairingRevisio
   replaceRuntimeEnvironmentRevisions([{ id: SERVER, createdAt: 1, pairingRevision }])
   useAppStore.setState({
     runtimeEnvironments: [pairedEnvironment(SERVER, 'studio-mac')],
+    runtimeEnvironmentCatalogHydrated: true,
     runtimeStatusByEnvironmentId: new Map([
       [
         SERVER,
@@ -243,6 +244,82 @@ it('decides nothing twice across a new window, and forgets interruptions the ser
   serveOffers([row('a', 'own', 'update', RECORDED_AT + 1)])
   await readNativeChatRestartMachine(TARGET)
   expect(toast).toHaveBeenCalledTimes(2)
+})
+
+// The watcher mounts before the saved server list loads; a server not listed yet is not removed.
+it('keeps an earlier run’s decisions through boot, before the server list has loaded', async () => {
+  const stored = JSON.stringify({ [SERVER]: [`a\u0000${RECORDED_AT}`] })
+  window.localStorage.setItem('orca.nativeChatRestartDecided.v1', stored)
+  renderHook(() => useNativeChatRestartOfferSources(false))
+  expect(window.localStorage.getItem('orca.nativeChatRestartDecided.v1')).toBe(stored)
+  stageServer({ runtimeId: 'r2' })
+  await vi.waitFor(() => expect(offerReads()).toBeGreaterThan(0))
+  await settle()
+  expect(toast).not.toHaveBeenCalled()
+})
+
+// Storage that refuses writes must not turn one interruption into repeated decisions this run.
+it('decides each interruption once per run even when storage refuses writes', async () => {
+  const refuse = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('QuotaExceededError')
+  })
+  try {
+    await connect({ runtimeId: 'r2' })
+    for (const epoch of [1, 2]) {
+      stageServer({ runtimeId: 'r2', epoch })
+      await vi.waitFor(() => expect(offerReads()).toBe(epoch + 1))
+      await settle()
+    }
+    expect(toast).toHaveBeenCalledTimes(1)
+  } finally {
+    refuse.mockRestore()
+  }
+})
+
+it('continues an interruption at most once per run when storage refuses writes and the continue fails', async () => {
+  useAppStore.setState({
+    settings: { ...getDefaultSettings(''), nativeChatResumeWorkOnRestart: true }
+  })
+  mocks.rpc.mockImplementation(async (_target, method) => {
+    if (method === 'agentSession.restartResumable') {
+      return { sessions: [row('a', 'own')], failed: [] }
+    }
+    throw new Error('timeout')
+  })
+  const refuse = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('QuotaExceededError')
+  })
+  try {
+    await connect({ runtimeId: 'r2' })
+    await vi.waitFor(() => expect(offerReads()).toBeGreaterThanOrEqual(2))
+    await settle()
+    expect(continueCalls()).toHaveLength(1)
+  } finally {
+    refuse.mockRestore()
+  }
+})
+
+it('raises no toast while the launch-raised dialog lists the server too', async () => {
+  requestNativeChatResumeOnRestartDialog('launch', 'local')
+  await connect({ runtimeId: 'r2' })
+  expect(toast).not.toHaveBeenCalled()
+})
+
+it('opens nothing from a toast whose chats are already gone', async () => {
+  await connect({ runtimeId: 'r2' })
+  const options = vi.mocked(toast).mock.calls[0]?.[1]
+  serveOffers([])
+  await readNativeChatRestartMachine(TARGET)
+  press(options?.cancel)
+  expect(getNativeChatResumeOnRestartDialogRequest()).toBeNull()
+})
+
+// Re-pairing to a server that cannot be reached yet must not leave the old pairing's rows behind.
+it('forgets the old pairing’s rows as soon as the saved record is re-paired', async () => {
+  await connect({ runtimeId: 'r2' })
+  replaceRuntimeEnvironmentRevisions([{ id: SERVER, createdAt: 1, pairingRevision: 2 }])
+  useAppStore.setState({ runtimeStatusByEnvironmentId: new Map() })
+  expect(getNativeChatRestartOffers().has(MACHINE)).toBe(false)
 })
 
 it('decides what an open dialog already shows without a toast', async () => {

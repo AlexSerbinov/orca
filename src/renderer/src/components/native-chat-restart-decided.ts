@@ -6,9 +6,11 @@ import type { ResumeCandidate } from './native-chat-resume-on-restart-grouping'
  * so a chat and the moment it was cut off name one interruption exactly, and a reconnect, a reload
  * or a reopened window decides nothing twice.
  *
- * Kept per desktop in this window's storage. It is presentation only — the server holds the offers —
- * so losing it costs at most one repeated notice. Every successful read prunes it to what the
- * server still offers, and a removed or re-paired server's entry goes, so it can never grow.
+ * This run's record in memory is the authority; the window's storage only seeds it at startup and
+ * carries it to the next launch. It is presentation only — the server holds the offers — so a
+ * storage that refuses writes costs at most one repeated notice per launch, never a second
+ * decision within a run. Every successful read prunes it to what the server still offers, and a
+ * removed or re-paired server's entry goes, so it can never grow.
  */
 
 const STORAGE_KEY = 'orca.nativeChatRestartDecided.v1'
@@ -51,8 +53,30 @@ function write(next: DecidedByEnvironment): void {
   }
 }
 
+/** This run's record per server, seeded from storage on first use. */
+const memory = new Map<string, Set<string>>()
+
+function keysFor(environmentId: string): Set<string> {
+  let keys = memory.get(environmentId)
+  if (!keys) {
+    keys = new Set(read()[environmentId] ?? [])
+    memory.set(environmentId, keys)
+  }
+  return keys
+}
+
+function persist(environmentId: string, keys: ReadonlySet<string>): void {
+  const all = read()
+  if (keys.size === 0) {
+    delete all[environmentId]
+  } else {
+    all[environmentId] = [...keys]
+  }
+  write(all)
+}
+
 export function decidedRestartInterruptions(environmentId: string): ReadonlySet<string> {
-  return new Set(read()[environmentId] ?? [])
+  return new Set(keysFor(environmentId))
 }
 
 /** Marks these decided, and drops every key the server no longer offers. */
@@ -62,27 +86,28 @@ export function settleRestartInterruptions(
   decided: readonly string[]
 ): void {
   const stillOffered = new Set(offered)
-  const all = read()
-  const keys = [...new Set([...(all[environmentId] ?? []), ...decided])].filter((key) =>
-    stillOffered.has(key)
+  const keys = new Set(
+    [...keysFor(environmentId), ...decided].filter((key) => stillOffered.has(key))
   )
-  if (keys.length === 0) {
-    delete all[environmentId]
-  } else {
-    all[environmentId] = keys
-  }
-  write(all)
+  memory.set(environmentId, keys)
+  persist(environmentId, keys)
 }
 
-/** Every environment that has an entry, so a removed server's can be forgotten. */
+/** Every server with a record, so a removed one's can be forgotten. */
 export function restartDecidedEnvironments(): string[] {
-  return Object.keys(read())
+  const remembered = [...memory].flatMap(([environmentId, keys]) =>
+    keys.size > 0 ? [environmentId] : []
+  )
+  return [...new Set([...Object.keys(read()), ...remembered])]
 }
 
 export function forgetRestartInterruptions(environmentId: string): void {
-  const all = read()
-  if (environmentId in all) {
-    delete all[environmentId]
-    write(all)
-  }
+  // Empty rather than absent, so storage that refused the delete cannot seed the old keys back.
+  memory.set(environmentId, new Set())
+  persist(environmentId, new Set())
+}
+
+/** @internal - a new window starts with only what storage carried over. */
+export function _resetRestartDecidedMemory(): void {
+  memory.clear()
 }
