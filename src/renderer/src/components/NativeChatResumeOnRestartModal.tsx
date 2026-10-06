@@ -28,6 +28,7 @@ import {
   dismissNativeChatRestartOffer
 } from './native-chat-restart-offer-actions'
 import { LOCAL_RESTART_MACHINE } from './native-chat-restart-machines'
+import { dismissReconnectRestartOffers } from './native-chat-restart-reconnect-toast'
 import {
   hasOwnCandidate,
   useNativeChatRestartOffers,
@@ -112,7 +113,8 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
       markNativeChatResumeLaunchRequestShown()
     }
   }, [launchTurn, markLaunchShown, launchWanted])
-  // What the open dialog shows is decided: a later read of a paired server does not announce it.
+  // What the open dialog shows is decided: a later read of a paired server does not announce it,
+  // and a restart toast still up goes, since the dialog lists its chats and blocks clicks on it.
   const showing = Boolean(request && open && renderable)
   useEffect(() => {
     if (showing) {
@@ -122,6 +124,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
           candidates: machine.offer.candidates
         }))
       )
+      dismissReconnectRestartOffers(machines.map((machine) => machine.machine))
     }
   }, [showing, machines])
   const updateSettings = useAppStore((store) => store.updateSettings)

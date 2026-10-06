@@ -33,7 +33,9 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
 vi.mock('@/lib/activate-ai-vault-structured-session', () => ({
   activateAiVaultStructuredSession: vi.fn(async () => true)
 }))
-vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
+vi.mock('sonner', () => ({
+  toast: Object.assign(vi.fn(), { error: vi.fn(), dismiss: vi.fn() })
+}))
 vi.mock('@/lib/telemetry', () => ({ track: vi.fn() }))
 const surface = vi.hoisted(() => ({ loaded: Promise.resolve(), suspended: false, mounts: 0 }))
 // The real surface is covered by its own tests; here only whether it is on screen matters.

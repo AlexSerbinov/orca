@@ -9,6 +9,18 @@ import type { RestartMachineKey } from './native-chat-restart-machines'
  *
  * Never shown for this computer, whose own launch opens the dialog instead.
  */
+function reconnectToastId(machine: RestartMachineKey): string {
+  return `native-chat-restart-reconnect:${machine}`
+}
+
+/** An open resume dialog lists these machines' chats and blocks the page under it, so a toast still
+ *  on screen above it would only look clickable. */
+export function dismissReconnectRestartOffers(machines: readonly RestartMachineKey[]): void {
+  for (const machine of machines) {
+    toast.dismiss(reconnectToastId(machine))
+  }
+}
+
 export function announceReconnectRestartOffer(args: {
   machine: RestartMachineKey
   machineName: string
@@ -45,7 +57,7 @@ export function announceReconnectRestartOffer(args: {
   const sessionIds = own.map((candidate) => candidate.sessionId)
   toast(title, {
     // One per machine: a newer restart of the same server replaces the older notice.
-    id: `native-chat-restart-reconnect:${args.machine}`,
+    id: reconnectToastId(args.machine),
     description,
     action: {
       label:

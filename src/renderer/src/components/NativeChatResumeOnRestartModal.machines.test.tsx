@@ -28,7 +28,7 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
   pairedRestartOffersSupport: async () => 'supported',
   subscribeStructuredAgentSessionStatus: () => new Promise(() => {})
 }))
-vi.mock('sonner', () => ({ toast: vi.fn() }))
+vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }))
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 let root: Root
@@ -371,4 +371,12 @@ it('disables Dismiss when no listed chat is the user’s own', async () => {
   await act(async () => button('Dismiss').click())
   expect(actionCalls('agentSession.restartResumableDismiss')).toEqual([])
   expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+})
+
+// A restart toast still on screen sits above the dialog's backdrop but cannot be clicked through
+// it; the open dialog lists the same chats, so the toast goes.
+it('dismisses a server’s restart toast once the dialog listing it opens', async () => {
+  await stage({ studio: [row('s1', 'own')] })
+  await open('environment:studio')
+  expect(toast.dismiss).toHaveBeenCalledWith('native-chat-restart-reconnect:environment:studio')
 })

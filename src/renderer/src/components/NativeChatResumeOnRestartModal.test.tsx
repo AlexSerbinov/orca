@@ -32,7 +32,7 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
 vi.mock('@/lib/activate-ai-vault-structured-session', () => ({
   activateAiVaultStructuredSession: activate
 }))
-vi.mock('sonner', () => ({ toast: vi.fn() }))
+vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }))
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 let root: Root

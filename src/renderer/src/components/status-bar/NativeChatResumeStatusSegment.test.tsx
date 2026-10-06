@@ -26,7 +26,7 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
   // A failed row opens the status feed; these cases never drive it.
   subscribeStructuredAgentSessionStatus: () => new Promise(() => {})
 }))
-vi.mock('sonner', () => ({ toast: vi.fn() }))
+vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }))
 
 const candidates: ResumeCandidate[] = [
   {
