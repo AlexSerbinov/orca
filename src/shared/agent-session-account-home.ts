@@ -26,7 +26,7 @@ export function agentSessionAccountHome(
 }
 
 const ENVIRONMENT_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/
-const MAX_PATH_LENGTH = 4096
+export const MAX_PATH_LENGTH = 4096
 
 /** Shape only: whether the variable is the one the record's agent pins is a launch-time question
  *  (`agentDrivesSession`), so an agent that renames its variable never hides its chats. */

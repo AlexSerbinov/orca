@@ -30,6 +30,7 @@ import {
 } from './agent-session-provider-handle-encoding'
 import {
   isAgentSessionAccountHome,
+  MAX_PATH_LENGTH,
   type AgentSessionAccountHome
 } from './agent-session-account-home'
 
