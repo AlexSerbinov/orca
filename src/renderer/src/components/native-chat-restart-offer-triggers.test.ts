@@ -280,9 +280,10 @@ it('continues an interruption at most once per run when storage refuses writes a
   useAppStore.setState({
     settings: { ...getDefaultSettings(''), nativeChatResumeWorkOnRestart: true }
   })
+  // Bounded so a regression ends: after five continues the server stops listing the chat.
   mocks.rpc.mockImplementation(async (_target, method) => {
     if (method === 'agentSession.restartResumable') {
-      return { sessions: [row('a', 'own')], failed: [] }
+      return { sessions: continueCalls().length >= 5 ? [] : [row('a', 'own')], failed: [] }
     }
     throw new Error('timeout')
   })
