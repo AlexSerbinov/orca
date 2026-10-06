@@ -3,6 +3,7 @@ import { getBrowserPlatform } from './web-storage'
 
 export function createWebPlatformApi(): Partial<PreloadApi> {
   return {
+    getPathForFile: () => '',
     platform: {
       get: () => ({
         platform: getBrowserPlatform(),
