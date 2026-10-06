@@ -140,8 +140,10 @@ function decidePairedAnswer(target: RuntimeClientTarget, candidates: readonly Re
     candidates.map(restartInterruptionKey),
     fresh.map(restartInterruptionKey)
   )
-  // Any resume dialog, the launch's or the user's, lists every machine: what it shows needs no toast.
-  if (fresh.length === 0 || getNativeChatResumeOnRestartDialogRequest() !== null) {
+  // A resume dialog on screen, the user's or a launch's already shown, lists every machine: what it
+  // shows needs no toast. A launch request still waiting for its turn may never show, so it does.
+  const dialog = getNativeChatResumeOnRestartDialogRequest()
+  if (fresh.length === 0 || dialog?.origin === 'user' || dialog?.shown === true) {
     return
   }
   if (autoResumeEnabled()) {

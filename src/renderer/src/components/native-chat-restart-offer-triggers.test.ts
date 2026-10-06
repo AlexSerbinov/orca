@@ -10,6 +10,7 @@ import {
   consumeNativeChatResumeOnRestartDialogRequest,
   getNativeChatResumeLaunchDecided,
   getNativeChatResumeOnRestartDialogRequest,
+  markNativeChatResumeLaunchRequestShown,
   requestNativeChatResumeOnRestartDialog
 } from './native-chat-resume-on-restart-dialog'
 import {
@@ -300,10 +301,19 @@ it('continues an interruption at most once per run when storage refuses writes a
   }
 })
 
-it('raises no toast while the launch-raised dialog lists the server too', async () => {
+it('raises no toast while the launch-raised dialog on screen lists the server too', async () => {
   requestNativeChatResumeOnRestartDialog('launch', 'local')
+  markNativeChatResumeLaunchRequestShown()
   await connect({ runtimeId: 'r2' })
   expect(toast).not.toHaveBeenCalled()
+})
+
+// A launch request still waiting for its turn may be dropped unseen; holding the toast back for it
+// would lose the announcement for good.
+it('still announces a paired interruption while a launch request only waits for its turn', async () => {
+  requestNativeChatResumeOnRestartDialog('launch', 'local')
+  await connect({ runtimeId: 'r2' })
+  expect(toastTitles()).toEqual(['studio-mac restarted for an update'])
 })
 
 it('opens nothing from a toast whose chats are already gone', async () => {
