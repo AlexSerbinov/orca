@@ -1,0 +1,179 @@
+// @vitest-environment happy-dom
+import type * as ReactI18nextModule from 'react-i18next'
+import { act, renderHook } from '@testing-library/react'
+import { useNewWorkspaceComposerFileDrop } from './new-workspace/use-new-workspace-composer-file-drop'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { renderCard, unmountCard } from './NewWorkspaceComposerCard.test-fixture'
+
+vi.mock('@/store', () => ({
+  useAppStore: Object.assign(
+    (selector: (state: unknown) => unknown) => selector({ settings: {}, projects: [], repos: [] }),
+    {
+      getState: () => ({
+        sshConnectionStates: connections,
+        sshStateByEnvironment: runtimeConnections
+      })
+    }
+  )
+}))
+vi.mock('react-i18next', async (importOriginal) => ({
+  ...(await importOriginal<typeof ReactI18nextModule>()),
+  useTranslation: () => ({})
+}))
+vi.mock('@/components/contextual-tours/use-contextual-tour', () => ({
+  useContextualTour: () => {}
+}))
+vi.mock('@/components/sidebar/AddRemoteHostDialog', () => ({ AddRemoteHostDialog: () => null }))
+vi.mock('./new-workspace/NewWorkspaceComposerProjectSection', () => ({
+  NewWorkspaceComposerProjectSection: () => null
+}))
+vi.mock('./new-workspace/NewWorkspaceComposerNameSection', () => ({
+  NewWorkspaceComposerNameSection: () => null
+}))
+vi.mock('./new-workspace/NewWorkspaceComposerAgentSection', () => ({
+  NewWorkspaceComposerAgentSection: () => null
+}))
+vi.mock('./new-workspace/NewWorkspaceComposerAdvancedSection', () => ({
+  NewWorkspaceComposerAdvancedSection: () => null
+}))
+vi.mock('./new-workspace/NewWorkspaceComposerFooter', () => ({
+  NewWorkspaceComposerFooter: () => <textarea />
+}))
+
+const runtimeConnections = vi.hoisted(
+  () => new Map<string, { connectionStates: Map<string, { connectionGeneration: number }> }>()
+)
+const connections = vi.hoisted(() => new Map<string, { connectionGeneration: number }>())
+const prepare = vi.fn(async ({ paths }: { paths: string[] }) => ({ paths, failures: [] }))
+const cards: HTMLDivElement[] = []
+beforeEach(() => {
+  vi.clearAllMocks()
+  connections.clear()
+  runtimeConnections.clear()
+  vi.stubGlobal('api', {
+    getPathForFile: (file: File) => `/drop/${file.name}`,
+    fs: { prepareDroppedPaths: prepare }
+  })
+})
+afterEach(() => {
+  for (const card of cards.splice(0)) {
+    unmountCard(card)
+  }
+  vi.unstubAllGlobals()
+})
+async function card(
+  attach: (paths: string[], current: () => boolean) => Promise<void>,
+  path = '/repo'
+) {
+  const container = await renderCard({
+    selectedRepoPath: path,
+    selectedRepoExecutionHostId: 'local',
+    onNativeFileDrop: attach,
+    projectHostSetupOptions: []
+  })
+  cards.push(container)
+  return container
+}
+async function drop(container: HTMLDivElement) {
+  const event = new Event('drop', { bubbles: true, cancelable: true, composed: true })
+  Object.defineProperty(event, 'isTrusted', { value: true })
+  Object.defineProperty(event, 'dataTransfer', {
+    value: { types: ['Files'], files: [new File(['x'], 'a.txt')] }
+  })
+  await act(async () => {
+    container.querySelector('textarea')!.dispatchEvent(event)
+  })
+}
+describe('new workspace card file drop ownership', () => {
+  it('delivers to the card under the cursor even when another card mounts later', async () => {
+    const first = vi.fn(async () => {})
+    const second = vi.fn(async () => {})
+    const a = await card(first, '/repo-a')
+    const b = await card(second, '/repo-b')
+    await drop(a)
+    expect(first).toHaveBeenCalledExactlyOnceWith(['/drop/a.txt'], expect.any(Function))
+    expect(second).not.toHaveBeenCalled()
+    await drop(b)
+    expect(second).toHaveBeenCalledExactlyOnceWith(['/drop/a.txt'], expect.any(Function))
+    unmountCard(b)
+    cards.splice(cards.indexOf(b), 1)
+    await drop(a)
+    expect(first).toHaveBeenCalledTimes(2)
+    expect(a.querySelector('[data-native-file-drop-target]')).toBeNull()
+  })
+  it('keeps a preparation captured for the original card when another card mounts', async () => {
+    const gate = Promise.withResolvers<{ paths: string[]; failures: never[] }>()
+    prepare.mockImplementationOnce(() => gate.promise)
+    const first = vi.fn(async () => {})
+    const second = vi.fn(async () => {})
+    const a = await card(first)
+    await drop(a)
+    await card(second)
+    await act(async () => gate.resolve({ paths: ['/prepared/a.txt'], failures: [] }))
+    expect(first).toHaveBeenCalledExactlyOnceWith(['/prepared/a.txt'], expect.any(Function))
+    expect(second).not.toHaveBeenCalled()
+  })
+  it('abandons a preparation when its card unmounts', async () => {
+    const gate = Promise.withResolvers<{ paths: string[]; failures: never[] }>()
+    prepare.mockImplementationOnce(() => gate.promise)
+    const attach = vi.fn(async () => {})
+    const a = await card(attach)
+    await drop(a)
+    unmountCard(a)
+    cards.splice(cards.indexOf(a), 1)
+    await act(async () => gate.resolve({ paths: ['/prepared/a.txt'], failures: [] }))
+    expect(attach).not.toHaveBeenCalled()
+  })
+  it.each(['project', 'host', 'connection', 'runtime connection'] as const)(
+    'refuses a captured destination after its %s changes',
+    async (change) => {
+      const gate = Promise.withResolvers<{ paths: string[]; failures: never[] }>()
+      prepare.mockImplementationOnce(() => gate.promise)
+      const applyDrop = vi.fn(async () => {})
+      connections.set('ssh-a', { connectionGeneration: 1 })
+      runtimeConnections.set('runtime-a', {
+        connectionStates: new Map([['ssh-a', { connectionGeneration: 1 }]])
+      })
+      const input: Parameters<typeof useNewWorkspaceComposerFileDrop>[0] = {
+        projectPath: '/repo',
+        hostId: change === 'runtime connection' ? 'runtime:runtime-a' : 'ssh:ssh-a',
+        connectionId: 'ssh-a',
+        applyDrop
+      }
+      const hook = renderHook(
+        (args: Parameters<typeof useNewWorkspaceComposerFileDrop>[0]) =>
+          useNewWorkspaceComposerFileDrop(args),
+        { initialProps: input }
+      )
+      const owner = document.createElement('div')
+      const target = document.createElement('textarea')
+      owner.append(target)
+      document.body.append(owner)
+      act(() => hook.result.current(owner))
+      const event = new Event('drop', { bubbles: true, cancelable: true, composed: true })
+      Object.defineProperty(event, 'isTrusted', { value: true })
+      Object.defineProperty(event, 'dataTransfer', {
+        value: { types: ['Files'], files: [new File(['x'], 'a.txt')] }
+      })
+      await act(async () => target.dispatchEvent(event))
+      if (change === 'runtime connection') {
+        runtimeConnections.set('runtime-a', {
+          connectionStates: new Map([['ssh-a', { connectionGeneration: 2 }]])
+        })
+      } else if (change === 'connection') {
+        connections.set('ssh-a', { connectionGeneration: 2 })
+      } else {
+        hook.rerender({
+          ...input,
+          projectPath: change === 'project' ? '/other' : input.projectPath,
+          hostId: change === 'host' ? 'local' : input.hostId
+        })
+      }
+      await act(async () => gate.resolve({ paths: ['/prepared/a.txt'], failures: [] }))
+      expect(applyDrop).not.toHaveBeenCalled()
+      act(() => hook.result.current(null))
+      hook.unmount()
+      owner.remove()
+    }
+  )
+})

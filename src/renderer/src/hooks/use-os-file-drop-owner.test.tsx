@@ -30,12 +30,14 @@ const prepareDroppedPaths = vi.fn(
 function Owner<Destination = undefined>({
   onDrop,
   canAccept,
+  onRefused,
   sequence,
   captureDestination,
   children
 }: {
   onDrop: DropHandler<Destination>
   canAccept?: boolean
+  onRefused?: () => void
   sequence?: OsFileDropSequence
   captureDestination?: (event: DragEvent) => Destination
   children?: React.ReactNode
@@ -46,6 +48,7 @@ function Owner<Destination = undefined>({
     consumer: 'agent' as const,
     onDrop,
     canAccept,
+    onRefused,
     sequence: sequence ?? ownSequence,
     captureDestination
   }
@@ -101,6 +104,17 @@ afterEach(() => {
 })
 
 describe('useOsFileDropOwner', () => {
+  it('reports a trusted refused drop once without reading file paths', () => {
+    const onDrop = vi.fn()
+    const onRefused = vi.fn()
+    const view = render(<Owner onDrop={onDrop} canAccept={false} onRefused={onRefused} />)
+    drag(view.getByTestId('owner'), 'drop')
+    expect(onRefused).toHaveBeenCalledOnce()
+    expect(getPathForFile).not.toHaveBeenCalled()
+    expect(onDrop).not.toHaveBeenCalled()
+    drag(view.getByTestId('owner'), 'drop', undefined, { trusted: false })
+    expect(onRefused).toHaveBeenCalledOnce()
+  })
   it('registers the root with a callback ref and delivers one prepared drop to the nearest owner', async () => {
     const outerDrop = vi.fn<DropHandler>()
     const innerDrop = vi.fn<DropHandler>()

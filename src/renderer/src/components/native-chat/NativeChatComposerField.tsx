@@ -5,7 +5,6 @@ import { useLayoutEffect, useRef } from 'react'
 import { ImageOff } from 'lucide-react'
 import type { useImeEnterGestureOwnership } from '@/lib/ime-composition-keyboard-event'
 import { cn } from '@/lib/utils'
-import { NATIVE_FILE_DROP_TARGET } from '../../../../shared/native-file-drop'
 import type { ComposerAutocomplete, NativeChatPickerItem } from './native-chat-composer-state'
 import { NativeChatMentionHint, NativeChatPickerMenu } from './NativeChatAutocompleteMenus'
 import { NativeChatComposerActions } from './NativeChatComposerActions'
@@ -24,7 +23,6 @@ import { useNativeChatComposerDraftUnsaved } from './use-native-chat-draft-unsav
 export type NativeChatComposerFieldProps = {
   /** Pane identity published to the drop pipeline so a native file drop lands
    *  only in the composer it was dropped on. */
-  dropScopeKey: string
   /** Owner of the draft the editor's document is saved with. */
   draftScopeKey: string
   textareaRef: RefObject<NativeChatComposerInput | null>
@@ -104,7 +102,6 @@ function imeComposedSegment(base: string, settled: string): string {
 }
 
 export function NativeChatComposerField({
-  dropScopeKey,
   draftScopeKey,
   textareaRef,
   draft,
@@ -202,8 +199,6 @@ export function NativeChatComposerField({
             </div>
           ) : null}
           <div
-            data-native-file-drop-target={NATIVE_FILE_DROP_TARGET.composer}
-            data-composer-scope-key={dropScopeKey}
             className={cn(
               // Why: always-on hairline (token-level border, not focus ring) —
               // no focus/click border flash. The box is a container, not a

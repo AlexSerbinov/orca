@@ -6,14 +6,17 @@
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
+import { findKnownWorktreeById } from '@/store/slices/worktrees/listing/detected-worktree-meta'
+import {
+  toRuntimeExecutionHostId,
+  toSshExecutionHostId,
+  type ExecutionHostId
+} from '../../../../shared/execution-host'
 import { getConnectionIdFromState } from '@/lib/connection-context'
-import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { getExplicitRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import type { AppState } from '@/store/types'
 import { reportTerminalDropUploadSkipsAndFailures } from '../terminal-pane/terminal-drop-upload-report'
-import {
-  findTerminalTabWorktreeId,
-  resolveNativeChatFileLinkContext
-} from './native-chat-file-link'
+import { findTerminalTabWorktreeId } from './native-chat-file-link'
 import {
   captureDirectSshMutationExpectation,
   type DirectSshMutationExpectation
@@ -38,8 +41,8 @@ export type NativeChatAttachmentOwner =
 
 type NativeChatAttachmentOwnerState = Pick<
   AppState,
+  | 'detectedWorktreesByRepo'
   | 'folderWorkspaces'
-  | 'getKnownWorktreeById'
   | 'projectGroups'
   | 'repos'
   | 'settings'
@@ -58,15 +61,35 @@ export function resolveNativeChatAttachmentOwner(
   if (!worktreeId) {
     return { kind: 'not-ready' }
   }
-  return resolveNativeChatAttachmentOwnerForWorktree(state, worktreeId, terminalTabId)
+  return resolveNativeChatAttachmentOwnerForWorktree(state, worktreeId)
+}
+
+export function resolveNativeChatAttachmentHost(
+  state: NativeChatAttachmentOwnerState,
+  worktreeId: string
+): ExecutionHostId | null {
+  const runtimeId = getExplicitRuntimeEnvironmentIdForWorktree(state, worktreeId)
+  const connectionId = getConnectionIdFromState(state, worktreeId)
+  if (!runtimeId && connectionId === undefined) {
+    return null
+  }
+  const hostId = runtimeId
+    ? toRuntimeExecutionHostId(runtimeId)
+    : connectionId
+      ? toSshExecutionHostId(connectionId)
+      : 'local'
+  return findKnownWorktreeById(state, worktreeId, hostId) ? hostId : null
 }
 
 export function resolveNativeChatAttachmentOwnerForWorktree(
   state: NativeChatAttachmentOwnerState,
-  worktreeId: string,
-  terminalTabId?: string
+  worktreeId: string
 ): NativeChatAttachmentOwner {
-  if (getRuntimeEnvironmentIdForWorktree(state, worktreeId)) {
+  const hostId = resolveNativeChatAttachmentHost(state, worktreeId)
+  if (!hostId) {
+    return { kind: 'not-ready' }
+  }
+  if (getExplicitRuntimeEnvironmentIdForWorktree(state, worktreeId)) {
     return { kind: 'runtime' }
   }
   const connectionId = getConnectionIdFromState(state, worktreeId)
@@ -76,9 +99,7 @@ export function resolveNativeChatAttachmentOwnerForWorktree(
   if (connectionId === null) {
     return { kind: 'local' }
   }
-  const worktreePath = terminalTabId
-    ? resolveNativeChatFileLinkContext(state, terminalTabId)?.worktreePath
-    : state.getKnownWorktreeById(worktreeId)?.path
+  const worktreePath = findKnownWorktreeById(state, worktreeId, hostId)?.path
   if (!worktreePath) {
     return { kind: 'not-ready' }
   }

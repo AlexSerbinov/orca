@@ -28,6 +28,7 @@ type OsFileDropOwnerOptions<Destination> = {
   consumer: DroppedPathConsumer
   sequence: OsFileDropSequence
   canAccept?: boolean
+  onRefused?: () => void
   captureDestination?: (event: DragEvent) => Destination
   onDrop: (
     prepared: PreparedDroppedPaths,
@@ -94,7 +95,11 @@ export function useOsFileDropOwner<Destination = undefined>(
         }
         event.preventDefault()
         event.stopPropagation()
-        if (!event.isTrusted || optionsRef.current.canAccept === false) {
+        if (!event.isTrusted) {
+          return
+        }
+        if (optionsRef.current.canAccept === false) {
+          optionsRef.current.onRefused?.()
           return
         }
 
