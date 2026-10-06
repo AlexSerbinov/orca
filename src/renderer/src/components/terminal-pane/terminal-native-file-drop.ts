@@ -77,7 +77,8 @@ async function handleNativeTerminalFileDropWithCapturedOwner(
   const worktreePath = resolveTerminalDropWorktreePath(
     worktreeId,
     owner?.runtimeEnvironmentId ? undefined : cwd,
-    owner?.executionHostId
+    owner?.executionHostId,
+    owner?.runtimeEnvironmentId
   )
   if (!worktreePath) {
     toast.error(

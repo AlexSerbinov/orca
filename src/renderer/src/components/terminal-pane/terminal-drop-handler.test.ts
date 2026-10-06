@@ -83,20 +83,14 @@ function createTerminalTransport(
   ptyId = 'pty-1',
   sendInputAccepted?: ReturnType<typeof vi.fn>
 ) {
-  const executionHostId =
-    parseExecutionHostId(mocks.storeState.repos[0]?.executionHostId)?.id ?? 'local'
-  mocks.storeState.worktreesByRepo = Object.fromEntries(
-    Object.entries(mocks.storeState.worktreesByRepo).map(([repoId, rows]) => [
-      repoId,
-      rows.map((row) => ({ ...row, hostId: executionHostId }))
-    ])
-  )
+  const host = parseExecutionHostId(mocks.storeState.repos[0]?.executionHostId)
   return {
     sendInput,
     ...(sendInputAccepted ? { sendInputAccepted } : {}),
     getPtyId: vi.fn(() => ptyId),
     isConnected: vi.fn(() => true),
-    getExecutionHostId: () => executionHostId
+    getExecutionHostId: () => (host?.kind === 'runtime' ? 'local' : (host?.id ?? 'local')),
+    getRuntimeEnvironmentId: () => (host?.kind === 'runtime' ? host.environmentId : null)
   }
 }
 
@@ -150,10 +144,7 @@ describe('handleTerminalFileDrop', () => {
     const sendInput = vi.fn(() => true)
     const focus = vi.fn()
     const pane = { id: 1, leafId: 'leaf-1', terminal: { focus } }
-    const manager = {
-      getActivePane: () => pane,
-      getPanes: () => [pane]
-    }
+    const manager = { getActivePane: () => pane, getPanes: () => [pane] }
     const paneTransports = new Map([[1, createTerminalTransport(sendInput)]])
 
     await handleTerminalFileDrop({
@@ -207,10 +198,7 @@ describe('handleTerminalFileDrop', () => {
     const sendInput = vi.fn(() => true)
     const focus = vi.fn()
     const pane = { id: 1, leafId: 'leaf-1', terminal: { focus } }
-    const manager = {
-      getActivePane: () => pane,
-      getPanes: () => [pane]
-    }
+    const manager = { getActivePane: () => pane, getPanes: () => [pane] }
     const transport = createTerminalTransport(sendInput)
     transport.getPtyId.mockImplementation(() => ptyId)
 
@@ -298,6 +286,11 @@ describe('handleTerminalFileDrop', () => {
         executionHostId: 'runtime:owner-runtime'
       }
     ]
+    mocks.storeState.worktreesByRepo = {
+      repo1: [
+        { id: 'wt-1', repoId: 'repo1', path: '/remote/repo', hostId: 'runtime:owner-runtime' }
+      ]
+    }
     mocks.importExternalPathsToRuntime.mockResolvedValue({
       results: [
         {
@@ -348,6 +341,9 @@ describe('handleTerminalFileDrop', () => {
     mocks.storeState.repos = [
       { id: 'repo1', connectionId: null, path: '/remote/repo', executionHostId: 'local' }
     ]
+    mocks.storeState.worktreesByRepo = {
+      repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/remote/repo', hostId: 'local' }]
+    }
     const sendInput = vi.fn(() => true)
     const focus = vi.fn()
     const pane = { id: 1, leafId: 'leaf-1', terminal: { focus } }
@@ -478,6 +474,9 @@ describe('handleTerminalFileDrop', () => {
     mocks.storeState.repos = [
       { id: 'repo1', connectionId: null, path: '/repo', executionHostId: 'local' }
     ]
+    mocks.storeState.worktreesByRepo = {
+      repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/repo', hostId: 'local' }]
+    }
     const sendInput = vi.fn(() => true)
     const sendInputAccepted = vi.fn(async () => true)
     const focus = vi.fn()

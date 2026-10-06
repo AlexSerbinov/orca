@@ -159,6 +159,37 @@ describe('OS attachment destination through input-method composition', () => {
     expect(container.querySelector('[data-draft]')?.textContent).toBe('@/local/file.txt ')
   })
 
+  it('refuses an obsolete SSH drop and attaches the retry once during the same composition', async () => {
+    mocks.owner = {
+      kind: 'ssh',
+      connectionId: 'ssh-1',
+      worktreePath: '/remote',
+      expectedExecutionHostId: 'ssh:ssh-1',
+      expectedSshTargetId: 'ssh-1',
+      expectedSshConnectionGeneration: 1
+    }
+    mocks.upload
+      .mockResolvedValueOnce(['/remote/a.txt', '/remote/a.png'])
+      .mockResolvedValueOnce(['/remote/b.txt', '/remote/b.png'])
+    await render('workspace-1')
+    await act(async () => latest().attachExternalPaths(['/local/a.txt', '/local/a.png']))
+    mocks.owner = { ...mocks.owner, expectedSshConnectionGeneration: 2 }
+    await act(async () => latest().attachExternalPaths(['/local/b.txt', '/local/b.png']))
+    expect(container.querySelector('[data-draft]')?.textContent).toBe('')
+    composing = false
+    act(() => {
+      latest().flushPendingAttachments()
+      latest().flushPendingAttachments()
+    })
+    expect(container.querySelector('[data-draft]')?.textContent).toBe('@/remote/b.txt ')
+    expect(latest().imageAttachments).toEqual([
+      expect.objectContaining({ path: '/remote/b.png', connectionId: 'ssh-1' })
+    ])
+    expect(container.querySelector('[data-notice]')?.textContent).toBe(
+      'This workspace changed hosts while attaching — drop the files again.'
+    )
+  })
+
   it.each([true, false])(
     'keeps the workspace-file exemption off OS drops (queued=$queued)',
     async (queued) => {

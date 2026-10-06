@@ -81,13 +81,14 @@ function createTerminalTransport(
   ptyId = 'pty-1',
   sendInputAccepted?: ReturnType<typeof vi.fn>
 ) {
+  const host = parseExecutionHostId(mocks.storeState.repos[0]?.executionHostId)
   return {
     sendInput,
     ...(sendInputAccepted ? { sendInputAccepted } : {}),
     getPtyId: vi.fn(() => ptyId),
     isConnected: vi.fn(() => true),
-    getExecutionHostId: () =>
-      parseExecutionHostId(mocks.storeState.repos[0]?.executionHostId)?.id ?? 'local'
+    getExecutionHostId: () => (host?.kind === 'runtime' ? 'local' : (host?.id ?? 'local')),
+    getRuntimeEnvironmentId: () => (host?.kind === 'runtime' ? host.environmentId : null)
   }
 }
 

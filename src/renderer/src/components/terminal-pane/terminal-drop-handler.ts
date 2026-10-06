@@ -73,7 +73,8 @@ export async function handleInternalTerminalFileDrop({
   const worktreePath = resolveTerminalDropWorktreePath(
     worktreeId,
     runtimeEnvironmentId ? undefined : cwd,
-    host?.id
+    host?.id,
+    runtimeEnvironmentId
   )
   if (!worktreePath) {
     return { status: 'ignored', reason: 'worktree-unavailable' }

@@ -20,9 +20,11 @@ describe('terminal drop transport owner', () => {
   it('captures and rechecks a runtime transport after settings change', () => {
     let environmentId = 'owner-runtime'
     const owner = captureTerminalDropTransportOwner({
-      getExecutionHostId: () => 'runtime:owner-runtime',
+      getExecutionHostId: () => 'local',
       getRuntimeEnvironmentId: () => environmentId
     })
+    expect(owner?.executionHostId).toBe('local')
+    expect(owner?.expectedExecutionHostId).toBe('local')
     expect(owner?.runtimeEnvironmentId).toBe('owner-runtime')
     mocks.state.settings.activeRuntimeEnvironmentId = 'unrelated-runtime'
     expect(() => owner?.assertCurrent()).not.toThrow()
