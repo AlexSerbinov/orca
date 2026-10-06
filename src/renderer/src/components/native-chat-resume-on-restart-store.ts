@@ -4,6 +4,7 @@ import {
   pairedRestartOffersSupport
 } from '@/runtime/structured-agent-session-client'
 import type { RuntimeClientTarget } from '@/runtime/runtime-client-target'
+import { parseRestartOfferOrigin } from '../../../shared/restart-offer-origin'
 import type { ResumeCandidate, ResumeFailure } from './native-chat-resume-on-restart-grouping'
 import {
   failedFrom,
@@ -104,6 +105,11 @@ function emit(): void {
   }
 }
 
+/** Whether a machine offers any chat that is the user's own, the ones a launch asks about. */
+export function hasOwnCandidate(offer: NativeChatRestartMachineOffer | undefined): boolean {
+  return Boolean(offer?.candidates.some((row) => parseRestartOfferOrigin(row.origin) === 'own'))
+}
+
 function hasRows(offer: NativeChatRestartMachineOffer | undefined): boolean {
   return Boolean(offer && (offer.candidates.length > 0 || offer.failed.length > 0))
 }
@@ -124,8 +130,8 @@ function publish(machine: RestartMachineKey, next: NativeChatRestartMachineOffer
   if (offers.size === 0) {
     // With nothing left on any machine, an open request for the dialog has nothing to show.
     consumeNativeChatResumeOnRestartDialogRequest()
-  } else if (machine === LOCAL_RESTART_MACHINE && !offers.has(machine)) {
-    // A launch request is this computer's; with nothing left here it must not open for a server.
+  } else if (machine === LOCAL_RESTART_MACHINE && !hasOwnCandidate(offers.get(machine))) {
+    // A launch request is for the user's own chats here; with none left it must not open by itself.
     consumeNativeChatResumeOnRestartLaunchRequest()
   }
 }

@@ -20,6 +20,7 @@ import type { ResumeFailureAction } from './native-chat-resume-failure-guidance'
 import {
   consumeNativeChatResumeOnRestartDialogRequest,
   getNativeChatResumeOnRestartDialogRequest,
+  markNativeChatResumeLaunchRequestShown,
   subscribeNativeChatResumeOnRestartDialog
 } from './native-chat-resume-on-restart-dialog'
 import {
@@ -28,6 +29,7 @@ import {
 } from './native-chat-restart-offer-actions'
 import { LOCAL_RESTART_MACHINE } from './native-chat-restart-machines'
 import {
+  hasOwnCandidate,
   useNativeChatRestartOffers,
   useNativeChatRestartResuming
 } from './native-chat-resume-on-restart-store'
@@ -92,23 +94,24 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
   // Only a dialog that can render asks for a turn, so a hidden one never holds others back.
   const renderable = machines.length > 0
   // Raised by this computer's launch, it takes its turn among the dialogs that open by themselves,
-  // and only while this computer has something to offer: it never opens by itself for a server.
+  // and only while this computer offers the user's own chats: it never opens by itself for a
+  // server, an automation or another device. Once on screen it stays until the user closes it.
   // Opened by the user (status bar, toast), it shows at once and the others wait for it.
-  const localRenderable = offers.has(LOCAL_RESTART_MACHINE)
-  const [launchTurn, markLaunchShown] = useAutomaticPromptTurn(
-    'native-chat-resume',
-    request?.origin === 'launch' && localRenderable
-  )
+  const launchWanted =
+    request?.origin === 'launch' &&
+    (request.shown === true || hasOwnCandidate(offers.get(LOCAL_RESTART_MACHINE)))
+  const [launchTurn, markLaunchShown] = useAutomaticPromptTurn('native-chat-resume', launchWanted)
   usePromptBlockingDialog('native-chat-resume', request?.origin === 'user' && renderable)
   // After the turn request above (effects run in order), so nothing takes the first turn between.
   // Only this computer's read is waited on; a paired server's read never holds the launch turn.
   useNativeChatResumeLaunchDiscovery(localEnabled)
-  const open = request?.origin === 'user' || (launchTurn && localRenderable)
+  const open = request?.origin === 'user' || (launchTurn && launchWanted)
   useEffect(() => {
-    if (launchTurn && localRenderable) {
+    if (launchTurn && launchWanted) {
       markLaunchShown()
+      markNativeChatResumeLaunchRequestShown()
     }
-  }, [launchTurn, markLaunchShown, localRenderable])
+  }, [launchTurn, markLaunchShown, launchWanted])
   // What the open dialog shows is decided: a later read of a paired server does not announce it.
   const showing = Boolean(request && open && renderable)
   useEffect(() => {

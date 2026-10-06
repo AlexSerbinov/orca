@@ -107,8 +107,9 @@ async function loadLaunchOffer(): Promise<void> {
     await new Promise<void>((resolve) => setTimeout(resolve, delay))
     read = await readNativeChatRestartMachine(target)
   }
-  // Failures left from an earlier launch are the status bar's to show; only a fresh offer asks.
-  if (read.kind !== 'answered' || read.candidates.length === 0) {
+  // Failures left from an earlier launch are the status bar's to show; only a fresh offer of the
+  // user's own chats asks. Another device's or an automation's alone never open the dialog.
+  if (read.kind !== 'answered' || ownCandidates(target, read.candidates).length === 0) {
     return
   }
   if (!resumeWithoutAsking) {

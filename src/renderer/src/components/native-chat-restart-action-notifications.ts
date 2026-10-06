@@ -43,15 +43,6 @@ function continuedText(count: number, machineName: string | undefined): string {
       )
 }
 
-/** Delivery the host never confirmed. Reported, never retried — a second send is the user's call. */
-function deliveryUnknownText(count: number): string {
-  return translate(
-    'auto.components.NativeChatResumeOnRestartModal.continueUnconfirmed',
-    'Continuation delivery is unconfirmed for {{value0}} chats. Open them to check before sending another message.',
-    { value0: count, count }
-  )
-}
-
 /** What the failure toast can do: open the modal on the machine that failed (or on none in
  *  particular), or forget the failures. Passed in because the offer store owns both and this module
  *  must not import it back. */
@@ -188,14 +179,13 @@ type MachineTally = {
   /** Only chats the host listed as failed: one that merely dropped out may still be a live offer. */
   dismissable: string[]
   noLonger: number
-  deliveryUnknown: number
 }
 
 function tallyAnswer(
   requested: readonly string[],
   results: readonly RestartContinuationOutcome[],
   hostFailed: readonly Pick<ResumeFailure, 'sessionId' | 'outcome'>[] | undefined
-): Omit<MachineTally, 'machine' | 'machineName' | 'deliveryUnknown'> {
+): Omit<MachineTally, 'machine' | 'machineName'> {
   const notContinued = restartChatsNotContinued(requested, results)
   const failed = new Map(hostFailed?.map((failure) => [failure.sessionId, failure.outcome]))
   // A host that lists failures has already dropped chats that moved on by themselves or that the
@@ -230,15 +220,12 @@ function tally(result: RestartContinueResult): MachineTally {
   const none = { continued: 0, refused: [], unconfirmed: [], dismissable: [], noLonger: 0 }
   switch (result.kind) {
     case 'answered':
-      return {
-        ...base,
-        ...tallyAnswer(result.requested, result.results, result.hostFailed),
-        deliveryUnknown: 0
-      }
+      return { ...base, ...tallyAnswer(result.requested, result.results, result.hostFailed) }
     case 'unconfirmed':
-      return { ...base, ...none, deliveryUnknown: new Set(result.requested).size }
+      // The call's answer was lost: every named chat may have been resumed, and nothing is known.
+      return { ...base, ...none, unconfirmed: [...new Set(result.requested)] }
     case 'not-sent':
-      return { ...base, ...none, refused: [...new Set(result.requested)], deliveryUnknown: 0 }
+      return { ...base, ...none, refused: [...new Set(result.requested)] }
   }
 }
 
@@ -271,7 +258,6 @@ export function announceRestartResults(
   const refused = sum(failing, (entry) => entry.refused.length)
   const unconfirmed = sum(failing, (entry) => entry.unconfirmed.length)
   const continued = sum(continuing, (entry) => entry.continued)
-  const deliveryUnknown = sum(tallies, (entry) => entry.deliveryUnknown)
   const noLonger = options.quiet ? 0 : sum(tallies, (entry) => entry.noLonger)
   const parts = [
     ...(failing.length > 0
@@ -282,7 +268,6 @@ export function announceRestartResults(
         ]
       : []),
     ...(refused > 0 && unconfirmed > 0 ? [otherUnconfirmedCountText(unconfirmed)] : []),
-    ...(deliveryUnknown > 0 ? [deliveryUnknownText(deliveryUnknown)] : []),
     ...(continued > 0 ? [continuedText(continued, soleMachineName(continuing))] : []),
     ...(noLonger > 0 ? [noLongerNeededText(noLonger)] : [])
   ]

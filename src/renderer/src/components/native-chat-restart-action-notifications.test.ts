@@ -139,10 +139,10 @@ it('reports one resume across machines in a single notice', () => {
   )
   expect(vi.mocked(toast).mock.calls).toEqual([
     [
-      '1 chat on studio-mac couldn’t be resumed',
+      '1 chat couldn’t be resumed',
       expect.objectContaining({
         description:
-          'Continuation delivery is unconfirmed for 1 chat. Open it to check before sending another message. · Resumed 2 chats and asked them to continue · 1 chat no longer needs resuming'
+          'Couldn’t confirm 1 other chat was resumed · Resumed 2 chats and asked them to continue · 1 chat no longer needs resuming'
       })
     ]
   ])
@@ -234,4 +234,33 @@ it('counts a resume refused before it left (the server was re-paired) as not res
     actions
   )
   expect(titles()).toEqual(['1 chat on studio-mac couldn’t be resumed'])
+})
+
+// A call whose answer was lost is an unconfirmed outcome like any other: it says where, and the
+// notice opens the list.
+it('names the machine of a resume whose answer was lost, and opens the dialog on it', () => {
+  announceRestartResults(
+    [
+      {
+        machine: 'environment:studio',
+        machineName: 'studio-mac',
+        requested: ['s1', 's2'],
+        kind: 'unconfirmed'
+      }
+    ],
+    actions
+  )
+  expect(titles()).toEqual(['Couldn’t confirm 2 chats on studio-mac were resumed'])
+  const options = vi.mocked(toast).mock.calls[0]?.[1]
+  const show = options && typeof options === 'object' && 'action' in options ? options.action : null
+  if (
+    !show ||
+    typeof show !== 'object' ||
+    !('onClick' in show) ||
+    typeof show.onClick !== 'function'
+  ) {
+    throw new Error('no Show button')
+  }
+  show.onClick()
+  expect(actions.show).toHaveBeenCalledWith('environment:studio')
 })

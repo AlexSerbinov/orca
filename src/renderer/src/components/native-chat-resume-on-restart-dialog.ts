@@ -7,6 +7,9 @@ export type NativeChatResumeDialogOrigin = 'launch' | 'user'
 export type NativeChatResumeOnRestartDialogRequest = Readonly<{
   origin: NativeChatResumeDialogOrigin
   focus: RestartMachineKey | null
+  /** A launch request already on screen: the user is looking at it, so it is no longer dropped
+   *  when this computer's own chats run out. */
+  shown?: true
 }>
 
 let pending: NativeChatResumeOnRestartDialogRequest | null = null
@@ -47,10 +50,18 @@ export function consumeNativeChatResumeOnRestartDialogRequest(): void {
   notify()
 }
 
-/** Drops a request only this computer's launch raised; one the user made stays. */
+/** Drops a request only this computer's launch raised and nobody has seen yet. */
 export function consumeNativeChatResumeOnRestartLaunchRequest(): void {
-  if (pending?.origin === 'launch') {
+  if (pending?.origin === 'launch' && !pending.shown) {
     consumeNativeChatResumeOnRestartDialogRequest()
+  }
+}
+
+/** The launch-raised dialog reached the screen. */
+export function markNativeChatResumeLaunchRequestShown(): void {
+  if (pending?.origin === 'launch' && !pending.shown) {
+    pending = { ...pending, shown: true }
+    notify()
   }
 }
 

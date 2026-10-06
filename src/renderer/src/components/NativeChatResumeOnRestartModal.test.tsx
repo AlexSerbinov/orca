@@ -565,7 +565,10 @@ it('reports an unreadable resume response as an unconfirmed delivery', async () 
   )
   await mount(<NativeChatResumeOnRestartModal />)
   await act(async () => button('Resume 2 chats').click())
-  expect(toast).toHaveBeenCalledWith(expect.stringContaining('unconfirmed'))
+  expect(toast).toHaveBeenCalledWith(
+    'Couldn’t confirm 2 chats were resumed',
+    expect.objectContaining({ action: expect.anything() })
+  )
   expect(offerIds()).toEqual(['a', 'b'])
   expect(document.querySelector('[role="dialog"]')).toBeNull()
 })
@@ -579,7 +582,10 @@ it('reports a lost resume response without retrying the action', async () => {
   })
   await mount(<NativeChatResumeOnRestartModal />)
   await act(async () => button('Resume 2 chats').click())
-  expect(toast).toHaveBeenCalledWith(expect.stringContaining('unconfirmed'))
+  expect(toast).toHaveBeenCalledWith(
+    'Couldn’t confirm 2 chats were resumed',
+    expect.objectContaining({ action: expect.anything() })
+  )
   // A lost action response is followed by a read-only reconciliation, never a retry.
   expect(rpc.mock.calls.map((call) => [call[1], call[2]])).toEqual([
     ['agentSession.restartResumable', undefined],

@@ -19,11 +19,12 @@ import { resumeCandidateOwnership } from '../native-chat-resume-ownership'
 // Why: closing the resume dialog is a snooze, not a decline — each host keeps its offer. This is
 // then the only surface left carrying it, so it is always rendered rather than gated by
 // `statusBarItems`. Pressing Resume closes the dialog too, so this entry carries the run while it
-// is in flight. A chat the resume could not carry on is kept the same way: the toast that reported
-// it is gone in seconds, and this entry is what still names it.
+// is in flight. A chat of the user's own that a resume could not carry on is kept the same way: the
+// toast that reported it is gone in seconds, and this entry is what still names it.
 //
-// ONE entry across every machine: the dialog covers them all. It names the machine only when there
-// is just one, and its tooltip breaks the count down by machine.
+// ONE entry across every machine: the dialog covers them all. It counts only the user's own chats
+// (another device's or an automation's are listed in the dialog, not counted here), names the
+// machine only when there is just one, and its tooltip breaks the count down by machine.
 
 /** The machine to open the dialog on: the only one listed, or none in particular. */
 function focusOf(machines: readonly RestartMachineKey[]): RestartMachineKey | null {

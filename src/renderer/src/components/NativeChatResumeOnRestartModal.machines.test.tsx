@@ -173,25 +173,25 @@ it('resumes each machine’s picked chats on that machine, and the machine box p
   ])
 })
 
-// Another device's or an automation's chats stay for their owner, on this computer as on a server,
-// and the button says only what it does.
-it('dismisses only the user’s own chats and the machine’s own, on every machine', async () => {
-  localRows = [row('l1', 'own'), row('l2', 'other-device')]
+// Only another device's chats stay for their owner, on this computer as on a server: the user's
+// own, the machine's and an automation's go. The button says only what it does.
+it('dismisses everything but another device’s chats, on every machine', async () => {
+  localRows = [row('l1', 'own'), row('l2', 'other-device'), row('l3', 'automation')]
   await stage({ studio: [...SERVER_ROWS, row('s4', 'server-made')] })
   await open(null)
   await act(async () => button('Dismiss').click())
   const listed = (sessionId: string) => ({ sessionId, recordedAt: 1_800_000_000_000 })
   expect(actionCalls('agentSession.restartResumableDismiss')).toEqual([
-    [{ kind: 'local' }, { sessionIds: ['l1'], offers: [listed('l1')] }],
+    [{ kind: 'local' }, { sessionIds: ['l1', 'l3'], offers: [listed('l1'), listed('l3')] }],
     [
       { kind: 'environment', environmentId: 'studio' },
-      { sessionIds: ['s1', 's4'], offers: [listed('s1'), listed('s4')] }
+      { sessionIds: ['s1', 's3', 's4'], offers: [listed('s1'), listed('s3'), listed('s4')] }
     ]
   ])
 })
 
-it('keeps "Dismiss all" when every listed chat is the user’s to clear', async () => {
-  await stage({ studio: [row('s1', 'own')] })
+it('keeps "Dismiss all" when no other device’s chat stays listed', async () => {
+  await stage({ studio: [row('s1', 'own'), row('s2', 'automation')] })
   await open(null)
   expect(button('Dismiss all')).toBeTruthy()
 })
@@ -298,4 +298,28 @@ it('keeps a user-opened dialog on screen when another dialog opens over it', asy
   )
   expect(resume).toBeTruthy()
   expect(resume?.hasAttribute('data-stepped-aside')).toBe(false)
+})
+
+// Once on screen, a launch-raised dialog stays until the user closes it, whatever this computer's
+// list does under it.
+it('keeps an open launch dialog when this computer’s chats run out while a server’s remain', async () => {
+  await stage({ studio: [row('s1', 'own')] })
+  await act(async () =>
+    root.render(
+      <TooltipProvider>
+        <NativeChatResumeOnRestartModal />
+      </TooltipProvider>
+    )
+  )
+  await act(async () => {
+    requestLaunchResumePrompt('local')
+    markNativeChatResumeLaunchDecided()
+  })
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  localRows = []
+  await act(async () => {
+    await readNativeChatRestartMachine({ kind: 'local' })
+  })
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  expect(getNativeChatResumeOnRestartDialogRequest()).toMatchObject({ origin: 'launch' })
 })

@@ -107,7 +107,9 @@ const offered: ResumeCandidate[] = [
     latestPrompt: 'Prompt a',
     recordedAt: 1_800_000_000_000,
     executionHostId: 'local',
-    workspaceKind: 'git-worktree'
+    workspaceKind: 'git-worktree',
+    // The host says whose it is; only the user's own chats raise the launch dialog.
+    origin: 'own'
   }
 ]
 

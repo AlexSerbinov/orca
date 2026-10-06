@@ -599,6 +599,24 @@ it("asks for this computer's launch turn and decides the wait when its read deci
   expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ origin: 'launch', focus: 'local' })
 })
 
+// The launch asks about the user's own chats here; an automation's or another device's alone never
+// open the dialog, launch after launch.
+it.each(['automation', 'other-device'] as const)(
+  'never raises the launch dialog for chats here that are only %s',
+  async (origin) => {
+    mocks.rpc.mockImplementation(async (target) =>
+      target.kind === 'local' ? { sessions: [row('l1', origin)] } : { sessions: [] }
+    )
+    for (let launch = 0; launch < 2; launch += 1) {
+      _resetNativeChatRestartOffer()
+      renderHook(() => useNativeChatRestartOfferSources(true))
+      await vi.waitFor(() => expect(getNativeChatResumeLaunchDecided()).toBe(true))
+      expect(getNativeChatResumeOnRestartDialogRequest()).toBeNull()
+      expect(getNativeChatRestartOffers().get('local')?.candidates).toHaveLength(1)
+    }
+  }
+)
+
 it('never opens the dialog by itself for a paired server, nor counts toward the launch wait', async () => {
   await connect({ runtimeId: 'r2' })
   expect(toast).toHaveBeenCalledTimes(1)
