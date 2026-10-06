@@ -309,6 +309,40 @@ describe('NativeChatResumeStatusSegment', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 
+  // A server's provider refused to carry the user's chat on: the entry says so, counting only the
+  // user's own failures, and opens on that server. The failed label names no machine; the dialog does.
+  it('counts only the user’s own failures on a paired server, and opens on it', async () => {
+    const failure = (sessionId: string, origin: 'own' | 'other-device') => ({
+      ...candidates[0]!,
+      sessionId,
+      origin,
+      failedAt: 60_000,
+      outcome: 'refused',
+      reason: 'provider_refused_continuation'
+    })
+    rpc.mockImplementation(async (target) =>
+      target.kind === 'environment'
+        ? { sessions: [], failed: [failure('a', 'own'), failure('o', 'other-device')] }
+        : { sessions: [] }
+    )
+    useAppStore.setState({
+      runtimeEnvironments: [pairedEnvironment('studio', 'studio-mac')]
+    })
+    await mount()
+    await act(async () => {
+      await readNativeChatRestartMachine({ kind: 'environment', environmentId: 'studio' })
+    })
+    const entry = screen.getByRole('button', {
+      name: '1 chat failed to resume. Click for details.'
+    })
+    expect(entry.textContent).toBe('1 chat failed to resume')
+    await act(async () => entry.click())
+    expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({
+      origin: 'user',
+      focus: 'environment:studio'
+    })
+  })
+
   it('counts every machine in one entry and opens on none in particular', async () => {
     rpc.mockImplementation(async (target) =>
       target.kind === 'environment' ? { sessions: candidates } : { sessions: [candidates[0]] }

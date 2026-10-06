@@ -21,6 +21,7 @@ import { requestLaunchResumePrompt } from './native-chat-resume-on-restart-launc
 import { readNativeChatRestartMachine } from './native-chat-resume-on-restart-store'
 import { _resetNativeChatRestartOffer } from './native-chat-restart-offer-triggers'
 import { pairedEnvironment } from './native-chat-restart-offer-test-support'
+import { lastToastShow } from './native-chat-resume-toast.test-support'
 
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/structured-agent-session-client', () => ({
@@ -67,6 +68,14 @@ async function stage(servers: Record<string, ResumeCandidate[]>): Promise<void> 
     for (const environmentId of Object.keys(servers)) {
       await readNativeChatRestartMachine({ kind: 'environment', environmentId })
     }
+  })
+}
+
+/** Reads this computer and the studio server with whatever `rpc` answers now. */
+async function stageReads(): Promise<void> {
+  await act(async () => {
+    await readNativeChatRestartMachine({ kind: 'local' })
+    await readNativeChatRestartMachine({ kind: 'environment', environmentId: 'studio' })
   })
 }
 
@@ -376,4 +385,68 @@ it('dismisses a server’s restart toast once the dialog listing it opens', asyn
   await stage({ studio: [row('s1', 'own')] })
   await open('environment:studio')
   expect(toast.dismiss).toHaveBeenCalledWith('native-chat-restart-reconnect:environment:studio')
+})
+
+// The server's provider refused to carry the chat on: the host files the failure and lists it. One
+// toast says so and opens that server's list, where the row's Retry ends in one toast of its own.
+it('reports a chat a server could not carry on once, opens it on that server, and retries it', async () => {
+  localRows = []
+  const failed = {
+    ...row('s1', 'own'),
+    failedAt: 1_800_000_060_000,
+    outcome: 'refused',
+    reason: 'provider_refused_continuation'
+  }
+  const others = [row('s2', 'other-device')]
+  let phase: 'offered' | 'failed' | 'retried' = 'offered'
+  rpc.mockImplementation(async (target, method) => {
+    if (target.kind === 'local') {
+      return { sessions: [] }
+    }
+    if (method === 'agentSession.restartResumable') {
+      return phase === 'offered'
+        ? { sessions: [row('s1', 'own'), ...others], failed: [] }
+        : { sessions: others, failed: phase === 'failed' ? [failed] : [] }
+    }
+    if (phase === 'offered') {
+      phase = 'failed'
+      return {
+        continued: [{ sessionId: 's1', outcome: 'refused' }],
+        sessions: others,
+        failed: [failed]
+      }
+    }
+    phase = 'retried'
+    return { continued: [{ sessionId: 's1', outcome: 'continued' }], sessions: others, failed: [] }
+  })
+  await stageReads()
+  await open('environment:studio')
+  await act(async () => button('Resume 1 chat').click())
+  await vi.waitFor(() => expect(toast).toHaveBeenCalled())
+  expect(vi.mocked(toast).mock.calls).toEqual([
+    [
+      '1 chat on studio-mac couldn’t be resumed',
+      { action: { label: 'Show', onClick: expect.any(Function) } }
+    ]
+  ])
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+
+  await act(async () => lastToastShow()?.())
+  await vi.waitFor(() =>
+    expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({
+      origin: 'user',
+      focus: 'environment:studio'
+    })
+  )
+  const dialog = document.querySelector('[role="dialog"]')
+  expect(dialog?.textContent).toContain('studio-mac')
+  expect(dialog?.textContent).toContain('Prompt s1')
+
+  await act(async () => button('Retry').click())
+  await vi.waitFor(() => expect(toast).toHaveBeenCalledTimes(2))
+  expect(actionCalls('agentSession.restartContinue').at(-1)).toEqual([
+    { kind: 'environment', environmentId: 'studio' },
+    { sessionIds: ['s1'] }
+  ])
+  expect(vi.mocked(toast).mock.calls[1]).toEqual(['Resumed 1 chat on studio-mac'])
 })
