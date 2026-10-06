@@ -11,6 +11,7 @@ import type { WorktreeCardProps } from './worktree-card-model'
 import type { useWorktreeCardFoundation } from './use-worktree-card-foundation'
 import type { useWorktreeCardLinkedDetails } from './use-worktree-card-linked-details'
 import type { useWorktreeCardReviewDetails } from './use-worktree-card-review-details'
+import { hasInlineWorktreeAgentRows } from './worktree-card-spacing'
 
 type Foundation = ReturnType<typeof useWorktreeCardFoundation>
 type LinkedDetails = ReturnType<typeof useWorktreeCardLinkedDetails>
@@ -90,7 +91,11 @@ export function useWorktreeCardSecondaryDetails({
   const metaAutomationProvenance = showAutomation ? worktree.automationProvenance : null
   const metaCliProvenance = showCli ? worktree.cliProvenance : null
   const metaComment = showComment ? hoverComment : null
-  const showInlineAgentList = cardProps.includes('inline-agents') && (newCardStyle || !compactCards)
+  const showInlineAgentList = hasInlineWorktreeAgentRows({
+    cardProperties: cardProps,
+    newCardStyle,
+    compactCards
+  })
   const compactInlineAgentRows = useWorktreeAgentRows(
     worktree.id,
     showInlineAgentList && agentActivityDisplayMode === 'compact'
@@ -239,7 +244,12 @@ export function useWorktreeCardSecondaryDetails({
     cliProvenance: metaCliProvenance
   })
   const hasPorts = showPorts && workspacePorts.length > 0
-  const cacheStartedAt = usePromptCacheCountdownStartedAt(worktree.id, showAggregateCacheTimer)
+  // Hidden live metadata still determines the sidebar's header padding.
+  const cacheStartedAtForSurfacePadding = usePromptCacheCountdownStartedAt(
+    worktree.id,
+    !compactCards && !compactInlineAgentRowsVisible
+  )
+  const cacheStartedAt = showAggregateCacheTimer ? cacheStartedAtForSurfacePadding : null
   // Why: derived from the settings the card already subscribes to — a third store
   // subscription for this one field costs a listener per card on every store write.
   const cacheTtlMs = showAggregateCacheTimer ? (settings?.promptCacheTtlMs ?? 0) : 0
@@ -271,6 +281,7 @@ export function useWorktreeCardSecondaryDetails({
     handleOpenLinearIssueInOrca,
     hasDetails,
     hasPorts,
+    cacheTimerAffectsSurfacePadding: cacheStartedAtForSurfacePadding != null,
     cacheStartedAt,
     cacheTtlMs
   }
