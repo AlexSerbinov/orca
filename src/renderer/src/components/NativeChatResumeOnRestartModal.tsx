@@ -75,8 +75,8 @@ import {
  * anything left.
  *
  * Closing is a SNOOZE, so looking around before deciding cannot remove the recovery. Dismiss is the
- * explicit path that deletes the durable records: the user's own and the machine's, never another
- * device's or an automation's.
+ * explicit path that deletes the durable records, and only the user's own; any other chat ends when
+ * it moves on, when its tab is closed, or by its own row's dismiss.
  */
 
 export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
@@ -162,11 +162,14 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
         .map((machine) => ({ machine, ids: dismissedRows(machine) })),
     [machines, resuming]
   )
-  // "Dismiss all" only when it clears every chat listed; another device's or an automation's chats
-  // stay for their owner, and the button must not claim otherwise.
+  // "Dismiss all" only when it clears every chat listed; any chat not the user's own (another
+  // device's, an automation's, the server's, or one whose owner the host could not say) stays, and
+  // the button must not claim otherwise. With nothing of the user's listed it clears nothing, so it
+  // stays put but disabled; each such row's own dismiss is the way out.
   const dismissesEverything = dismissals.every(
     (entry) => entry.ids.length === entry.machine.rows.length
   )
+  const dismissesNothing = dismissals.every((entry) => entry.ids.length === 0)
   const chosenCount = chosen.reduce((total, entry) => total + entry.ids.length, 0)
 
   const toggle = useCallback((identity: string, sessionId: string, checked: boolean) => {
@@ -407,7 +410,12 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
               </span>
             </label>
             {/* Quiet, explicit cleanup of the durable records. */}
-            <Button variant="ghost" size="sm" disabled={allBusy} onClick={() => void dismissAll()}>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={allBusy || dismissesNothing}
+              onClick={() => void dismissAll()}
+            >
               {dismissesEverything
                 ? translate(
                     'auto.components.NativeChatResumeOnRestartModal.dismissAll',

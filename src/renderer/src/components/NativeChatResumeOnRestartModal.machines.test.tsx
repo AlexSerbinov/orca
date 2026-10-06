@@ -360,3 +360,15 @@ it('names the machine on its row whenever chats are grouped by machine, even a s
   expect(machineRow('Local').textContent).toContain('Local')
   expect(machineRow('studio-mac')).toBeTruthy()
 })
+
+// With nothing of the user's listed, Dismiss would clear nothing and only close the dialog; it stays
+// in place, disabled, and each row's own dismiss is the way out.
+it('disables Dismiss when no listed chat is the user’s own', async () => {
+  localRows = []
+  await stage({ studio: [row('s2', 'other-device'), row('s3', 'automation')] })
+  await open(null)
+  expect(button('Dismiss').disabled).toBe(true)
+  await act(async () => button('Dismiss').click())
+  expect(actionCalls('agentSession.restartResumableDismiss')).toEqual([])
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+})
