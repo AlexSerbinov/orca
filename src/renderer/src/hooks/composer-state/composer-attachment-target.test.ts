@@ -66,6 +66,24 @@ describe('composer attachment destination', () => {
       settings: { activeRuntimeEnvironmentId: 'folder-host' }
     })
   })
+  it.each(['/folder/source-repo', '/outside/source-repo'])(
+    'keeps folder attachments in the project when the task source is %s',
+    (sourcePath) => {
+      expect(
+        resolveComposerAttachmentTarget({
+          ...selected,
+          selectedRepoPath: sourcePath,
+          selectedProjectGroup: { ...group, connectionId: 'ssh-a' }
+        }).path
+      ).toBe('/folder')
+    }
+  )
+  it('keeps the folder destination unchanged when the task source repository changes', () => {
+    const input = { ...selected, selectedProjectGroup: { ...group, connectionId: 'ssh-a' } }
+    expect(
+      resolveComposerAttachmentTarget({ ...input, selectedRepoPath: '/folder/first' })
+    ).toEqual(resolveComposerAttachmentTarget({ ...input, selectedRepoPath: '/outside/second' }))
+  })
   it('keeps a missing selection unresolved', () => {
     expect(
       resolveComposerAttachmentTarget({

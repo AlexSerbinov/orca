@@ -8,12 +8,17 @@ import { translate } from '@/i18n/i18n'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import { findKnownWorktreeById } from '@/store/slices/worktrees/listing/detected-worktree-meta'
 import {
+  parseExecutionHostId,
   toRuntimeExecutionHostId,
   toSshExecutionHostId,
   type ExecutionHostId
 } from '../../../../shared/execution-host'
 import { getConnectionIdFromState } from '@/lib/connection-context'
-import { getExplicitRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import {
+  getExplicitRuntimeEnvironmentIdForWorktree,
+  getKnownExecutionHostIdForWorktree
+} from '@/lib/worktree-runtime-owner'
+import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import type { AppState } from '@/store/types'
 import { reportTerminalDropUploadSkipsAndFailures } from '../terminal-pane/terminal-drop-upload-report'
 import { findTerminalTabWorktreeId } from './native-chat-file-link'
@@ -68,6 +73,9 @@ export function resolveNativeChatAttachmentHost(
   state: NativeChatAttachmentOwnerState,
   worktreeId: string
 ): ExecutionHostId | null {
+  if (worktreeId === FLOATING_TERMINAL_WORKTREE_ID) {
+    return getKnownExecutionHostIdForWorktree(state, worktreeId)
+  }
   const runtimeId = getExplicitRuntimeEnvironmentIdForWorktree(state, worktreeId)
   const connectionId = getConnectionIdFromState(state, worktreeId)
   if (!runtimeId && connectionId === undefined) {
@@ -89,15 +97,18 @@ export function resolveNativeChatAttachmentOwnerForWorktree(
   if (!hostId) {
     return { kind: 'not-ready' }
   }
-  if (getExplicitRuntimeEnvironmentIdForWorktree(state, worktreeId)) {
+  if (parseExecutionHostId(hostId)?.kind === 'runtime') {
     return { kind: 'runtime' }
+  }
+  if (hostId === 'local') {
+    return { kind: 'local' }
   }
   const connectionId = getConnectionIdFromState(state, worktreeId)
   if (connectionId === undefined) {
     return { kind: 'not-ready' }
   }
   if (connectionId === null) {
-    return { kind: 'local' }
+    return { kind: 'not-ready' }
   }
   const worktreePath = findKnownWorktreeById(state, worktreeId, hostId)?.path
   if (!worktreePath) {

@@ -53,14 +53,7 @@ export function NativeChatPaneFileDropSurface({
   const attachOwner = useOsFileDropOwner(ownerRef, {
     consumer: 'agent',
     sequence,
-    canAccept: Boolean(registration && !registration.getClaim().disabled),
-    onRefused: () =>
-      toast.error(
-        translate(
-          'components.native-chat.composer.dropUnavailable',
-          'This chat cannot accept attachments right now.'
-        )
-      ),
+    canAccept: () => Boolean(registration && !registration.getClaim().disabled),
     captureDestination: () => registration?.getClaim().captureExternalDrop(),
     onDrop: async (prepared, { destination }) => {
       setIsDragActive(false)

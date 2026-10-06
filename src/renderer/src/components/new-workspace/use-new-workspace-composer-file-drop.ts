@@ -1,5 +1,4 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { translate } from '@/i18n/i18n'
 import { toast } from 'sonner'
 import { createOsFileDropSequence, useOsFileDropOwner } from '@/hooks/use-os-file-drop-owner'
 import { getNativeFileDropRejectionMessage } from '@/hooks/useGlobalFileDrop'
@@ -27,13 +26,6 @@ export function useNewWorkspaceComposerFileDrop(args: Args) {
     consumer: 'agent',
     sequence,
     canAccept: Boolean(args.projectPath && args.hostId),
-    onRefused: () =>
-      toast.error(
-        translate(
-          'auto.hooks.useComposerState.3db83fc58a',
-          'No project path is available on this host for attachments.'
-        )
-      ),
     captureDestination: () => {
       const connectionId = args.connectionId
       const host = parseExecutionHostId(args.hostId)

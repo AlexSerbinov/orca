@@ -17737,8 +17737,7 @@
         "imagePreviewUnavailable": "プレビューは利用できません",
         "workspaceAttachmentMismatch": "ファイルはソースワークスペースにのみ添付できます。",
         "attachmentOwnerChanged": "このワークスペースは接続中にホストを変更しました。ファイルを再度ドロップしてください。",
-        "attachmentUnreadable": "ドロップされたファイルを読み取れませんでした。",
-        "dropUnavailable": "このチャットでは現在、添付ファイルを追加できません。"
+        "attachmentUnreadable": "ドロップされたファイルを読み取れませんでした。"
       },
       "tool": {
         "running": "実行中…",

@@ -4,6 +4,15 @@ import { act, renderHook } from '@testing-library/react'
 import { useNewWorkspaceComposerFileDrop } from './new-workspace/use-new-workspace-composer-file-drop'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderCard, unmountCard } from './NewWorkspaceComposerCard.test-fixture'
+import { createRef } from 'react'
+import { resolveComposerAttachmentTarget } from '../hooks/composer-state/composer-attachment-target'
+import { useAttachmentDropState } from '../hooks/composer-state/attachment-drop-state'
+import type { ProjectGroup } from '../../../shared/project-group-types'
+
+const uploads = vi.hoisted(() => ({ importPaths: vi.fn() }))
+vi.mock('@/runtime/runtime-file-client', () => ({
+  importExternalPathsToRuntime: uploads.importPaths
+}))
 
 vi.mock('@/store', () => ({
   useAppStore: Object.assign(
@@ -50,6 +59,15 @@ beforeEach(() => {
   vi.clearAllMocks()
   connections.clear()
   runtimeConnections.clear()
+  uploads.importPaths.mockResolvedValue({
+    results: [
+      {
+        status: 'imported',
+        destPath: '/folder/.orca/drops/a.txt',
+        kind: 'file'
+      }
+    ]
+  })
   vi.stubGlobal('api', {
     getPathForFile: (file: File) => `/drop/${file.name}`,
     fs: { prepareDroppedPaths: prepare }
@@ -85,6 +103,86 @@ async function drop(container: HTMLDivElement) {
   })
 }
 describe('new workspace card file drop ownership', () => {
+  it.each([
+    ['/folder/source-repo', false],
+    ['/outside/source-repo', false],
+    ['/folder/source-repo', true],
+    ['/outside/source-repo', true]
+  ] as const)(
+    'uploads into the selected folder project with task source %s (changes during preparation: %s)',
+    async (sourcePath, changesSource) => {
+      const attach = vi.fn()
+      const group: ProjectGroup = {
+        id: 'folder-project',
+        name: 'Folder',
+        parentPath: '/folder',
+        connectionId: 'ssh-a',
+        parentGroupId: null,
+        createdFrom: 'manual',
+        tabOrder: 0,
+        isCollapsed: false,
+        color: null,
+        createdAt: 0,
+        updatedAt: 0
+      }
+      connections.set('ssh-a', { connectionGeneration: 1 })
+      const initialProps: { source: string } = { source: sourcePath }
+      const hook = renderHook(
+        ({ source }: { source: string }) => {
+          const target = resolveComposerAttachmentTarget({
+            selectedProjectGroup: group,
+            selectedRepoPath: source,
+            selectedRepoExecutionHostId: 'ssh:ssh-a',
+            selectedRepoSettings: {},
+            connectionId: 'ssh-a'
+          })
+          const dropState = useAttachmentDropState({
+            agentPromptRef: { current: '' },
+            cancelPromptCaretFrame: () => {},
+            promptCaretFrameRef: { current: null },
+            promptTextareaRef: createRef<HTMLTextAreaElement>(),
+            connectionId: target.connectionId,
+            selectedRepoPath: target.path ?? undefined,
+            selectedRepoSettings: target.settings,
+            setAgentPrompt: () => {},
+            setAttachmentPaths: attach
+          })
+          return useNewWorkspaceComposerFileDrop({
+            projectPath: target.path,
+            hostId: target.hostId,
+            connectionId: target.connectionId,
+            applyDrop: dropState.applyNativeDrop
+          })
+        },
+        { initialProps }
+      )
+      const owner = document.createElement('div')
+      const textarea = document.createElement('textarea')
+      owner.append(textarea)
+      document.body.append(owner)
+      act(() => hook.result.current(owner))
+      try {
+        const gate = Promise.withResolvers<{ paths: string[]; failures: never[] }>()
+        prepare.mockImplementationOnce(() => gate.promise)
+        await drop(owner)
+        if (changesSource) {
+          hook.rerender({ source: '/different-task-source' })
+        }
+        await act(async () => gate.resolve({ paths: ['/drop/a.txt'], failures: [] }))
+        expect(uploads.importPaths).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({ worktreePath: '/folder', connectionId: 'ssh-a' }),
+          ['/drop/a.txt'],
+          '/folder/.orca/drops',
+          expect.any(Object)
+        )
+        expect(attach).toHaveBeenCalledOnce()
+      } finally {
+        act(() => hook.result.current(null))
+        hook.unmount()
+        owner.remove()
+      }
+    }
+  )
   it('delivers to the card under the cursor even when another card mounts later', async () => {
     const first = vi.fn(async () => {})
     const second = vi.fn(async () => {})

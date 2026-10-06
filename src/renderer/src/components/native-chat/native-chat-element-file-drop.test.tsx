@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { act, cleanup, render } from '@testing-library/react'
-import { useRef } from 'react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
@@ -10,6 +10,7 @@ import {
   useNativeChatPaneFileDropClaim
 } from './NativeChatPaneFileDropSurface'
 import { NativeChatPromptEditor } from './NativeChatPromptEditor'
+import { useNewWorkspaceComposerFileDrop } from '../new-workspace/use-new-workspace-composer-file-drop'
 
 const electron = vi.hoisted(() => ({
   on: vi.fn(),
@@ -85,6 +86,37 @@ async function drop(target: Element, types = ['Files']) {
   })
   return event
 }
+function dragEvent(target: Element, type: string, transfer: { dropEffect: string }): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true, composed: true })
+  Object.defineProperty(event, 'isTrusted', { value: true })
+  Object.defineProperty(event, 'dataTransfer', { value: transfer })
+  target.dispatchEvent(event)
+  return event
+}
+function negotiateAndRelease(target: Element) {
+  const transfer = { types: ['Files'], files: [new File(['x'], 'a.png')], dropEffect: 'move' }
+  const hover = dragEvent(target, 'dragover', transfer)
+  const release = dragEvent(target, transfer.dropEffect === 'none' ? 'dragleave' : 'drop', transfer)
+  return { hover, release, transfer }
+}
+function AvailabilityComposer({ attach }: { attach: (paths: string[]) => void }) {
+  const [disabled, setDisabled] = useState(true)
+  return (
+    <>
+      <button onClick={() => setDisabled((value) => !value)}>Toggle availability</button>
+      <Composer attach={attach} disabled={disabled} />
+    </>
+  )
+}
+function WorkspaceWithoutPath({ attach }: { attach: () => Promise<void> }) {
+  const owner = useNewWorkspaceComposerFileDrop({
+    projectPath: null,
+    hostId: 'local',
+    connectionId: null,
+    applyDrop: attach
+  })
+  return <div ref={owner} className="workspace-card" />
+}
 beforeAll(() => installNativeFileDropHandlers())
 beforeEach(() => {
   vi.clearAllMocks()
@@ -141,7 +173,7 @@ describe('element-owned native chat drops', () => {
     }
   })
   it.each([false, true])(
-    'claims and reports a refused drop when composer disabled is %s',
+    'refuses by cursor only through dragover and release when composer disabled is %s',
     async (disabled) => {
       const attach = vi.fn()
       const view = render(
@@ -151,16 +183,68 @@ describe('element-owned native chat drops', () => {
           </NativeChatPaneFileDropSurface>
         </div>
       )
-      const event = await drop(view.container.querySelector('.chat')!)
-      expect(event.defaultPrevented).toBe(true)
-      expect(toast.error).toHaveBeenCalledExactlyOnceWith(
-        'This chat cannot accept attachments right now.'
-      )
+      const target = view.container.querySelector('.chat')!
+      let gesture: ReturnType<typeof negotiateAndRelease> | undefined
+      await act(async () => {
+        gesture = negotiateAndRelease(target)
+      })
+      expect(gesture?.hover.defaultPrevented).toBe(true)
+      expect(gesture?.transfer.dropEffect).toBe('none')
+      expect(gesture?.release.type).toBe('dragleave')
+      // A late delivered drop must preserve the same silent refusal barrier.
+      await drop(target)
+      expect(toast.error).not.toHaveBeenCalled()
       expect(attach).not.toHaveBeenCalled()
       expect(prepare).not.toHaveBeenCalled()
       expect(electron.send).not.toHaveBeenCalled()
     }
   )
+  it('keeps a workspace card without a path silent and out of the legacy terminal relay', async () => {
+    const attach = vi.fn(async () => {})
+    const view = render(
+      <div data-native-file-drop-target="terminal">
+        <WorkspaceWithoutPath attach={attach} />
+      </div>
+    )
+    const target = view.container.querySelector('.workspace-card')!
+    let gesture: ReturnType<typeof negotiateAndRelease> | undefined
+    await act(async () => {
+      gesture = negotiateAndRelease(target)
+    })
+    expect(gesture?.hover.defaultPrevented).toBe(true)
+    expect(gesture?.transfer.dropEffect).toBe('none')
+    expect(gesture?.release.type).toBe('dragleave')
+    await drop(target)
+    expect(attach).not.toHaveBeenCalled()
+    expect(prepare).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(electron.send).not.toHaveBeenCalled()
+  })
+  it('reads child-only availability changes on the immediate dragover and drop', async () => {
+    const attach = vi.fn()
+    const view = render(
+      <NativeChatPaneFileDropSurface className="chat">
+        <AvailabilityComposer attach={attach} />
+      </NativeChatPaneFileDropSurface>
+    )
+    const target = view.container.querySelector('.ProseMirror')!
+    const refused = negotiateAndRelease(target)
+    expect(refused.transfer.dropEffect).toBe('none')
+    expect(prepare).not.toHaveBeenCalled()
+    fireEvent.click(view.getByText('Toggle availability'))
+    let accepted: ReturnType<typeof negotiateAndRelease> | undefined
+    await act(async () => {
+      accepted = negotiateAndRelease(target)
+    })
+    expect(accepted?.transfer.dropEffect).toBe('copy')
+    expect(accepted?.release.type).toBe('drop')
+    expect(attach).toHaveBeenCalledExactlyOnceWith(['/drop/a.png'])
+    fireEvent.click(view.getByText('Toggle availability'))
+    await drop(target)
+    expect(attach).toHaveBeenCalledOnce()
+    expect(prepare).toHaveBeenCalledOnce()
+    expect(electron.send).not.toHaveBeenCalled()
+  })
   it('attaches hybrid Files and HTML without inserting HTML into the real editor', async () => {
     const attach = vi.fn()
     const view = render(<Chat attach={attach} />)

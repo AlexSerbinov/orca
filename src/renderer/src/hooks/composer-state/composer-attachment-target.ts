@@ -16,7 +16,7 @@ export function resolveComposerAttachmentTarget(input: TargetInput) {
   const host = parseExecutionHostId(hostId)
   return {
     hostId,
-    path: input.selectedRepoPath ?? group?.parentPath ?? null,
+    path: group ? group.parentPath : (input.selectedRepoPath ?? null),
     connectionId: group
       ? host?.kind === 'runtime'
         ? null
