@@ -23,6 +23,7 @@ import {
 } from '../../../../shared/native-chat-turn-fold'
 import { nativeChatRowRendersContent } from '../../../../shared/native-chat-row-content'
 import {
+  type NativeChatRowTypography,
   estimateNativeChatRowHeight,
   nativeChatRowContentMetrics
 } from './native-chat-row-height-estimate'
@@ -82,6 +83,7 @@ export type NativeChatMessageSlot = {
 
 export type NativeChatTranscriptSlotsInput = {
   messages: readonly NativeChatMessage[]
+  typography?: NativeChatRowTypography
   turnKeys: readonly (string | undefined)[]
   /** The live turn (`nativeChatTurnMembership`): its bar carries the running clock and its rows
    *  stay live. Undefined when no row has opened one. */
@@ -106,6 +108,7 @@ export function buildNativeChatTranscriptSlots(
 ): NativeChatTranscriptSlot[] {
   const {
     messages,
+    typography,
     turnKeys,
     liveTurnKey,
     receipts,
@@ -169,7 +172,14 @@ export function buildNativeChatTranscriptSlots(
   })
   const slots: NativeChatTranscriptSlot[] = []
   const live = nativeChatSubagentLiveSections(messages, sections, isWorking || lifecycleWorking)
-  const sectionSlots = nativeChatSubagentSectionSlots({ sections, choices, live, receipts, slots })
+  const sectionSlots = nativeChatSubagentSectionSlots({
+    sections,
+    choices,
+    live,
+    receipts,
+    slots,
+    typography
+  })
   const pending = [...(sections.openAt.get(null) ?? [])]
   for (const [index, message] of messages.entries()) {
     sectionSlots.openBefore(pending, message, 0)
@@ -213,12 +223,16 @@ export function buildNativeChatTranscriptSlots(
         turnDiff,
         subagentRoster: roster,
         depth: 0,
-        estimatedHeight: estimateNativeChatRowHeight(nativeChatRowContentMetrics(message), {
-          hasReceipt: receipt !== undefined,
-          hasStatus: status !== undefined,
-          hasTurnDiff: turnDiff !== undefined,
-          folded
-        })
+        estimatedHeight: estimateNativeChatRowHeight(
+          nativeChatRowContentMetrics(message, typography),
+          {
+            hasReceipt: receipt !== undefined,
+            hasStatus: status !== undefined,
+            hasTurnDiff: turnDiff !== undefined,
+            folded
+          },
+          typography
+        )
       })
     }
     sectionSlots.openAnchoredAt(message, roster, turnKey)

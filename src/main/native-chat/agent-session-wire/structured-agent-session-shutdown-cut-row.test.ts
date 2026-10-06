@@ -33,6 +33,7 @@ import {
   HOST_TEST_THREAD as THREAD
 } from './structured-agent-session-host-test-data'
 import { createStructuredAgentSessionLogger } from './structured-agent-session-logger'
+import { claudeAndCodexDeclared } from './structured-agent-session-adapter-router-test-support'
 
 const CUT_TURN = { provider: 'codex' as const, threadId: THREAD, turnId: 'cut-turn', ordinal: 1 }
 const LEGACY_TEXT =
@@ -46,6 +47,7 @@ beforeEach(() => {
   const state = hostTestState()
   providerEnd = { state: 'interrupted', completedAt: HOST_TEST_NOW }
   host = new StructuredAgentSessionHost({
+    agents: claudeAndCodexDeclared(),
     logger: createStructuredAgentSessionLogger(),
     store: state.store,
     adapter: {
@@ -104,6 +106,7 @@ async function restartAfterDeath(): Promise<void> {
   beginAgentSessionRuntimeIncarnationForTest()
   const store = await openTestAgentSessionRecordStore(root)
   host = new StructuredAgentSessionHost({
+    agents: claudeAndCodexDeclared(),
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: adapter(),
