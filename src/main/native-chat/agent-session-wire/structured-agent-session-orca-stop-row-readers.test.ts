@@ -78,6 +78,7 @@ describe('the row a host writes for a cut it knows the cause of', () => {
       turnKey: item.itemId === read[0]!.itemId ? undefined : TURN,
       role: item.body.kind === 'message' ? item.body.role : ('system' as const),
       rendersProse: item.body.kind !== 'turn',
+      draws: true,
       outlivesTurn: false,
       reportsFailure: item.body.kind === 'status' && item.body.tone === 'error',
       explainsTurn: false
