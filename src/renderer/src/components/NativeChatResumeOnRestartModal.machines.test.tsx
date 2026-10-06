@@ -173,27 +173,51 @@ it('resumes each machine’s picked chats on that machine, and the machine box p
   ])
 })
 
-// Only another device's chats stay for their owner, on this computer as on a server: the user's
-// own, the machine's and an automation's go. The button says only what it does.
-it('dismisses everything but another device’s chats, on every machine', async () => {
+// Dismiss all clears only the user's own chats, on this computer as on a server; another
+// device's, an automation's and the server's own stay for their owner, and the button says so.
+it('dismisses only the user’s own chats, on every machine', async () => {
   localRows = [row('l1', 'own'), row('l2', 'other-device'), row('l3', 'automation')]
   await stage({ studio: [...SERVER_ROWS, row('s4', 'server-made')] })
   await open(null)
   await act(async () => button('Dismiss').click())
   const listed = (sessionId: string) => ({ sessionId, recordedAt: 1_800_000_000_000 })
   expect(actionCalls('agentSession.restartResumableDismiss')).toEqual([
-    [{ kind: 'local' }, { sessionIds: ['l1', 'l3'], offers: [listed('l1'), listed('l3')] }],
+    [{ kind: 'local' }, { sessionIds: ['l1'], offers: [listed('l1')] }],
     [
       { kind: 'environment', environmentId: 'studio' },
-      { sessionIds: ['s1', 's3', 's4'], offers: [listed('s1'), listed('s3'), listed('s4')] }
+      { sessionIds: ['s1'], offers: [listed('s1')] }
     ]
   ])
 })
 
-it('keeps "Dismiss all" when no other device’s chat stays listed', async () => {
+// What Dismiss all leaves has its own way out: its row's dismiss forgets exactly that offer.
+it('dismisses a chat that is not the user’s from its own row, and offers no such control on theirs', async () => {
   await stage({ studio: [row('s1', 'own'), row('s2', 'automation')] })
+  await open('environment:studio')
+  const rowDismiss = (prompt: string) =>
+    [...document.querySelectorAll('button')].find(
+      (entry) =>
+        entry.getAttribute('aria-label') === `Dismiss "${prompt}" in workspace-s${prompt.at(-1)}`
+    )
+  expect(rowDismiss('Prompt s1')).toBeUndefined()
+  await act(async () => rowDismiss('Prompt s2')?.click())
+  expect(actionCalls('agentSession.restartResumableDismiss')).toEqual([
+    [
+      { kind: 'environment', environmentId: 'studio' },
+      {
+        sessionIds: ['s2'],
+        offers: [{ sessionId: 's2', recordedAt: 1_800_000_000_000 }]
+      }
+    ]
+  ])
+})
+
+it('says "Dismiss all" only when every listed chat is the user’s own', async () => {
+  await stage({ studio: [row('s1', 'own')] })
   await open(null)
   expect(button('Dismiss all')).toBeTruthy()
+  await stage({ studio: [row('s1', 'own'), row('s2', 'automation')] })
+  expect(button('Dismiss')).toBeTruthy()
 })
 
 it('reports one resume across machines in one notice', async () => {

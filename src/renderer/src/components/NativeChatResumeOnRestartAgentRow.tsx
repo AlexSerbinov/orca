@@ -9,7 +9,11 @@ import {
   resumeFailureSelectable,
   type ResumeFailureAction
 } from './native-chat-resume-failure-guidance'
-import { ResumeFailureGuidanceLine, ResumeFailureStatus } from './NativeChatResumeFailureDetails'
+import {
+  ResumeFailureGuidanceLine,
+  ResumeFailureStatus,
+  ResumeRowDismiss
+} from './NativeChatResumeFailureDetails'
 import { resumeActivityLabel } from './native-chat-resume-activity-label'
 
 /**
@@ -107,10 +111,23 @@ export function ResumeCandidateRow({
       </span>
     </label>
   )
-  if (!failure) {
-    return <li>{row}</li>
-  }
   const act = (action: ResumeFailureAction) => onFailureAction?.(action, candidate.sessionId)
+  if (!failure) {
+    // A chat that is not the user's is never cleared by Dismiss all; its own control ends it here.
+    return originLabel && onFailureAction ? (
+      <li className="flex items-center gap-1">
+        {row}
+        <ResumeRowDismiss
+          title={title}
+          workspaceName={workspaceName}
+          disabled={disabled}
+          onDismiss={() => act('dismiss')}
+        />
+      </li>
+    ) : (
+      <li>{row}</li>
+    )
+  }
   return (
     <li className="flex flex-col">
       {/* Outside the label, so pressing them never toggles the checkbox. */}

@@ -76,14 +76,11 @@ export function chosenResumeRows(
   )
 }
 
-/** What Dismiss forgets on one machine, each chat named with the interruption it listed: everything
- *  but another device's chats (and any whose owner the host could not say), which stay listed for
- *  their owner, on this computer as on a shared server. */
+/** What Dismiss forgets on one machine, each chat named with the interruption it listed: only the
+ *  user's own. Any other chat ends when it moves on, when its tab is closed, or by its own row's
+ *  dismiss. */
 export function dismissedRows(machine: ResumeSelectionMachine): string[] {
   return machine.rows
-    .filter((row) => {
-      const ownership = machine.ownershipFor(row.sessionId)
-      return ownership !== 'other-device' && ownership !== 'unknown'
-    })
+    .filter((row) => machine.ownershipFor(row.sessionId) === 'own')
     .map((row) => row.sessionId)
 }

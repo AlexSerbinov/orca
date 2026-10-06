@@ -611,7 +611,7 @@ it("asks for this computer's launch turn and decides the wait when its read deci
 
 // The launch asks about the user's own chats here; an automation's or another device's alone never
 // open the dialog, launch after launch.
-it.each(['automation', 'other-device'] as const)(
+it.each(['automation', 'other-device', 'server-made'] as const)(
   'never raises the launch dialog for chats here that are only %s',
   async (origin) => {
     mocks.rpc.mockImplementation(async (target) =>
