@@ -1,5 +1,5 @@
 import type { PathExistenceResult } from '../../shared/path-existence-batch'
-import { ipcRenderer } from 'electron'
+import { ipcRenderer, webUtils } from 'electron'
 import type {
   PrepareDroppedPathsRequest,
   PreparedDroppedPaths
@@ -23,6 +23,7 @@ import type {
 import type { PreloadApi } from '../api-types'
 
 export const fsApi = {
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   prepareDroppedPaths: (args: PrepareDroppedPathsRequest): Promise<PreparedDroppedPaths> =>
     ipcRenderer.invoke('fs:prepareDroppedPaths', args),
   readFileChunk: (args: {
