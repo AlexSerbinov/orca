@@ -264,10 +264,15 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
         {/* Wide enough for a sidebar card's chat row to keep its name, model and age on one line. */}
         <DialogContent
           className="grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-3xl max-h-[85vh]"
-          // Why: left to Radix, focus lands on the scrollable list (its first tabbable) and rings it.
+          // Keep the scrollable list out of initial focus, including while Resume is disabled.
           onOpenAutoFocus={(event) => {
             event.preventDefault()
-            resumeButtonRef.current?.focus()
+            const resumeButton = resumeButtonRef.current
+            if (resumeButton && !resumeButton.disabled) {
+              resumeButton.focus()
+            } else if (event.currentTarget instanceof HTMLElement) {
+              event.currentTarget.focus()
+            }
           }}
         >
           <DialogHeader>
@@ -306,7 +311,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
               'Chats that would be resumed'
             )}
             // The sidebar's own surface, so its cards read here as they do there.
-            className="min-h-0 overflow-y-auto scrollbar-sleek rounded-md border bg-worktree-sidebar p-1.5"
+            className="min-h-0 overflow-y-auto scrollbar-sleek rounded-md bg-worktree-sidebar p-1.5"
           >
             {flat ? (
               <ResumeOnRestartGroups

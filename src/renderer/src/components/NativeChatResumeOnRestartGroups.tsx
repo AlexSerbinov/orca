@@ -199,6 +199,14 @@ function WorkspaceCard({
     onFailureAction,
     originLabelFor
   } = rowProps
+  // Remote folders have no repo, so no title-row SSH identity can name their host.
+  const showHostLabel =
+    mixedHosts ||
+    (!repo &&
+      first &&
+      resumeWorkspaceKind(first) === 'folder' &&
+      hostId &&
+      hostId !== LOCAL_EXECUTION_HOST_ID)
   const rows = (
     <ul className="flex flex-col">
       {group.candidates.map((candidate) => (
@@ -259,7 +267,7 @@ function WorkspaceCard({
         readOnly
         // The repo header above already names it.
         hideRepoBadge
-        hostContextLabel={mixedHosts ? hostLabel : undefined}
+        hostContextLabel={showHostLabel ? hostLabel : undefined}
         nativeDragEnabled={false}
         flushSurface
         contentIndent={geometry.cardContentIndent}

@@ -31,6 +31,7 @@ type WorktreeCardSshHostControlProps = {
   sshOwnerEnvironmentId: string | null
   /** True when the row cannot afford a visible label: icon-only with an sr-only label. */
   iconOnly: boolean
+  interactive?: boolean
   onPointerDown: React.PointerEventHandler<HTMLButtonElement>
 }
 
@@ -38,30 +39,43 @@ type WorktreeCardSshHostControlProps = {
 // (WorktreeCard.tsx). States differ only by color token, so the pill never changes height.
 const PILL_BASE =
   'h-4 shrink-0 gap-0.5 rounded !px-0.5 text-[10px] font-medium leading-none has-[>svg]:!px-0.5'
+// Mirror Button's resting layout without its interaction variants.
+const PILL_LAYOUT =
+  "inline-flex items-center justify-center whitespace-nowrap transition-all outline-none px-4 py-2 has-[>svg]:px-3 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
 const PILL_QUIET =
   'text-muted-foreground border border-worktree-sidebar-border bg-worktree-sidebar shadow-none hover:bg-worktree-sidebar-accent hover:text-foreground focus-visible:border-worktree-sidebar-border focus-visible:ring-1 focus-visible:ring-worktree-sidebar-ring'
 const PILL_FAILED =
   'text-destructive border border-destructive/40 bg-destructive/10 hover:bg-destructive/15 hover:text-destructive focus-visible:border-destructive/40 focus-visible:ring-1 focus-visible:ring-worktree-sidebar-ring'
 
+const PILL_QUIET_STATIC =
+  'text-muted-foreground border border-worktree-sidebar-border bg-worktree-sidebar shadow-none'
+const PILL_FAILED_STATIC = 'text-destructive border border-destructive/40 bg-destructive/10'
+
 function PassiveGlyph({
   icon,
   tooltip,
   accessibleName,
-  targetLabel
+  targetLabel,
+  interactive
 }: {
   icon: React.ReactNode
   tooltip: string
   accessibleName: string
   targetLabel: string
+  interactive: boolean
 }): React.JSX.Element {
+  const glyph = (
+    <span className="shrink-0 inline-flex items-center" data-ssh-target-label={targetLabel}>
+      {icon}
+      <span className="sr-only">{accessibleName}</span>
+    </span>
+  )
+  if (!interactive) {
+    return glyph
+  }
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="shrink-0 inline-flex items-center" data-ssh-target-label={targetLabel}>
-          {icon}
-          <span className="sr-only">{accessibleName}</span>
-        </span>
-      </TooltipTrigger>
+      <TooltipTrigger asChild>{glyph}</TooltipTrigger>
       <TooltipContent side="right" sideOffset={8}>
         {tooltip}
       </TooltipContent>
@@ -76,6 +90,7 @@ export function WorktreeCardSshHostControl({
   targetRemoved,
   sshOwnerEnvironmentId,
   iconOnly,
+  interactive = true,
   onPointerDown
 }: WorktreeCardSshHostControlProps): React.JSX.Element | null {
   const setSshConnectionState = useAppStore((store) => store.setSshConnectionState)
@@ -140,6 +155,7 @@ export function WorktreeCardSshHostControl({
   if (status === null || status === 'connected') {
     return (
       <PassiveGlyph
+        interactive={interactive}
         targetLabel={targetLabel}
         icon={<Server className="size-3 text-muted-foreground" />}
         tooltip={translate(
@@ -161,6 +177,7 @@ export function WorktreeCardSshHostControl({
   if (targetRemoved) {
     return (
       <PassiveGlyph
+        interactive={interactive}
         targetLabel={targetLabel}
         icon={<ServerOff className="size-3 text-muted-foreground" />}
         tooltip={translate(
@@ -225,6 +242,33 @@ export function WorktreeCardSshHostControl({
           )
         : accessibleName
 
+  const content = (
+    <>
+      {connecting ? (
+        <Loader2 className="size-2.5 animate-spin motion-reduce:animate-none" />
+      ) : (
+        iconOnly && <ServerOff className="size-2.5" />
+      )}
+      {!iconOnly && <span className="text-left">{label}</span>}
+    </>
+  )
+  if (!interactive) {
+    return (
+      <span
+        className={cn(
+          PILL_LAYOUT,
+          PILL_BASE,
+          failed ? PILL_FAILED_STATIC : PILL_QUIET_STATIC,
+          iconOnly && 'w-4 justify-center !px-0 has-[>svg]:!px-0',
+          'cursor-default'
+        )}
+        data-ssh-target-label={targetLabel}
+      >
+        {content}
+        <span className="sr-only">{accessibleName}</span>
+      </span>
+    )
+  }
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -265,14 +309,7 @@ export function WorktreeCardSshHostControl({
             void handleConnect()
           }}
         >
-          {connecting ? (
-            <Loader2 className="size-2.5 animate-spin motion-reduce:animate-none" />
-          ) : (
-            iconOnly && <ServerOff className="size-2.5" />
-          )}
-          {/* Why: aria-label already names the control, so a second sr-only copy would be
-              dead markup; the label span exists only for sighted users. */}
-          {!iconOnly && <span className="text-left">{label}</span>}
+          {content}
         </Button>
       </TooltipTrigger>
       <TooltipContent side="right" sideOffset={8}>
