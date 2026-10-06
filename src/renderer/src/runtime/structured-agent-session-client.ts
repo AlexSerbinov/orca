@@ -107,6 +107,8 @@ const STRUCTURED_AGENT_SESSION_METHOD_TIMEOUT_MS: ReadonlyMap<string, number> = 
   ['agentSession.conversationCommand', 195_000],
   // The host may start an agent at rest before rewinding it, as it does for a command.
   ['agentSession.rewind', 195_000],
+  // The host answers once each continued chat's agent has started and taken the message.
+  ['agentSession.restartContinue', 195_000],
   // A waiting catalog read lasts as long as the host's listing: Claude's is 60 s, after up to 15 s
   // for an account switch to settle and 5 s of login-shell environment.
   ['agentSession.modelCatalog', 90_000]

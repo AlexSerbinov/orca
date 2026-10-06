@@ -5,7 +5,8 @@ import type { ResumeCandidate } from './native-chat-resume-on-restart-grouping'
 import { lastToastShow } from './native-chat-resume-toast.test-support'
 import {
   consumeNativeChatResumeOnRestartDialogRequest,
-  getNativeChatResumeOnRestartDialogRequest
+  getNativeChatResumeOnRestartDialogRequest,
+  subscribeNativeChatResumeOnRestartDialog
 } from './native-chat-resume-on-restart-dialog'
 import {
   forgetNativeChatRestartMachine,
@@ -14,6 +15,7 @@ import {
 } from './native-chat-resume-on-restart-store'
 import { continueNativeChatRestartOffers } from './native-chat-restart-offer-actions'
 import { _resetNativeChatRestartOffer } from './native-chat-restart-offer-triggers'
+import { reopenNativeChatRestartOffer } from './native-chat-restart-offer-reopen'
 import { replaceRuntimeEnvironmentRevisions } from '@/runtime/runtime-environment-revision'
 import { pairedEnvironment, verifiedConnection } from './native-chat-restart-offer-test-support'
 
@@ -64,6 +66,17 @@ function pairStudio(pairingRevision = 1): void {
   })
 }
 
+/** Every change to the dialog request from here on, so an open that closes again is seen. */
+function recordDialogRequests(): unknown[] {
+  const seen: unknown[] = []
+  unsubscribe = subscribeNativeChatResumeOnRestartDialog(() => {
+    seen.push(getNativeChatResumeOnRestartDialogRequest())
+  })
+  return seen
+}
+
+let unsubscribe = () => {}
+
 beforeEach(() => {
   rpc.mockReset()
   _resetNativeChatRestartOffer()
@@ -73,6 +86,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  unsubscribe()
+  unsubscribe = () => {}
   vi.mocked(console.warn).mockRestore()
   _resetNativeChatRestartOffer()
 })
@@ -155,8 +170,8 @@ it('raises no toast when the host had nothing left to resume', async () => {
 })
 
 // The agent was seen carrying on while the toast was up, so the host retired the failure: Show
-// re-reads, and the request it raised retires with the last row rather than latching.
-it('leaves no dialog request from Show once the host no longer lists the chat', async () => {
+// re-reads and opens nothing, rather than flashing a dialog with no rows to draw.
+it('opens nothing from Show once the host no longer lists the chat', async () => {
   let failed = [{ ...offered[0]!, failedAt: 1, outcome: 'unconfirmed', reason: 'unknown' }]
   rpc.mockImplementation(async (_target, method) =>
     method === 'agentSession.restartResumable'
@@ -169,10 +184,12 @@ it('leaves no dialog request from Show once the host no longer lists the chat', 
     'Couldn’t confirm 1 chat was resumed'
   ])
   failed = []
+  const requests = recordDialogRequests()
   lastToastShow()?.()
   await new Promise((resolve) => setTimeout(resolve, 0))
   expect(rpc.mock.calls.at(-1)?.[1]).toBe('agentSession.restartResumable')
   expect(getNativeChatRestartOffers().get('local')).toBeUndefined()
+  expect(requests).toEqual([])
   expect(getNativeChatResumeOnRestartDialogRequest()).toBeNull()
 })
 
@@ -216,4 +233,65 @@ it('ends a server’s marks when the desktop forgets it', async () => {
   await readNativeChatRestartMachine(STUDIO)
   expect(offerIds(`environment:${SERVER}`)).toEqual(['a', 'b'])
   expect(failedIds(`environment:${SERVER}`)).toEqual([])
+})
+
+// The host reserved the chats and carries on with them, but the answer never came back: the reserved
+// chats leave its list, so nothing may count them as failed or drop them. One toast still says so.
+it('counts a paired resume whose answer was lost as unconfirmed once the server stops listing it', async () => {
+  pairStudio()
+  let reserved = false
+  rpc.mockImplementation(async (_target, method) => {
+    if (method === 'agentSession.restartResumable') {
+      return { sessions: reserved ? [] : offered, failed: [] }
+    }
+    reserved = true
+    throw Object.assign(new Error('Timed out waiting for runtime response'), {
+      code: 'runtime_timeout'
+    })
+  })
+  await readNativeChatRestartMachine(STUDIO)
+  await continueNativeChatRestartOffers([
+    { machine: `environment:${SERVER}`, sessionIds: ['a', 'b'] }
+  ])
+  expect(vi.mocked(toast).mock.calls.map(([title]) => title)).toEqual([
+    'Couldn’t confirm 2 chats on studio-mac were resumed'
+  ])
+  expect(lastToastShow()).toBeDefined()
+})
+
+// The user's click is never lost to bookkeeping: a server out of contact opens on its last listing,
+// without a read that would hold the dialog back until it timed out.
+it('opens a disconnected server’s last listing from Show without reading it', async () => {
+  pairStudio()
+  rpc.mockResolvedValue({ sessions: offered, failed: [] })
+  await readNativeChatRestartMachine(STUDIO)
+  useAppStore.setState({ runtimeStatusByEnvironmentId: new Map() })
+  const reads = rpc.mock.calls.length
+  await reopenNativeChatRestartOffer([`environment:${SERVER}`])
+  expect(rpc.mock.calls).toHaveLength(reads)
+  expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({
+    origin: 'user',
+    focus: `environment:${SERVER}`
+  })
+})
+
+it('opens a connected server’s last listing when its re-read fails', async () => {
+  pairStudio()
+  rpc.mockResolvedValueOnce({ sessions: offered, failed: [] })
+  await readNativeChatRestartMachine(STUDIO)
+  rpc.mockRejectedValue(new Error('host unreachable'))
+  const requests = recordDialogRequests()
+  await reopenNativeChatRestartOffer([`environment:${SERVER}`])
+  expect(rpc.mock.calls.at(-1)?.[1]).toBe('agentSession.restartResumable')
+  expect(requests).toEqual([{ origin: 'user', focus: `environment:${SERVER}` }])
+})
+
+it('opens nothing for a connected server whose re-read lists nothing', async () => {
+  pairStudio()
+  rpc.mockResolvedValueOnce({ sessions: offered, failed: [] })
+  await readNativeChatRestartMachine(STUDIO)
+  rpc.mockResolvedValue({ sessions: [], failed: [] })
+  const requests = recordDialogRequests()
+  await reopenNativeChatRestartOffer([`environment:${SERVER}`])
+  expect(requests).toEqual([])
 })

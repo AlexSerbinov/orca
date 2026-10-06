@@ -212,6 +212,8 @@ it("the toast's buttons resume exactly the own chats there, or open the dialog o
   const options = vi.mocked(toast).mock.calls[0]?.[1]
   expect([label(options?.action), label(options?.cancel)]).toEqual(['Resume 1 chat', 'Show chats'])
   press(options?.cancel)
+  // It re-reads the server first, then opens over what it still lists.
+  await settle()
   expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ origin: 'user', focus: MACHINE })
   press(options?.action)
   await settle()
@@ -327,6 +329,7 @@ it('opens nothing from a toast whose chats are already gone', async () => {
   serveOffers([])
   await readNativeChatRestartMachine(TARGET)
   press(options?.cancel)
+  await settle()
   expect(getNativeChatResumeOnRestartDialogRequest()).toBeNull()
 })
 

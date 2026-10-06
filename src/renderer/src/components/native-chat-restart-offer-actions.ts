@@ -21,6 +21,7 @@ import {
   type RestartMachineFence
 } from './native-chat-restart-machine-fence'
 import { failedFrom, type HostOfferPayload } from './native-chat-restart-offer-payload'
+import type { ResumeFailure } from './native-chat-resume-on-restart-grouping'
 import {
   beginNativeChatRestartAction,
   getNativeChatRestartOffers,
@@ -28,10 +29,11 @@ import {
   readNativeChatRestartMachine,
   restartTicketPairingCurrent,
   type NativeChatRestartMachineOffer,
+  type RestartMachineRead,
   type RestartMachineTicket
 } from './native-chat-resume-on-restart-store'
 import { forgetUnsentResumes, markUnsentResumes } from './native-chat-resume-unsent-requests'
-import { reopenNativeChatRestartOffers } from './native-chat-restart-offer-reopen'
+import { reopenNativeChatRestartOffer } from './native-chat-restart-offer-reopen'
 
 /**
  * Acting on one machine's offer: continue the chats, or turn them down for good.
@@ -81,16 +83,41 @@ async function publishOrReread(
 
 /** The toast's Show: the dialog over a fresh read of the failing machine, or of every machine. */
 function showResult(machine: RestartMachineKey | null): void {
-  reopenNativeChatRestartOffers(machine ? [machine] : [...getNativeChatRestartOffers().keys()])
+  void reopenNativeChatRestartOffer(machine ? [machine] : undefined)
 }
 
 type ContinueReply = HostOfferPayload & { continued?: RestartContinuationOutcome[] }
+type RestartFailureRow = Pick<ResumeFailure, 'sessionId' | 'outcome'>
 
 export type RestartContinueRequest = {
   machine: RestartMachineKey
   sessionIds: readonly string[]
   /** What the notices count; by default the named chats. */
   reported?: readonly string[]
+}
+
+/** A lost request's chats as the re-read shows them: each one still offered was marked failed.
+ *  A paired server may have taken the request and be continuing chats it no longer lists, so those
+ *  are unconfirmed rather than dropped; a local request that failed reached nothing. */
+function lostRequestFailures(
+  read: RestartMachineRead,
+  lost: { machine: RestartMachineKey; requested: readonly string[] }
+): RestartFailureRow[] | undefined {
+  if (read.kind !== 'answered') {
+    return undefined
+  }
+  const offer = getNativeChatRestartOffers().get(lost.machine)
+  const failed = offer?.failed ?? []
+  if (restartMachineTarget(lost.machine).kind === 'local') {
+    return [...failed]
+  }
+  const listed = new Set([...(offer?.candidates ?? []), ...failed].map((row) => row.sessionId))
+  return [
+    ...failed,
+    ...lost.requested
+      .filter((sessionId) => !listed.has(sessionId))
+      .map((sessionId) => ({ sessionId, outcome: 'unconfirmed' as const }))
+  ]
 }
 
 async function continueOnMachine(
@@ -144,15 +171,10 @@ async function continueOnMachine(
       return { ...base, kind: 'not-sent' }
     }
     // The row's reason is this side's own code, so the real error is kept in the log.
-    console.warn('[native-chat-resume] resume request failed before reaching the chats', error)
+    console.warn('[native-chat-resume] resume request failed or its answer was lost', error)
     markUnsentResumes(machine, sessionIds, Date.now())
     const read = await readNativeChatRestartMachine(target)
-    // Nothing reached the chats, so each is a failure of this resume as the list now shows it.
-    const listed =
-      read.kind === 'answered'
-        ? (getNativeChatRestartOffers().get(machine)?.failed ?? [])
-        : undefined
-    return { ...base, kind: 'answered', results: [], hostFailed: listed }
+    return { ...base, kind: 'answered', results: [], hostFailed: lostRequestFailures(read, base) }
   } finally {
     settle()
   }

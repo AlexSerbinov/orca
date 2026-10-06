@@ -6,7 +6,7 @@ import {
   useNativeChatRestartOffers,
   useNativeChatRestartResuming
 } from '../native-chat-resume-on-restart-store'
-import { reopenNativeChatRestartOffers } from '../native-chat-restart-offer-reopen'
+import { reopenNativeChatRestartOffer } from '../native-chat-restart-offer-reopen'
 import { useNativeChatRestartOfferSources } from '../native-chat-restart-offer-triggers'
 import { LOCAL_RESTART_MACHINE, type RestartMachineKey } from '../native-chat-restart-machines'
 import { restartMachineNameFromState } from '../native-chat-restart-machine-name'
@@ -46,7 +46,7 @@ function Segment({
       <TooltipTrigger asChild>
         <button
           type="button"
-          onClick={() => reopenNativeChatRestartOffers(machines)}
+          onClick={() => void reopenNativeChatRestartOffer(machines)}
           className="inline-flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 hover:bg-accent/70"
           aria-label={ariaLabel}
         >

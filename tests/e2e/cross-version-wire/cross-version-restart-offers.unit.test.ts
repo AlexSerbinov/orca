@@ -73,14 +73,15 @@ describe('paired restart offers across versions', () => {
           const replies = await dismissNamed(build)
           expect(replies, `${build.label}: a dismiss naming a chat`).toHaveLength(1)
           expect(replies[0], `${build.label}: a dismiss naming a chat`).toMatchObject({ ok: true })
-          expect(hostCalls.restartResumableDismiss).toHaveBeenCalledWith([SESSION])
+          // Only the names are compared: a newer host also passes the caller's audience.
+          expect(hostCalls.restartResumableDismiss.mock.calls[0]?.[0]).toEqual([SESSION])
           // A desktop names each chat with the interruption it listed; `sessionIds` rides along.
           const listed = [{ sessionId: SESSION, recordedAt: 1 }]
           const witnessed = await dismissNamed(build, { sessionIds: [SESSION], offers: listed })
           expect(witnessed[0], `${build.label}: a dismiss naming listed offers`).toMatchObject({
             ok: true
           })
-          expect(hostCalls.restartResumableDismissListed).toHaveBeenCalledWith(listed)
+          expect(hostCalls.restartResumableDismissListed.mock.calls[0]?.[0]).toEqual(listed)
           expect(hostCalls.restartResumableDismiss).toHaveBeenCalledTimes(1)
         } finally {
           await build.installStructuredHost(null)

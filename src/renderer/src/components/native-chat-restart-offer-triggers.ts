@@ -38,7 +38,7 @@ import {
   settleRestartInterruptions
 } from './native-chat-restart-decided'
 import { announceReconnectRestartOffer } from './native-chat-restart-reconnect-toast'
-import { reopenNativeChatRestartOffers } from './native-chat-restart-offer-reopen'
+import { reopenNativeChatRestartOffer } from './native-chat-restart-offer-reopen'
 
 /**
  * When each machine is asked for its offer, and the one decision a fresh offer makes: ask, resume
@@ -156,7 +156,7 @@ function decidePairedAnswer(target: RuntimeClientTarget, candidates: readonly Re
     own: fresh,
     resume: (sessionIds) =>
       void continueNativeChatRestartOffers([{ machine, sessionIds }], { expected: fence }),
-    show: () => reopenNativeChatRestartOffers([machine])
+    show: () => void reopenNativeChatRestartOffer([machine])
   })
 }
 

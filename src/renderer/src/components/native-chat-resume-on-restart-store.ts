@@ -302,17 +302,6 @@ export async function readNativeChatRestartMachine(
   }
 }
 
-/** Re-reads the named machines (by default every machine with something listed), so a count can
- *  never name a chat a host would now refuse. */
-export async function refreshNativeChatRestartOffers(
-  machines: readonly RestartMachineKey[] = [...offers.keys()]
-): Promise<NativeChatRestartOffers> {
-  await Promise.all(
-    machines.map((machine) => readNativeChatRestartMachine(restartMachineTarget(machine)))
-  )
-  return offers
-}
-
 /** A machine this desktop no longer pairs with: its offers are not this desktop's to show, and no
  *  answer to a request already in flight may bring them back. */
 export function forgetNativeChatRestartMachine(machine: RestartMachineKey): void {

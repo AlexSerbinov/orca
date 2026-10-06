@@ -348,11 +348,12 @@ describe('NativeChatResumeStatusSegment', () => {
     )
   })
 
-  it('opens the dialog at once and refreshes each machine without waiting on any', async () => {
+  // Read first, as this computer's entry always has; a server out of contact is not waited on.
+  it('re-reads this computer and opens over a disconnected server’s last listing', async () => {
     let hang = false
     rpc.mockImplementation((target) => {
       if (hang && target.kind === 'environment') {
-        // An unreachable server: its re-read never answers.
+        // An unreachable server: a re-read would never answer.
         return new Promise(() => {})
       }
       return Promise.resolve({ sessions: candidates })
@@ -367,10 +368,12 @@ describe('NativeChatResumeStatusSegment', () => {
     hang = true
     await act(async () => screen.getByRole('button').click())
     expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({ origin: 'user', focus: null })
-    // Both machines were asked again, each on its own.
+    // This computer was asked again; the server, with no connection, was not.
     expect(
-      rpc.mock.calls.filter((call) => call[1] === 'agentSession.restartResumable')
-    ).toHaveLength(4)
+      rpc.mock.calls
+        .filter((call) => call[1] === 'agentSession.restartResumable')
+        .map((call) => call[0].kind)
+    ).toEqual(['local', 'environment', 'local'])
   })
 
   // A failed re-read is loss of contact, never evidence the offers are gone: keep the last answer.
