@@ -4,6 +4,7 @@ import { NATIVE_FILE_DROP_MAX_PATHS } from '../../../../shared/native-file-drop'
 import { formatNativeChatFileReference } from './native-chat-composer-target'
 import type { NativeChatComposerInput } from './native-chat-composer-input'
 import { isNativeChatImageAttachmentPath } from './native-chat-image-paste'
+import { nativeChatAttachmentOwnerChangedNotice } from './native-chat-attachment-upload'
 import {
   nativeChatWorkspaceAttachmentMismatchNotice,
   type NativeChatResolvedPathOptions
@@ -12,8 +13,7 @@ import {
 type ResolvedAttachmentPath = {
   path: string
   connectionId?: string | null
-  targetOwnerIsCurrent?: () => boolean
-}
+} & NativeChatResolvedPathOptions
 
 type Args = {
   appendImageAttachments: (paths: { path: string; connectionId?: string | null }[]) => void
@@ -83,6 +83,10 @@ export function useNativeChatResolvedPathAttachments({
       if (resolvedPaths.length === 0) {
         return
       }
+      if (resolvedPaths.some(({ destinationIsCurrent }) => destinationIsCurrent?.() === false)) {
+        setNotice(nativeChatAttachmentOwnerChangedNotice())
+        return
+      }
       // A failed ownership verdict refuses the whole completion (see the limit
       // rejection below): an ordered batch is never partially applied.
       if (resolvedPaths.some(({ targetOwnerIsCurrent }) => targetOwnerIsCurrent?.() === false)) {
@@ -142,6 +146,10 @@ export function useNativeChatResolvedPathAttachments({
       if (paths.length === 0 || disabledRef.current) {
         return
       }
+      if (options.destinationIsCurrent?.() === false) {
+        setNotice(nativeChatAttachmentOwnerChangedNotice())
+        return
+      }
       const targetOwnerIsCurrent = options.targetOwnerIsCurrent?.()
       if (targetOwnerIsCurrent === false) {
         setNotice(nativeChatWorkspaceAttachmentMismatchNotice())
@@ -167,7 +175,7 @@ export function useNativeChatResolvedPathAttachments({
           ...paths.map((path) => ({
             path,
             connectionId,
-            targetOwnerIsCurrent: options.targetOwnerIsCurrent
+            ...options
           }))
         )
         return
@@ -176,7 +184,7 @@ export function useNativeChatResolvedPathAttachments({
         paths.map((path) => ({
           path,
           connectionId,
-          targetOwnerIsCurrent: options.targetOwnerIsCurrent
+          ...options
         })),
         true
       )
