@@ -4,13 +4,10 @@ import {
 } from '@/runtime/structured-agent-session-client'
 import { hasRuntimeRpcErrorCode } from '@/runtime/runtime-rpc-client'
 import {
-  announceRestartDismissUnconfirmed,
   announceRestartResults,
   type RestartContinuationOutcome,
-  type RestartContinueResult,
-  type RestartFailureActions
+  type RestartContinueResult
 } from './native-chat-restart-action-notifications'
-import { requestNativeChatResumeOnRestartDialog } from './native-chat-resume-on-restart-dialog'
 import {
   projectRestartMachineRows,
   restartMachineTarget,
@@ -33,6 +30,8 @@ import {
   type NativeChatRestartMachineOffer,
   type RestartMachineTicket
 } from './native-chat-resume-on-restart-store'
+import { forgetUnsentResumes, markUnsentResumes } from './native-chat-resume-unsent-requests'
+import { reopenNativeChatRestartOffers } from './native-chat-restart-offer-reopen'
 
 /**
  * Acting on one machine's offer: continue the chats, or turn them down for good.
@@ -80,22 +79,12 @@ async function publishOrReread(
   }
 }
 
-const failureToastActions: RestartFailureActions = {
-  show: (machine) => {
-    if (getNativeChatRestartOffers().size > 0) {
-      requestNativeChatResumeOnRestartDialog('user', machine)
-    }
-  },
-  dismiss: (machine, sessionIds) => {
-    void dismissNativeChatRestartOffer(machine, [...sessionIds])
-  }
+/** The toast's Show: the dialog over a fresh read of the failing machine, or of every machine. */
+function showResult(machine: RestartMachineKey | null): void {
+  reopenNativeChatRestartOffers(machine ? [machine] : [...getNativeChatRestartOffers().keys()])
 }
 
-type ContinueReply = HostOfferPayload & {
-  /** Which chats the host reattached. */
-  resumed?: { sessionId: string }[]
-  continued: RestartContinuationOutcome[]
-}
+type ContinueReply = HostOfferPayload & { continued?: RestartContinuationOutcome[] }
 
 export type RestartContinueRequest = {
   machine: RestartMachineKey
@@ -123,6 +112,7 @@ async function continueOnMachine(
   if (offer === 'moved') {
     return { ...base, kind: 'not-sent' }
   }
+  forgetUnsentResumes(machine, sessionIds)
   const { ticket, settle } = beginNativeChatRestartAction(target, reported)
   try {
     if (!sameRestartMachineFence(ticket.fence, offer.fence)) {
@@ -139,21 +129,30 @@ async function continueOnMachine(
         )
       : callStructuredAgentSession<ContinueReply>(target, 'agentSession.restartContinue', params))
     await publishOrReread(ticket, result)
-    if (!Array.isArray(result.continued)) {
-      // A shape this side did not expect: the message may well have gone out.
-      return { ...base, kind: 'unconfirmed' }
-    }
     return {
       ...base,
       kind: 'answered',
-      results: result.continued,
+      // A shape this side did not expect counts as unconfirmed: the message may well have gone out.
+      results: Array.isArray(result.continued) ? result.continued : undefined,
       hostFailed: Array.isArray(result.failed)
         ? projectRestartMachineRows(target, failedFrom(result))
         : undefined
     }
   } catch (error) {
-    await readNativeChatRestartMachine(target)
-    return { ...base, kind: refusedAsStale(error) ? 'not-sent' : 'unconfirmed' }
+    if (refusedAsStale(error)) {
+      await readNativeChatRestartMachine(target)
+      return { ...base, kind: 'not-sent' }
+    }
+    // The row's reason is this side's own code, so the real error is kept in the log.
+    console.warn('[native-chat-resume] resume request failed before reaching the chats', error)
+    markUnsentResumes(machine, sessionIds, Date.now())
+    const read = await readNativeChatRestartMachine(target)
+    // Nothing reached the chats, so each is a failure of this resume as the list now shows it.
+    const listed =
+      read.kind === 'answered'
+        ? (getNativeChatRestartOffers().get(machine)?.failed ?? [])
+        : undefined
+    return { ...base, kind: 'answered', results: [], hostFailed: listed }
   } finally {
     settle()
   }
@@ -161,27 +160,28 @@ async function continueOnMachine(
 
 /**
  * Reattach the named chats on each machine, ask each agent to carry on, then replace each machine's
- * offer with its host's authoritative remaining list. One click is one notice, however many
- * machines it reached.
+ * offer with its host's authoritative remaining list.
  *
- * `sessionIds` always names the chats: an action never continues one this side did not choose,
- * which on a shared server could be another device's. `expected` is the listing a caller saw (a
- * toast), which acts only while the machine is still paired that way. `quiet` is a resume nobody
- * clicked (opted in), whose notice leaves out chats that no longer needed it.
+ * Ends in one toast saying what it did across every machine it reached, whether a click, a toast or
+ * an opted-in automatic resume started it; each chat's note stays the record. `sessionIds` always
+ * names the chats: an action never continues one this side did not choose, which on a shared server
+ * could be another device's. `expected` is the listing a caller saw (a toast), which acts only
+ * while the machine is still paired that way.
  *
- * Never rejects. The payload is unvalidated, and a shape this side did not expect is reported as
- * an unconfirmed delivery — the message may well have gone out.
+ * Never rejects; a lost answer is followed by a re-read, never a retry. The chats a lost request
+ * named that the host still offers show as failed, with Retry. A request refused because the
+ * server was re-paired counts as not resumed.
  */
 export async function continueNativeChatRestartOffers(
   requests: readonly RestartContinueRequest[],
-  options: { expected?: RestartMachineFence; quiet?: boolean } = {}
+  options: { expected?: RestartMachineFence } = {}
 ): Promise<void> {
   const results = await Promise.all(
     requests
       .filter((request) => request.sessionIds.length > 0)
       .map((request) => continueOnMachine(request, options.expected))
   )
-  announceRestartResults(results, failureToastActions, { quiet: options.quiet })
+  announceRestartResults(results, showResult)
 }
 
 /** The offers a named dismissal lists back to the host, each with the interruption it showed. */
@@ -199,8 +199,8 @@ function listedOffers(offer: NativeChatRestartMachineOffer, sessionIds: readonly
  * which chats: unnamed, its dismissal would delete every device's offers. A server is only ever
  * listed when it advertises named dismissal, so one that does not is never sent one.
  *
- * A failed write or unreachable host leaves the durable record untouched and says so; a later read
- * can restore the offer after the host is available again.
+ * Says nothing either way: the dialog row going away is the answer. A refused or lost dismissal
+ * leaves the durable record untouched and re-reads the list, which puts it back.
  */
 export async function dismissNativeChatRestartOffer(
   machine: RestartMachineKey,
@@ -211,11 +211,11 @@ export async function dismissNativeChatRestartOffer(
   if (offer === 'gone') {
     return
   }
+  const target = restartMachineTarget(machine)
   if (offer === 'moved') {
-    announceRestartDismissUnconfirmed()
+    void readNativeChatRestartMachine(target)
     return
   }
-  const target = restartMachineTarget(machine)
   const named =
     target.kind === 'environment'
       ? (sessionIds ?? [...offer.candidates, ...offer.failed].map((row) => row.sessionId))
@@ -228,7 +228,6 @@ export async function dismissNativeChatRestartOffer(
     const support = await pairedRestartOffersSupport(target.environmentId)
     if (support !== 'supported') {
       void readNativeChatRestartMachine(target)
-      announceRestartDismissUnconfirmed()
       return
     }
   }
@@ -248,10 +247,11 @@ export async function dismissNativeChatRestartOffer(
           'agentSession.restartResumableDismiss',
           params
         ))
+    // Only a dismissal the host took ends the marks; a failed one leaves the chats shown as failed.
+    forgetUnsentResumes(machine, named)
     await publishOrReread(ticket, result)
   } catch {
     await readNativeChatRestartMachine(target)
-    announceRestartDismissUnconfirmed()
   } finally {
     settle()
   }

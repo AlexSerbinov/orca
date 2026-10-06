@@ -251,13 +251,9 @@ export class AgentSessionRecoveryCapsule {
   }
 
   /** Forgets offers exactly as a client listed them. A chat interrupted again since, or being
-   *  resumed by another action right now, keeps its record: the listing never named those. */
-  dismissListed(
-    listed: readonly ListedRestartOffer[],
-    now: number,
-    /** A record this answers true for stays: read against the stored marker, under the lock. */
-    keep: KeepRecord = () => false
-  ): Promise<number> {
+   *  resumed by another action right now, keeps its record: the listing never named those. A
+   *  record `keep` answers true for stays too, read against the stored marker under the lock. */
+  dismissListed(listed: readonly ListedRestartOffer[], now: number, keep?: KeepRecord) {
     return withFileTransactionLock(this.filePath, async () => {
       const state = await this.readState()
       const { kept, dismissed } = splitDismissedListed(normalizeState(state, now), listed, keep)

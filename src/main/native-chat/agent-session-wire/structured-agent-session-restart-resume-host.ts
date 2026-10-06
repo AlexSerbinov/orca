@@ -21,8 +21,7 @@ import { createStructuredAgentSessionRestartOfferRecords } from './structured-ag
 import {
   restartRowsFor,
   type StructuredAgentSessionRestartAudience,
-  type StructuredAgentSessionResumeCandidate,
-  type StructuredAgentSessionResumeFailure
+  type StructuredAgentSessionResumeCandidate
 } from './structured-agent-session-restart-resume-set'
 import {
   resumeStructuredAgentSessionsFromRestart,

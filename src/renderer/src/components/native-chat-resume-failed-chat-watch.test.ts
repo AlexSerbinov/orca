@@ -25,7 +25,6 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: mocks.rpc,
   subscribeStructuredAgentSessionStatus: mocks.subscribeStatus
 }))
-vi.mock('sonner', () => ({ toast: vi.fn() }))
 
 function getNativeChatRestartOffer() {
   return getNativeChatRestartOffers().get('local') ?? { candidates: [], failed: [] }

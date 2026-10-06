@@ -27,8 +27,7 @@ import { requestLaunchResumePrompt } from './native-chat-resume-on-restart-launc
 import {
   _resetNativeChatResumeOnRestartDialog,
   getNativeChatResumeOnRestartDialogRequest,
-  markNativeChatResumeLaunchDecided,
-  requestNativeChatResumeOnRestartDialog
+  markNativeChatResumeLaunchDecided
 } from './native-chat-resume-on-restart-dialog'
 import {
   _resetRestartDecidedMemory,
@@ -39,6 +38,7 @@ import {
   settleRestartInterruptions
 } from './native-chat-restart-decided'
 import { announceReconnectRestartOffer } from './native-chat-restart-reconnect-toast'
+import { reopenNativeChatRestartOffers } from './native-chat-restart-offer-reopen'
 
 /**
  * When each machine is asked for its offer, and the one decision a fresh offer makes: ask, resume
@@ -79,12 +79,11 @@ function ownCandidates(
   )
 }
 
-/** "Resume automatically": nobody clicked, so the notice says only what resumed or failed. */
+/** "Resume automatically": ends in the same one toast a clicked resume does. */
 function resumeOwn(machine: RestartMachineKey, own: readonly ResumeCandidate[]): Promise<void> {
-  return continueNativeChatRestartOffers(
-    [{ machine, sessionIds: own.map((candidate) => candidate.sessionId) }],
-    { quiet: true }
-  )
+  return continueNativeChatRestartOffers([
+    { machine, sessionIds: own.map((candidate) => candidate.sessionId) }
+  ])
 }
 
 /**
@@ -157,12 +156,7 @@ function decidePairedAnswer(target: RuntimeClientTarget, candidates: readonly Re
     own: fresh,
     resume: (sessionIds) =>
       void continueNativeChatRestartOffers([{ machine, sessionIds }], { expected: fence }),
-    show: () => {
-      // With nothing left to list, a request would wait and later open the dialog by itself.
-      if (getNativeChatRestartOffers().size > 0) {
-        requestNativeChatResumeOnRestartDialog('user', machine)
-      }
-    }
+    show: () => reopenNativeChatRestartOffers([machine])
   })
 }
 

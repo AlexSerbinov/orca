@@ -220,7 +220,7 @@ it('says "Dismiss all" only when every listed chat is the user’s own', async (
   expect(button('Dismiss')).toBeTruthy()
 })
 
-it('reports one resume across machines in one notice', async () => {
+it('reports one resume across machines in one toast', async () => {
   await stage({ studio: SERVER_ROWS })
   rpc.mockImplementation(async (target, method) =>
     method === 'agentSession.restartContinue'
@@ -234,9 +234,7 @@ it('reports one resume across machines in one notice', async () => {
   await open(null)
   await act(async () => button('Resume 2 chats').click())
   await vi.waitFor(() => expect(toast).toHaveBeenCalled())
-  expect(vi.mocked(toast).mock.calls.map(([title]) => title)).toEqual([
-    'Resumed 2 chats and asked them to continue'
-  ])
+  expect(vi.mocked(toast).mock.calls.map(([title]) => title)).toEqual(['Resumed 2 chats'])
 })
 
 // One slow server must not hold this computer's chats hostage.

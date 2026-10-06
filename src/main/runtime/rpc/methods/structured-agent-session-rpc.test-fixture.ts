@@ -248,6 +248,8 @@ export function dispatcher(runtimeOverrides: Record<string, unknown> = {}): RpcD
     registerSubscriptionCleanup: vi.fn(),
     cleanupSubscription: vi.fn(),
     cleanupSubscriptionsByPrefix: vi.fn(),
+    // No creator record: every listed restart offer reads as the host user's own.
+    restartOfferWorkspaceProvenance: () => undefined,
     ...runtimeCalls,
     ...runtimeOverrides
   }

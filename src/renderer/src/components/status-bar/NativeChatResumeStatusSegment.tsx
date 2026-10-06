@@ -2,13 +2,11 @@ import { AlertCircle, Loader2, RotateCcw } from 'lucide-react'
 import { useNativeChatRestartOfferEnabled } from '../native-chat-restart-offer-gate'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
-import { requestNativeChatResumeOnRestartDialog } from '../native-chat-resume-on-restart-dialog'
 import {
-  getNativeChatRestartResuming,
-  refreshNativeChatRestartOffers,
   useNativeChatRestartOffers,
   useNativeChatRestartResuming
 } from '../native-chat-resume-on-restart-store'
+import { reopenNativeChatRestartOffers } from '../native-chat-restart-offer-reopen'
 import { useNativeChatRestartOfferSources } from '../native-chat-restart-offer-triggers'
 import { LOCAL_RESTART_MACHINE, type RestartMachineKey } from '../native-chat-restart-machines'
 import { restartMachineNameFromState } from '../native-chat-restart-machine-name'
@@ -19,29 +17,12 @@ import { resumeCandidateOwnership } from '../native-chat-resume-ownership'
 // Why: closing the resume dialog is a snooze, not a decline — each host keeps its offer. This is
 // then the only surface left carrying it, so it is always rendered rather than gated by
 // `statusBarItems`. Pressing Resume closes the dialog too, so this entry carries the run while it
-// is in flight. A chat of the user's own that a resume could not carry on is kept the same way: the
-// toast that reported it is gone in seconds, and this entry is what still names it.
+// is in flight. It is also the lasting summary of the user's own chats a resume could not carry
+// on: its toast says so once, and each chat it reached carries its own note.
 //
 // ONE entry across every machine: the dialog covers them all. It counts only the user's own chats
 // (another device's or an automation's are listed in the dialog, not counted here), names the
 // machine only when there is just one, and its tooltip breaks the count down by machine.
-
-/** The machine to open the dialog on: the only one listed, or none in particular. */
-function focusOf(machines: readonly RestartMachineKey[]): RestartMachineKey | null {
-  return machines.length === 1 ? machines[0]! : null
-}
-
-/** Opens at once on the last confirmed offers, then re-reads each listed machine on its own, so an
- *  unreachable machine never holds the dialog back. A machine whose host now lists nothing drops
- *  out of the open dialog; the dialog closes once none is left. Opening the chat itself is
- *  read-only and does not retire the offer. */
-function reopenOffer(machines: readonly RestartMachineKey[]): void {
-  requestNativeChatResumeOnRestartDialog('user', focusOf(machines))
-  // Mid-resume the host's answer is already on its way; a re-read racing it could undo it.
-  if (getNativeChatRestartResuming().size === 0) {
-    void refreshNativeChatRestartOffers(machines)
-  }
-}
 
 function Segment({
   icon,
@@ -65,7 +46,7 @@ function Segment({
       <TooltipTrigger asChild>
         <button
           type="button"
-          onClick={() => reopenOffer(machines)}
+          onClick={() => reopenNativeChatRestartOffers(machines)}
           className="inline-flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 hover:bg-accent/70"
           aria-label={ariaLabel}
         >

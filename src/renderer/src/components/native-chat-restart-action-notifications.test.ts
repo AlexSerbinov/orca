@@ -1,3 +1,5 @@
+import { isValidElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { toast } from 'sonner'
 import { beforeEach, expect, it, vi } from 'vitest'
 import {
@@ -5,10 +7,11 @@ import {
   type RestartContinuationOutcome,
   type RestartContinueResult
 } from './native-chat-restart-action-notifications'
+import { lastToastShow } from './native-chat-resume-toast.test-support'
 
 vi.mock('sonner', () => ({ toast: vi.fn() }))
 
-const actions = { show: vi.fn(), dismiss: vi.fn() }
+const show = vi.fn()
 const refusedBoth = [
   { sessionId: 'a', outcome: 'refused' as const },
   { sessionId: 'b', outcome: 'refused' as const }
@@ -16,7 +19,7 @@ const refusedBoth = [
 
 function answered(
   requested: string[],
-  results: RestartContinuationOutcome[],
+  results: RestartContinuationOutcome[] | undefined,
   hostFailed: { sessionId: string; outcome: 'refused' | 'unconfirmed' }[] | undefined,
   machine = 'local',
   machineName?: string
@@ -37,8 +40,87 @@ function titles(): unknown[] {
 
 beforeEach(() => {
   vi.mocked(toast).mockClear()
-  actions.show.mockClear()
-  actions.dismiss.mockClear()
+  show.mockClear()
+})
+
+it('says how many chats were resumed', () => {
+  announceRestartResults(
+    [
+      answered(
+        ['a', 'b'],
+        [
+          { sessionId: 'a', outcome: 'continued' },
+          { sessionId: 'b', outcome: 'continued' }
+        ],
+        []
+      )
+    ],
+    show
+  )
+  expect(vi.mocked(toast).mock.calls).toEqual([['Resumed 2 chats']])
+})
+
+it('offers Show for chats a resume could not carry on', () => {
+  announceRestartResults([answered(['a', 'b'], refusedBoth, refusedBoth)], show)
+  expect(titles()).toEqual(['2 chats couldn’t be resumed'])
+  const options = vi.mocked(toast).mock.calls[0]?.[1]
+  expect(options).not.toHaveProperty('description')
+  expect(options).not.toHaveProperty('cancel')
+  expect(options?.action).toEqual({ label: 'Show', onClick: expect.any(Function) })
+  lastToastShow()?.()
+  expect(show).toHaveBeenCalledWith('local')
+})
+
+// One resume, one toast: the chats it resumed ride along under the ones it could not.
+it('reports a mixed resume in one toast', () => {
+  announceRestartResults(
+    [
+      answered(
+        ['a', 'b', 'c'],
+        [
+          { sessionId: 'a', outcome: 'continued' },
+          { sessionId: 'b', outcome: 'continued' },
+          { sessionId: 'c', outcome: 'refused' }
+        ],
+        [{ sessionId: 'c', outcome: 'refused' }]
+      )
+    ],
+    show
+  )
+  expect(vi.mocked(toast).mock.calls).toEqual([
+    ['1 chat couldn’t be resumed', expect.objectContaining({ description: 'Resumed 2 chats' })]
+  ])
+})
+
+it('puts each extra count on its own line when a resume had all three outcomes', () => {
+  announceRestartResults(
+    [
+      answered(
+        ['a', 'b', 'c'],
+        [
+          { sessionId: 'a', outcome: 'continued' },
+          { sessionId: 'b', outcome: 'refused' },
+          { sessionId: 'c', outcome: 'unknown' }
+        ],
+        [
+          { sessionId: 'b', outcome: 'refused' },
+          { sessionId: 'c', outcome: 'unconfirmed' }
+        ]
+      )
+    ],
+    show
+  )
+  expect(toast).toHaveBeenCalledTimes(1)
+  const [title, options] = vi.mocked(toast).mock.calls[0]!
+  expect(title).toBe('1 chat couldn’t be resumed')
+  const description = options?.description
+  if (!isValidElement(description)) {
+    throw new Error('Expected one line per count')
+  }
+  expect(renderToStaticMarkup(description)).toBe(
+    '<span class="block">Couldn’t confirm 1 other chat was resumed</span>' +
+      '<span class="block">Resumed 1 chat</span>'
+  )
 })
 
 // `b` finished on its own, or the user already answered it: the host no longer lists it, so the
@@ -46,28 +128,34 @@ beforeEach(() => {
 it('counts only the requested chats the host still lists as failed', () => {
   announceRestartResults(
     [answered(['a', 'b'], refusedBoth, [{ sessionId: 'a', outcome: 'refused' }])],
-    actions
+    show
   )
   expect(titles()).toEqual(['1 chat couldn’t be resumed'])
 })
 
-// Another device resumed or dismissed them first, or the chat moved on: nothing failed and nothing
-// was sent, and the click still gets an answer.
-it('says the chats no longer need resuming when the host lists none of them as failed', () => {
-  announceRestartResults([answered(['a', 'b'], refusedBoth, [])], actions)
-  expect(titles()).toEqual(['2 chats no longer need resuming'])
+it('says nothing when the host lists none of them as failed', () => {
+  announceRestartResults([answered(['a', 'b'], refusedBoth, [])], show)
+  expect(toast).not.toHaveBeenCalled()
 })
 
-it('counts every chat not carried on when an older host sends no failure list', () => {
-  announceRestartResults([answered(['a', 'b'], refusedBoth, undefined)], actions)
+// A request that never reached the host leaves no read to narrow by, so every chat it named failed.
+it('counts every chat not carried on when no failure list was read, with nothing to Show', () => {
+  announceRestartResults([answered(['a', 'b'], [], undefined)], show)
   expect(titles()).toEqual(['2 chats couldn’t be resumed'])
+  expect(vi.mocked(toast).mock.calls[0]?.[1]).not.toHaveProperty('action')
 })
 
-// The host retires an unconfirmed send once the agent is seen carrying on it; the action must still
+// An answer without outcomes may still have sent the message.
+it('counts every chat as unconfirmed when the answer carried no outcomes', () => {
+  announceRestartResults([answered(['a', 'b'], undefined, undefined)], show)
+  expect(titles()).toEqual(['Couldn’t confirm 2 chats were resumed'])
+})
+
+// The host retires an unconfirmed send once the agent is seen carrying on it; the resume must still
 // report the chat, and as resumed, not as a failure the list can no longer show.
 it('counts an unconfirmed chat the host no longer lists as resumed', () => {
-  announceRestartResults([answered(['a'], [{ sessionId: 'a', outcome: 'unknown' }], [])], actions)
-  expect(titles()).toEqual(['Resumed 1 chat and asked it to continue'])
+  announceRestartResults([answered(['a'], [{ sessionId: 'a', outcome: 'unknown' }], [])], show)
+  expect(titles()).toEqual(['Resumed 1 chat'])
 })
 
 // Unconfirmed means the agent may well be working; "couldn't be resumed" would invite a second send.
@@ -84,7 +172,7 @@ it('counts a chat the host filed as unconfirmed on its own line, as the list doe
         ]
       )
     ],
-    actions
+    show
   )
   expect(vi.mocked(toast).mock.calls).toEqual([
     [
@@ -106,7 +194,7 @@ it('leads with the unconfirmed count when nothing was refused', () => {
         undefined
       )
     ],
-    actions
+    show
   )
   expect(vi.mocked(toast).mock.calls).toEqual([
     [
@@ -116,8 +204,8 @@ it('leads with the unconfirmed count when nothing was refused', () => {
   ])
 })
 
-// One click, one notice: what went wrong leads, and the rest of the outcome rides beneath it.
-it('reports one resume across machines in a single notice', () => {
+// One resume, one toast, however many machines it reached.
+it('reports one resume across machines in a single toast', () => {
   announceRestartResults(
     [
       answered(['l1', 'l2'], [{ sessionId: 'l1', outcome: 'continued' }], []),
@@ -128,52 +216,30 @@ it('reports one resume across machines in a single notice', () => {
         'environment:studio',
         'studio-mac'
       ),
-      {
-        machine: 'environment:build',
-        machineName: 'build-box',
-        requested: ['b1'],
-        kind: 'unconfirmed'
-      }
+      answered(
+        ['b1'],
+        [{ sessionId: 'b1', outcome: 'unknown' }],
+        [{ sessionId: 'b1', outcome: 'unconfirmed' }],
+        'environment:build',
+        'build-box'
+      )
     ],
-    actions
+    show
   )
-  expect(vi.mocked(toast).mock.calls).toEqual([
-    [
-      '1 chat couldn’t be resumed',
-      expect.objectContaining({
-        description:
-          'Couldn’t confirm 1 other chat was resumed · Resumed 2 chats and asked them to continue · 1 chat no longer needs resuming'
-      })
-    ]
-  ])
+  expect(toast).toHaveBeenCalledTimes(1)
+  const [title, options] = vi.mocked(toast).mock.calls[0]!
+  expect(title).toBe('1 chat couldn’t be resumed')
+  const description = options?.description
+  if (!isValidElement(description)) {
+    throw new Error('Expected one line per count')
+  }
+  expect(renderToStaticMarkup(description)).toBe(
+    '<span class="block">Couldn’t confirm 1 other chat was resumed</span>' +
+      '<span class="block">Resumed 2 chats</span>'
+  )
 })
 
-it('says beneath the result how many chats no longer needed resuming', () => {
-  announceRestartResults(
-    [answered(['a', 'b'], [{ sessionId: 'a', outcome: 'continued' }], [])],
-    actions
-  )
-  expect(vi.mocked(toast).mock.calls).toEqual([
-    [
-      'Resumed 1 chat and asked it to continue',
-      expect.objectContaining({ description: '1 chat no longer needs resuming' })
-    ]
-  ])
-})
-
-// Nobody clicked an opted-in resume, so chats someone else already resumed go unmentioned.
-it('says nothing about chats that no longer needed it when the resume ran by itself', () => {
-  announceRestartResults([answered(['a', 'b'], refusedBoth, [])], actions, { quiet: true })
-  expect(toast).not.toHaveBeenCalled()
-  announceRestartResults(
-    [answered(['a', 'b'], [{ sessionId: 'a', outcome: 'continued' }], [])],
-    actions,
-    { quiet: true }
-  )
-  expect(vi.mocked(toast).mock.calls).toEqual([['Resumed 1 chat and asked it to continue']])
-})
-
-it('names the server when its chats alone are counted, and opens the dialog on it', () => {
+it('names the server when its chats alone are counted', () => {
   announceRestartResults(
     [
       answered(
@@ -184,9 +250,30 @@ it('names the server when its chats alone are counted, and opens the dialog on i
         'studio-mac'
       )
     ],
-    actions
+    show
   )
-  expect(titles()).toEqual(['Resumed 1 chat on studio-mac and asked it to continue'])
+  expect(titles()).toEqual(['Resumed 1 chat on studio-mac'])
+})
+
+it('opens the dialog on the one failing server', () => {
+  announceRestartResults(
+    [
+      answered(
+        ['s1', 's2'],
+        [{ sessionId: 's1', outcome: 'unknown' }],
+        [
+          { sessionId: 's1', outcome: 'unconfirmed' },
+          { sessionId: 's2', outcome: 'unconfirmed' }
+        ],
+        'environment:studio',
+        'studio-mac'
+      )
+    ],
+    show
+  )
+  expect(titles()).toEqual(['Couldn’t confirm 2 chats on studio-mac were resumed'])
+  lastToastShow()?.()
+  expect(show).toHaveBeenCalledWith('environment:studio')
 })
 
 it('counts failures on several machines together and opens the dialog on none in particular', () => {
@@ -201,27 +288,17 @@ it('counts failures on several machines together and opens the dialog on none in
         'studio-mac'
       )
     ],
-    actions
+    show
   )
   expect(titles()).toEqual(['2 chats couldn’t be resumed'])
-  const options = vi.mocked(toast).mock.calls[0]?.[1]
-  const press = (entry: unknown) =>
-    typeof entry === 'object' &&
-    entry !== null &&
-    'onClick' in entry &&
-    typeof entry.onClick === 'function'
-      ? entry.onClick()
-      : undefined
-  press(options?.action)
-  expect(actions.show).toHaveBeenCalledWith(null)
-  press(options?.cancel)
-  expect(actions.dismiss.mock.calls).toEqual([
-    ['local', ['a']],
-    ['environment:studio', ['s1']]
-  ])
+  expect(vi.mocked(toast).mock.calls[0]?.[1]).not.toHaveProperty('cancel')
+  lastToastShow()?.()
+  expect(show).toHaveBeenCalledWith(null)
 })
 
-it('counts a resume refused before it left (the server was re-paired) as not resumed', () => {
+// The server was re-paired under the listing: nothing was sent, and nothing it lists is this
+// pairing's to show.
+it('counts a resume refused before it left as not resumed, with nothing to Show', () => {
   announceRestartResults(
     [
       {
@@ -231,36 +308,8 @@ it('counts a resume refused before it left (the server was re-paired) as not res
         kind: 'not-sent'
       }
     ],
-    actions
+    show
   )
   expect(titles()).toEqual(['1 chat on studio-mac couldn’t be resumed'])
-})
-
-// A call whose answer was lost is an unconfirmed outcome like any other: it says where, and the
-// notice opens the list.
-it('names the machine of a resume whose answer was lost, and opens the dialog on it', () => {
-  announceRestartResults(
-    [
-      {
-        machine: 'environment:studio',
-        machineName: 'studio-mac',
-        requested: ['s1', 's2'],
-        kind: 'unconfirmed'
-      }
-    ],
-    actions
-  )
-  expect(titles()).toEqual(['Couldn’t confirm 2 chats on studio-mac were resumed'])
-  const options = vi.mocked(toast).mock.calls[0]?.[1]
-  const show: unknown = options?.action
-  if (
-    typeof show !== 'object' ||
-    show === null ||
-    !('onClick' in show) ||
-    typeof show.onClick !== 'function'
-  ) {
-    throw new Error('no Show button')
-  }
-  show.onClick()
-  expect(actions.show).toHaveBeenCalledWith('environment:studio')
+  expect(vi.mocked(toast).mock.calls[0]?.[1]).not.toHaveProperty('action')
 })

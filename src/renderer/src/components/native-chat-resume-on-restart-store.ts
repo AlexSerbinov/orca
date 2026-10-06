@@ -32,6 +32,11 @@ import {
   releaseOfferedChatWatches,
   syncOfferedChatWatch
 } from './native-chat-restart-offer-activity-watch'
+import {
+  _resetUnsentResumes,
+  forgetUnsentResumes,
+  withUnsentResumes
+} from './native-chat-resume-unsent-requests'
 
 /**
  * Which interrupted chats each machine is still offering to resume, and every action that moves
@@ -160,14 +165,18 @@ function publishUnder(
     return false
   }
   ticketsPublished.set(ticket.machine, ticket.ticket)
+  if (!rows) {
+    forgetUnsentResumes(ticket.machine, undefined)
+  }
+  const shown = rows && withUnsentResumes(ticket.machine, rows)
   publish(
     ticket.machine,
-    rows && {
+    shown && {
       machine: ticket.machine,
       target: ticket.target,
       fence: ticket.fence,
-      candidates: projectRestartMachineRows(ticket.target, rows.candidates),
-      failed: projectRestartMachineRows(ticket.target, rows.failed),
+      candidates: projectRestartMachineRows(ticket.target, shown.candidates),
+      failed: projectRestartMachineRows(ticket.target, shown.failed),
       listedAt: Date.now()
     }
   )
@@ -309,6 +318,7 @@ export async function refreshNativeChatRestartOffers(
 export function forgetNativeChatRestartMachine(machine: RestartMachineKey): void {
   const ticket = issueNativeChatRestartTicket(restartMachineTarget(machine))
   ticketsPublished.set(machine, ticket.ticket)
+  forgetUnsentResumes(machine, undefined)
   if (offers.has(machine)) {
     publish(machine, null)
   }
@@ -360,6 +370,7 @@ export function useNativeChatRestartResuming(): ReadonlyMap<RestartMachineKey, r
 export function _resetNativeChatRestartOfferState(): void {
   releaseOfferedChatWatches()
   offers = NO_OFFERS
+  _resetUnsentResumes()
   resumeBatches.clear()
   resuming = NOTHING_RESUMING
   actionsInFlight.clear()

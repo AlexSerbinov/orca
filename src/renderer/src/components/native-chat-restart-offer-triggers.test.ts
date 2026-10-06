@@ -222,14 +222,19 @@ it('resumes only own chats without asking, once per interruption, when the prefe
   useAppStore.setState({
     settings: { ...getDefaultSettings(''), nativeChatResumeWorkOnRestart: true }
   })
-  serveOffers([row('a', 'own'), row('b', 'automation'), row('c', 'other-device')])
+  const rows = [row('a', 'own'), row('b', 'automation'), row('c', 'other-device')]
+  mocks.rpc.mockImplementation(async (_target, method) =>
+    method === 'agentSession.restartResumable'
+      ? { sessions: rows, failed: [] }
+      : { continued: [{ sessionId: 'a', outcome: 'continued' }], sessions: [], failed: [] }
+  )
   await connect({ runtimeId: 'r2' })
   stageServer({ runtimeId: 'r2', epoch: 1 })
   await vi.waitFor(() => expect(offerReads()).toBeGreaterThanOrEqual(2))
   await settle()
   expect(continueCalls()).toEqual([[TARGET, { sessionIds: ['a'] }]])
-  // No reconnect toast, and no "no longer needs resuming" for a resume nobody clicked.
-  expect(toast).not.toHaveBeenCalled()
+  // No reconnect offer: the resume's own one toast says what it did, as a launch's does.
+  expect(toastTitles()).toEqual(['Resumed 1 chat on studio-mac'])
 })
 
 // A fresh window (a reload, or a reopened window on macOS) reads the same offer again.
@@ -470,14 +475,18 @@ it('names every chat with the interruption it listed when dismissing on a server
   ])
 })
 
-it('says a dismiss was not confirmed, and sends nothing, when the server cannot be probed', async () => {
+// Dismissing is bookkeeping: a refusal re-reads the list, which keeps the offer, and says nothing.
+it('sends nothing and raises no toast for a dismiss when the server cannot be probed', async () => {
   await connect({ runtimeId: 'r2' })
+  const toasts = toastTitles().length
+  const listed = getNativeChatRestartOffers().get(MACHINE)
   mocks.support.mockResolvedValue('unknown')
   await dismissNativeChatRestartOffer(MACHINE)
+  await settle()
   expect(callsTo('agentSession.restartResumableDismiss')).toEqual([])
-  expect(toastTitles()).toContain(
-    'Dismissing the resume offer was not confirmed — it may still be in the status bar.'
-  )
+  expect(toastTitles()).toHaveLength(toasts)
+  // The re-read could not reach the server either, so the last answer stands.
+  expect(getNativeChatRestartOffers().get(MACHINE)).toBe(listed)
 })
 
 // The host re-derives which named chats it still offers, so a restart since the listing is fine.

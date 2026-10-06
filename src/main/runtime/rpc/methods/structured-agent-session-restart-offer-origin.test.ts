@@ -43,7 +43,7 @@ const restartResume = {
   ]),
   listFailures: vi.fn(async () => [row('f', 'theirs')]),
   dismiss: vi.fn(async () => 1),
-  dismissListed: vi.fn(async () => 1),
+  dismissListed: vi.fn(async (_listed: unknown, _audience?: unknown) => 1),
   continueAfterRestart: vi.fn(async () => ({
     resumed: [],
     continued: [],
@@ -56,7 +56,9 @@ const RUNTIME = {
 }
 
 beforeEach(() => {
-  setStructuredAgentSessionHost(Object.assign(hostStub(), { restartResume }))
+  setStructuredAgentSessionHost(
+    Object.assign(hostStub(), { restartResume, knownAgentIds: () => ['claude', 'codex'] })
+  )
 })
 
 afterEach(() => {
@@ -139,7 +141,7 @@ it('forgets listed offers by the interruption the client saw, with sessionIds ri
     RUNTIME
   )
   expect(response).toMatchObject({ ok: true, result: { dismissed: 1 } })
-  expect(restartResume.dismissListed).toHaveBeenCalledWith(offers)
+  expect(restartResume.dismissListed.mock.lastCall?.[0]).toEqual(offers)
   expect(restartResume.dismiss).not.toHaveBeenCalled()
   expect(origins(response)).toMatchObject({ a: 'own' })
 })
