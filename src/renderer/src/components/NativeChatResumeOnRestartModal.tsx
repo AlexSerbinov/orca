@@ -72,8 +72,9 @@ import {
  * row and leave the dialog open. It closes only on the user's own way out, or once no machine has
  * anything left.
  *
- * Closing is a SNOOZE, so looking around before deciding cannot remove the recovery. Dismiss all is
- * the explicit path that deletes the durable records.
+ * Closing is a SNOOZE, so looking around before deciding cannot remove the recovery. Dismiss is the
+ * explicit path that deletes the durable records: the user's own and the machine's, never another
+ * device's or an automation's.
  */
 
 export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
@@ -157,10 +158,10 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
         .map((machine) => ({ machine, ids: dismissedRows(machine) })),
     [machines, resuming]
   )
-  // "Dismiss all" only when it clears every chat listed; on a shared server another device's chats
+  // "Dismiss all" only when it clears every chat listed; another device's or an automation's chats
   // stay for their owner, and the button must not claim otherwise.
   const dismissesEverything = dismissals.every(
-    (entry) => entry.ids === undefined || entry.ids.length === entry.machine.rows.length
+    (entry) => entry.ids.length === entry.machine.rows.length
   )
   const chosenCount = chosen.reduce((total, entry) => total + entry.ids.length, 0)
 
@@ -188,7 +189,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
     consumeNativeChatResumeOnRestartDialogRequest()
     await Promise.all(
       dismissals
-        .filter((entry) => entry.ids === undefined || entry.ids.length > 0)
+        .filter((entry) => entry.ids.length > 0)
         .map((entry) => dismissNativeChatRestartOffer(entry.machine.machine, entry.ids))
     )
   }

@@ -209,7 +209,16 @@ it('fully dismisses the offer only through Dismiss all', async () => {
   await act(async () => button('Dismiss all').click())
   expect(rpc.mock.calls.map((call) => [call[1], call[2]])).toEqual([
     ['agentSession.restartResumable', undefined],
-    ['agentSession.restartResumableDismiss', {}]
+    [
+      'agentSession.restartResumableDismiss',
+      {
+        sessionIds: ['a', 'b'],
+        offers: [
+          { sessionId: 'a', recordedAt: 1_800_000_000_000 },
+          { sessionId: 'b', recordedAt: 1_800_000_000_000 }
+        ]
+      }
+    ]
   ])
   expect(offerIds()).toEqual([])
 })
@@ -836,6 +845,9 @@ it('dismisses one failed chat by name, and every record through Dismiss all', as
   expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Prompt a')
   expect(document.querySelectorAll('[role="checkbox"]')).toHaveLength(2)
   await act(async () => button('Dismiss all').click())
-  expect(rpc.mock.calls.at(-1)?.slice(1)).toEqual(['agentSession.restartResumableDismiss', {}])
+  expect(rpc.mock.calls.at(-1)?.slice(1)).toEqual([
+    'agentSession.restartResumableDismiss',
+    { sessionIds: ['b'], offers: [{ sessionId: 'b', recordedAt: 1_800_000_000_000 }] }
+  ])
   expect(document.querySelector('[role="dialog"]')).toBeNull()
 })

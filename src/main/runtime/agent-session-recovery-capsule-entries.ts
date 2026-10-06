@@ -215,14 +215,25 @@ export function shouldReplaceMarker(
 /** Records "dismiss all" leaves as they were: this host does not list them (a newer Orca's chats). */
 export type KeepRecord = (marker: AgentSessionResumeMarker) => boolean
 
-/** What a "dismiss all" keeps, and how many pending offers it ends. */
+/** What a "dismiss all" keeps, and how many pending offers it ends. A chat another action is
+ *  resuming right now (another device's, on a shared host) stays with its earlier failure for that
+ *  action to settle; the action lease ends a reservation whose action died. */
 export function splitDismissedAll(
   state: Pick<RecoveryCapsuleState, 'entries' | 'failed'>,
   keep: KeepRecord
 ): { kept: Pick<RecoveryCapsuleState, 'entries' | 'failed'>; dismissedPending: number } {
-  const entries = state.entries.filter((entry) => keep(entry.marker))
+  const resuming = new Set(
+    state.entries
+      .filter((entry) => entry.state === 'in-progress')
+      .map((entry) => entry.marker.sessionId)
+  )
+  const kept = (marker: AgentSessionResumeMarker): boolean =>
+    resuming.has(marker.sessionId) || keep(marker)
   return {
-    kept: { entries, failed: state.failed.filter((failure) => keep(failure.marker)) },
+    kept: {
+      entries: state.entries.filter((entry) => kept(entry.marker)),
+      failed: state.failed.filter((failure) => kept(failure.marker))
+    },
     dismissedPending: state.entries.filter(
       (entry) => entry.state === 'pending' && !keep(entry.marker)
     ).length

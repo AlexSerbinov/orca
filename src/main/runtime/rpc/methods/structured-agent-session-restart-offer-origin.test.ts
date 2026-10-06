@@ -43,7 +43,13 @@ const restartResume = {
   ]),
   listFailures: vi.fn(async () => [row('f', 'theirs')]),
   dismiss: vi.fn(async () => 1),
-  dismissListed: vi.fn(async () => 1)
+  dismissListed: vi.fn(async () => 1),
+  continueAfterRestart: vi.fn(async () => ({
+    resumed: [],
+    continued: [],
+    sessions: [row('a', 'mine'), row('b', 'theirs')],
+    failed: [row('f', 'host-made')]
+  }))
 }
 const RUNTIME = {
   restartOfferWorkspaceProvenance: (workspaceId: string) => WORKSPACES[workspaceId]
@@ -136,4 +142,17 @@ it('forgets listed offers by the interruption the client saw, with sessionIds ri
   expect(restartResume.dismissListed).toHaveBeenCalledWith(offers)
   expect(restartResume.dismiss).not.toHaveBeenCalled()
   expect(origins(response)).toMatchObject({ a: 'own' })
+})
+
+// The desktop publishes what a continue leaves; without an origin every remaining row would read as
+// not the user's.
+it('says whose each remaining offer is in a continue reply', async () => {
+  const response = await call(
+    'agentSession.restartContinue',
+    { sessionIds: [SESSION] },
+    { ...STRUCTURED_CLIENT, pairedDeviceId: 'device-mine' },
+    RUNTIME
+  )
+  expect(response).toMatchObject({ ok: true })
+  expect(origins(response)).toEqual({ a: 'own', b: 'other-device', f: 'server-made' })
 })

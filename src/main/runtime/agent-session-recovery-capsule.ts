@@ -307,9 +307,9 @@ export class AgentSessionRecoveryCapsule {
         return 0
       }
       const { kept, dismissedPending } = splitDismissedAll(state, keep)
-      // Dismiss is the explicit user request to forget every recovery record it was shown. An
-      // in-flight action may still finish, but its later complete/rollback becomes a no-op and
-      // cannot resurrect a row the user dismissed.
+      // Dismiss is the explicit user request to forget every recovery record it was shown. A chat
+      // in-flight on another action was never shown (listing returns pending only); that action
+      // settles it, and the fence still stops a stale teardown writer.
       await this.publish(kept, now, now)
       return dismissedPending
     })

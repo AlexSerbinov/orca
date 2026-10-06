@@ -173,23 +173,19 @@ it('resumes each machine’s picked chats on that machine, and the machine box p
   ])
 })
 
-// Another device's or an automation's chats stay on the server for their owner, and the button
-// says only what it does.
-it('dismisses everything here by naming nothing, and on a server only the user’s own and its own', async () => {
+// Another device's or an automation's chats stay for their owner, on this computer as on a server,
+// and the button says only what it does.
+it('dismisses only the user’s own chats and the machine’s own, on every machine', async () => {
+  localRows = [row('l1', 'own'), row('l2', 'other-device')]
   await stage({ studio: [...SERVER_ROWS, row('s4', 'server-made')] })
   await open(null)
   await act(async () => button('Dismiss').click())
+  const listed = (sessionId: string) => ({ sessionId, recordedAt: 1_800_000_000_000 })
   expect(actionCalls('agentSession.restartResumableDismiss')).toEqual([
-    [{ kind: 'local' }, {}],
+    [{ kind: 'local' }, { sessionIds: ['l1'], offers: [listed('l1')] }],
     [
       { kind: 'environment', environmentId: 'studio' },
-      {
-        sessionIds: ['s1', 's4'],
-        offers: [
-          { sessionId: 's1', recordedAt: 1_800_000_000_000 },
-          { sessionId: 's4', recordedAt: 1_800_000_000_000 }
-        ]
-      }
+      { sessionIds: ['s1', 's4'], offers: [listed('s1'), listed('s4')] }
     ]
   ])
 })

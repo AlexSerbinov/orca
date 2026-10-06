@@ -496,16 +496,17 @@ describe('durable restart offers', () => {
     expect(await capsule.list(later)).toEqual([])
   })
 
-  it('dismisses pending and active recovery records', async () => {
+  // On a shared host the action may be another device's resume: dismissing what this listing showed
+  // must not take its reservation, or a refusal it meets would never be filed.
+  it('dismisses pending records and leaves a chat another action is resuming to that action', async () => {
     await capsule.record([marker(), marker({ sessionId: 'second' })], NOW)
     await capsule.beginResume([SESSION], 'operation-a', NOW)
 
     expect(await capsule.clearAll(NOW)).toBe(1)
     expect(await capsule.list(NOW)).toEqual([])
 
-    // A later failed action cannot resurrect a record the user explicitly dismissed.
-    await capsule.rollbackResume('operation-a', NOW)
-    expect(await capsule.list(NOW)).toEqual([])
+    await capsule.failResume('operation-a', [failure()], NOW)
+    expect(await capsule.listFailed(NOW)).toMatchObject([{ marker: marker() }])
   })
 
   it('fences a late teardown write until a genuinely newer interruption', async () => {
