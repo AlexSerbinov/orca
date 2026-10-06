@@ -63,7 +63,8 @@ describe('native preload destructive app actions', () => {
   it('exposes synchronous file path resolution and a window-local preparation invoke', async () => {
     const api = await loadApi()
     const file = new File(['x'], 'notes.txt')
-    expect(api.getPathForFile?.(file)).toBe('/files/notes.txt')
+    expect(api).not.toHaveProperty('getPathForFile')
+    expect(api.fs.getPathForFile?.(file)).toBe('/files/notes.txt')
     expect(getPathForFile).toHaveBeenCalledWith(file)
     const request = { paths: ['/files/notes.txt'], consumer: 'agent' as const }
     invoke.mockResolvedValue({ paths: request.paths, failures: [] })

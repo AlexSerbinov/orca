@@ -131,7 +131,9 @@ export function useOsFileDropOwner<Destination = undefined>(
           return
         }
 
-        const getPathForFile = window.api?.getPathForFile
+        const fs = window.api?.fs
+        // The web fallback proxy fabricates methods absent from the concrete namespace.
+        const getPathForFile = fs && 'getPathForFile' in fs ? fs.getPathForFile : undefined
         if (!getPathForFile) {
           queueDelivery(rejectedDrop('unresolved-paths', files.length))
           return

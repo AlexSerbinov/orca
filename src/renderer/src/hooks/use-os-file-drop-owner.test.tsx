@@ -8,6 +8,7 @@ import {
   WORKSPACE_FILE_PATHS_MIME
 } from '../lib/workspace-file-drag'
 import type { PreparedDroppedPaths } from '../../../shared/native-file-drop-preparation'
+import { withFallback } from '../web/preload-api/web-fallback-api'
 import {
   createOsFileDropSequence,
   useOsFileDropOwner,
@@ -90,7 +91,7 @@ function drag(
 }
 
 beforeEach(() => {
-  vi.stubGlobal('api', { getPathForFile, fs: { prepareDroppedPaths } })
+  vi.stubGlobal('api', { fs: { getPathForFile, prepareDroppedPaths } })
   getPathForFile.mockClear()
   prepareDroppedPaths.mockClear()
 })
@@ -282,13 +283,20 @@ describe('useOsFileDropOwner', () => {
     })
   })
 
-  it('reports a missing web path bridge to the owner', async () => {
+  it('reports a missing web path bridge to the owner despite fallback method synthesis', async () => {
     const onDrop = vi.fn<DropHandler>()
-    vi.stubGlobal('api', { fs: { prepareDroppedPaths } })
+    vi.stubGlobal('api', withFallback({ fs: { prepareDroppedPaths } }, []))
     const view = render(<Owner onDrop={onDrop} />)
     drag(view.getByTestId('owner'), 'drop')
     await act(async () => undefined)
-    expect(onDrop.mock.calls[0][0].failures[0].reason).toBe('unresolved-paths')
+    expect(onDrop).toHaveBeenCalledExactlyOnceWith(
+      {
+        paths: [],
+        failures: [{ target: 'rejected', reason: 'unresolved-paths', pathCount: 1, byteLength: 0 }]
+      },
+      { target: view.getByTestId('owner') }
+    )
+    expect(getPathForFile).not.toHaveBeenCalled()
     expect(prepareDroppedPaths).not.toHaveBeenCalled()
   })
 

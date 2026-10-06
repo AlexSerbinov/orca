@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import type { PreloadApi } from './api-types'
 import {
   installBrowserFindListener,
@@ -101,7 +101,6 @@ const telemetryGetConsentStateApi: PreloadApi['telemetryGetConsentState'] = () =
   ipcRenderer.invoke('telemetry:getConsentState')
 
 const api = {
-  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   app: appApi,
   orcaProfiles: orcaProfilesApi,
   platform: platformApi,

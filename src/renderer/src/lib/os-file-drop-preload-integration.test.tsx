@@ -76,7 +76,7 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
-  vi.stubGlobal('api', { getPathForFile: electron.getPathForFile, fs: { prepareDroppedPaths } })
+  vi.stubGlobal('api', { fs: { getPathForFile: electron.getPathForFile, prepareDroppedPaths } })
   electron.send.mockClear()
   electron.getPathForFile.mockClear()
   prepareDroppedPaths.mockClear()

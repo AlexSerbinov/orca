@@ -43,6 +43,7 @@ export type ExportApi = {
 
 export type FilesystemApi = {
   fs: {
+    getPathForFile?: (file: File) => string
     prepareDroppedPaths: (args: PrepareDroppedPathsRequest) => Promise<PreparedDroppedPaths>
     readFileChunk: (args: {
       filePath: string
