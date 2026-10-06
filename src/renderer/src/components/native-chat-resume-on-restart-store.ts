@@ -295,6 +295,8 @@ export async function continueNativeChatRestartOffer(
   let outcome: Parameters<typeof announceRestartResults>
   resumeBatches.add(batch)
   syncResuming()
+  // `resuming` now names the chats, so the launch's one resume decision is made.
+  markNativeChatLaunchResumeDecided()
   try {
     const result = await callStructuredAgentSession<
       HostOfferPayload & { continued?: RestartContinuationOutcome[] }
@@ -389,10 +391,7 @@ async function loadLaunchOffer(): Promise<void> {
     requestNativeChatResumeOnRestartDialog()
     return
   }
-  // Its batch names the chats before the first await, so `resuming` takes over with no gap.
-  const continuing = continueNativeChatRestartOffer(undefined, allResumeSessionIds(offered))
-  markNativeChatLaunchResumeDecided()
-  await continuing
+  await continueNativeChatRestartOffer(undefined, allResumeSessionIds(offered))
 }
 
 /**
