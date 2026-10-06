@@ -5,8 +5,9 @@ import WorktreeCard from '@/components/sidebar/WorktreeCard'
 import { WorktreeHostContextBadge } from '@/components/sidebar/WorktreeHostContextBadge'
 import {
   getLineageChildrenInlineStyle,
-  getLineageNestedRowGeometry
+  LINEAGE_CHILDREN_INLINE_OFFSET
 } from '@/components/sidebar/worktree-list/rows/indentation'
+import { getWorktreeRowGeometry } from '@/components/sidebar/worktree-list/rows/worktree-row-geometry'
 import {
   getCyclicProjectedWorktreeLineageIds,
   getSidebarLineageAncestors
@@ -158,13 +159,15 @@ function RepoHeader({ repoId }: { repoId: string | null }): React.JSX.Element {
   )
 }
 
+const NO_FOLDER_BACKED_GROUPS: ReadonlySet<string> = new Set()
+
 type RowProps = {
+  /** Whether the listed workspaces span machines; the sidebar names hosts only then. */
+  mixedHosts: boolean
   listedAt: number
   busy: boolean
   selected: ReadonlySet<string>
   onToggle: (sessionId: string, checked: boolean) => void
-  /** Leaves the machine off each workspace when a machine row above already names it. */
-  hideHostChip?: boolean
   /** Where a chat that does not start ticked came from ("Automation", "Another device"). */
   originLabelFor?: (sessionId: string) => string | undefined
 } & FailureProps
@@ -185,13 +188,17 @@ function WorkspaceCard({
     (store) => store.settings?.experimentalNewWorktreeCardStyle === true
   )
   const name = worktree?.displayName ?? group.workspaceId
-  // Shown for every workspace, local included. The sidebar hides it on a single-host install; this
-  // list is a one-off prompt with no surrounding context, so the machine is always worth naming.
-  const hostLabel = rowProps.hideHostChip
-    ? undefined
-    : getHostContextLabel(hostId ?? LOCAL_EXECUTION_HOST_ID)
-  const { listedAt, busy, selected, onToggle, failureFor, onFailureAction, originLabelFor } =
-    rowProps
+  const hostLabel = getHostContextLabel(hostId ?? LOCAL_EXECUTION_HOST_ID)
+  const {
+    mixedHosts,
+    listedAt,
+    busy,
+    selected,
+    onToggle,
+    failureFor,
+    onFailureAction,
+    originLabelFor
+  } = rowProps
   const rows = (
     <ul className="flex flex-col">
       {group.candidates.map((candidate) => (
@@ -210,22 +217,18 @@ function WorkspaceCard({
       ))}
     </ul>
   )
-  const geometryAt = (lineageDepth: number) =>
-    getLineageNestedRowGeometry({
-      experimentalNewWorktreeCardStyle: newCardStyle,
-      inheritedCardContentIndent: 0,
-      lineageDepth
-    })
-  const geometry = geometryAt(depth)
-  // Why: as in the sidebar, a child inside a card's lineage list is inset for its own depth.
-  const childInset = worktree ? geometryAt(depth + 1).surfaceInset : 0
+  // Why: the sidebar's own row geometry for a repo-grouped list, so the cards line up as there.
+  const geometry = getWorktreeRowGeometry({
+    groupBy: 'repo',
+    folderBackedProjectGroupIds: NO_FOLDER_BACKED_GROUPS,
+    newCardStyle,
+    projectGroupId: repo?.projectGroupId,
+    depth,
+    groupDepth: 0,
+    nested: depth > 0
+  })
   const children = node.children.map((child) => (
-    <div
-      key={child.group.workspaceId}
-      style={childInset > 0 ? { paddingLeft: childInset } : undefined}
-    >
-      <WorkspaceCard node={child} depth={depth + 1} {...rowProps} />
-    </div>
+    <WorkspaceCard key={child.group.workspaceId} node={child} depth={depth + 1} {...rowProps} />
   ))
 
   if (!worktree) {
@@ -243,27 +246,35 @@ function WorkspaceCard({
     )
   }
 
+  // Why: like a sidebar row, each card is inset for its own depth.
   return (
-    <WorktreeCard
-      worktree={worktree}
-      repo={repo}
-      isActive={false}
-      isActiveSurface={false}
-      readOnly
-      // The repo header above already names it.
-      hideRepoBadge
-      hostContextLabel={hostLabel}
-      nativeDragEnabled={false}
-      flushSurface
-      contentIndent={geometry.cardContentIndent}
-      agentRows={rows}
-      lineageChildren={children.length > 0 ? children : undefined}
-      lineageChildrenStyle={
-        children.length > 0
-          ? getLineageChildrenInlineStyle(geometry.lineageChildrenInlineOffset)
-          : undefined
-      }
-    />
+    <div
+      style={geometry.surfaceInset > 0 ? { paddingLeft: `${geometry.surfaceInset}px` } : undefined}
+    >
+      <WorktreeCard
+        worktree={worktree}
+        repo={repo}
+        isActive={false}
+        isActiveSurface={false}
+        readOnly
+        // The repo header above already names it.
+        hideRepoBadge
+        hostContextLabel={mixedHosts ? hostLabel : undefined}
+        nativeDragEnabled={false}
+        flushSurface
+        contentIndent={geometry.cardContentIndent}
+        agentRows={rows}
+        lineageChildCount={children.length}
+        lineageChildren={children.length > 0 ? children : undefined}
+        lineageChildrenStyle={
+          children.length > 0
+            ? getLineageChildrenInlineStyle(
+                geometry.lineageChildrenInlineOffset ?? LINEAGE_CHILDREN_INLINE_OFFSET
+              )
+            : undefined
+        }
+      />
+    </div>
   )
 }
 
@@ -275,15 +286,17 @@ export function ResumeOnRestartGroups({
   onToggle,
   failureFor,
   onFailureAction,
-  hideHostChip,
   originLabelFor
 }: {
   candidates: readonly ResumeCandidate[]
-} & RowProps): React.JSX.Element {
+} & Omit<RowProps, 'mixedHosts'>): React.JSX.Element {
   const workspaces = useMemo(() => groupResumeCandidates(candidates), [candidates])
   const repoIdFor = useRepoIdByWorkspace(workspaces)
   const ancestorsOf = useLineageAncestors(workspaces)
   const repoGroups = groupResumeWorkspacesByRepo(workspaces, repoIdFor)
+  const mixedHosts =
+    new Set(candidates.map((candidate) => candidate.executionHostId ?? LOCAL_EXECUTION_HOST_ID))
+      .size > 1
   return (
     <div className="flex flex-col gap-2.5">
       {repoGroups.map((repoGroup) => (
@@ -295,13 +308,13 @@ export function ResumeOnRestartGroups({
                 key={node.group.workspaceId}
                 node={node}
                 depth={0}
+                mixedHosts={mixedHosts}
                 listedAt={listedAt}
                 busy={busy}
                 selected={selected}
                 onToggle={onToggle}
                 failureFor={failureFor}
                 onFailureAction={onFailureAction}
-                hideHostChip={hideHostChip}
                 originLabelFor={originLabelFor}
               />
             ))}

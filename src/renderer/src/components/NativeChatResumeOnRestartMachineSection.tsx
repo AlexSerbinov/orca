@@ -105,7 +105,6 @@ export function ResumeMachineSection({
             onToggle={onToggle}
             failureFor={failureFor}
             onFailureAction={onFailureAction}
-            hideHostChip
             originLabelFor={originLabelFor}
           />
         </div>

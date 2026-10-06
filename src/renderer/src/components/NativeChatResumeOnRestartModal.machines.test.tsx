@@ -323,3 +323,16 @@ it('keeps an open launch dialog when this computer’s chats run out while a ser
   expect(document.querySelector('[role="dialog"]')).not.toBeNull()
   expect(getNativeChatResumeOnRestartDialogRequest()).toMatchObject({ origin: 'launch' })
 })
+
+// The cards inside follow the sidebar and name no host when one machine is listed, so the machine
+// row is what says where the chats are, this computer's and a server's alike, even alone.
+it('names the machine on its row whenever chats are grouped by machine, even a single server', async () => {
+  localRows = []
+  await stage({ studio: SERVER_ROWS })
+  await open(null)
+  expect(machineRow('studio-mac').textContent).toContain('studio-mac')
+  localRows = [row('l1', 'own')]
+  await stage({ studio: SERVER_ROWS })
+  expect(machineRow('Local').textContent).toContain('Local')
+  expect(machineRow('studio-mac')).toBeTruthy()
+})

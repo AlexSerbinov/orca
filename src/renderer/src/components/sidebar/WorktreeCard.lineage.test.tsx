@@ -64,7 +64,6 @@ vi.mock('./WorktreeCardAgents', () => ({
 
 vi.mock('./WorktreeContextMenu', () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
-  CLOSE_ALL_CONTEXT_MENUS_EVENT: 'orca:test-close-context-menus',
   WORKTREE_CONTEXT_MENU_SCOPE_ATTR: 'data-orca-context-menu-scope',
   WORKTREE_NATIVE_CONTEXT_MENU_ATTR: 'data-worktree-native-context-menu'
 }))
@@ -140,8 +139,7 @@ describe('WorktreeCard lineage indicators', () => {
     expect(markup).not.toContain('Parent workspace')
   })
 
-  // Why: legacy cards outdent their child list over the status lane; a read-only card has no lane
-  // to outdent over. The new card style nests in the surface and never had it.
+  // Why: read-only cards keep the status lane, so legacy children keep the sidebar's outdent.
   const OUTDENT = '-ml-[1.125rem] mt-1.5 w-[calc(100%+1.125rem)] space-y-1'
   const STYLES = {
     legacy: {},
@@ -152,7 +150,9 @@ describe('WorktreeCard lineage indicators', () => {
     ['legacy', false, OUTDENT],
     ['compact', false, OUTDENT],
     ['new', false, 'mt-1.5 space-y-1'],
-    ['legacy', true, 'mt-1.5 space-y-1']
+    ['legacy', true, OUTDENT],
+    ['compact', true, OUTDENT],
+    ['new', true, 'mt-1.5 space-y-1']
   ] as const)(
     '%s card, read-only %s: lineage children list classes',
     (style, readOnly, expectedClasses) => {

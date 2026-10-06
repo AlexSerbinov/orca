@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useNativeChatRestartOfferEnabled } from './native-chat-restart-offer-gate'
 import { RotateCcw } from 'lucide-react'
 import { Button } from './ui/button'
@@ -126,6 +126,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
   }, [showing, machines])
   const updateSettings = useAppStore((store) => store.updateSettings)
   const [dontAskAgain, setDontAskAgain] = useState(false)
+  const resumeButtonRef = useRef<HTMLButtonElement>(null)
   // The store's: the resume outlives this dialog, which can close or reopen mid-run. Busy is per
   // machine, so one slow server never locks this computer's chats.
   const resuming = useNativeChatRestartResuming()
@@ -261,7 +262,14 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
         {/* Height is capped, never the data: the list scrolls inside the dialog so the header and
           the primary action stay put however many chats were interrupted. */}
         {/* Wide enough for a sidebar card's chat row to keep its name, model and age on one line. */}
-        <DialogContent className="grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-3xl max-h-[85vh]">
+        <DialogContent
+          className="grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-3xl max-h-[85vh]"
+          // Why: left to Radix, focus lands on the scrollable list (its first tabbable) and rings it.
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            resumeButtonRef.current?.focus()
+          }}
+        >
           <DialogHeader>
             <DialogTitle>
               {/* Plain wrapper owns the icon spacing; DialogTitle owns its own. */}
@@ -403,6 +411,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
                 : translate('auto.components.NativeChatResumeOnRestartModal.dismiss', 'Dismiss')}
             </Button>
             <Button
+              ref={resumeButtonRef}
               variant="default"
               size="sm"
               disabled={chosenCount === 0}
