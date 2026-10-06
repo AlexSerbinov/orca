@@ -18,6 +18,7 @@ import {
 import { performAttach } from './structured-agent-session-attach-flow'
 import { openTestAttachConversation } from './structured-agent-session-attach-test-conversation'
 import { createStructuredAgentSessionLogger } from './structured-agent-session-logger'
+import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
 
 const NOW = 1_800_000_000_000
 const SESSION = 'stamped-owner-session'
@@ -101,6 +102,7 @@ it('starts a chat whose recorded owner carries the runtime stamp', async () => {
   }
 
   const attached = await performAttach({
+    agents: NO_STRUCTURED_AGENTS,
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter,
