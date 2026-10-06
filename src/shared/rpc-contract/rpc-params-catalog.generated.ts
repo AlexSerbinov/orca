@@ -486,9 +486,6 @@ import {
   QueuedMessagesResumeParams,
   RespondParams,
   RespondToQuestionParams,
-  RestartDismissParams,
-  RestartResumableParams,
-  RestartResumeParams,
   RewindParams,
   SendParams,
   SetOptionParams,
@@ -496,6 +493,11 @@ import {
   ThreadGoalParams,
   UnsubscribeParams
 } from './structured-agent-session-params'
+import {
+  RestartDismissParams,
+  RestartResumableParams,
+  RestartResumeParams
+} from './structured-agent-session-restart-params'
 import { TerminalAdoptOrphans } from './terminal-orphan-params'
 import { TerminalQuickCommandsUpdate } from './terminal-quick-command-params'
 import {

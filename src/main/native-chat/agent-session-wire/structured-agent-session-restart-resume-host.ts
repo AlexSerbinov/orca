@@ -8,14 +8,8 @@ import {
   agentSessionRefusalFromReference
 } from '../../../shared/agent-session-wire-refusals'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
-import type {
-  AgentSessionRecoveryCapsule,
-  ListedRestartOffer
-} from '../../runtime/agent-session-recovery-capsule'
-import type {
-  AgentSessionResumeMarker,
-  AgentSessionResumeTrigger
-} from '../../../shared/agent-session-resume-marker'
+import type { AgentSessionRecoveryCapsule } from '../../runtime/agent-session-recovery-capsule'
+import type { AgentSessionResumeMarker } from '../../../shared/agent-session-resume-marker'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 import {
   createNewerOrcaChats,
@@ -33,8 +27,7 @@ import type {
 } from './structured-agent-session-restart-resume-set'
 import {
   resumeStructuredAgentSessionsFromRestart,
-  StructuredAgentSessionResumeAdmission,
-  type StructuredAgentSessionResumeOutcome
+  StructuredAgentSessionResumeAdmission
 } from './structured-agent-session-restart-resume-runner'
 import {
   restartContinuationDeps,
@@ -52,37 +45,12 @@ import { createStructuredAgentSessionRestartWitnesses } from './structured-agent
 import { structuredAgentSessionConversationFence } from './structured-agent-session-provider-child'
 import type { JournalHostDatabase } from '../agent-session-journal/journal-host-database'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
+import type {
+  StructuredAgentSessionRestartContinueResult,
+  StructuredAgentSessionRestartResume
+} from './structured-agent-session-restart-resume-surface'
 
 type LiveSession = StructuredAgentSessionRestartOfferSession
-
-export type StructuredAgentSessionRestartResume = {
-  /** Teardown: begin, then per session a snapshot right before its child stops and a confirmation
-   *  once the stop is proven, then one write of the confirmed offers. */
-  beginTeardown: (trigger: AgentSessionResumeTrigger) => void
-  captureBeforeStop: (sessionId: string) => void
-  confirmStopped: (sessionId: string) => void
-  recordMarkers: () => Promise<void>
-  list: () => Promise<StructuredAgentSessionResumeCandidate[]>
-  /** Offers already acted on whose agent did not carry on. Read-only; nothing here is spent. */
-  listFailures: () => Promise<StructuredAgentSessionResumeFailure[]>
-  continueAfterRestart: (
-    sessionIds: readonly string[] | undefined,
-    owner: string
-  ) => Promise<{
-    resumed: StructuredAgentSessionResumeOutcome[]
-    continued: StructuredAgentSessionContinuationOutcome[]
-    sessions?: StructuredAgentSessionResumeCandidate[]
-    failed?: StructuredAgentSessionResumeFailure[]
-  }>
-  /** Named sessions forget their offer or failure; unnamed, every record this host
-   *  lists goes (a newer Orca's stay). */
-  dismiss: (sessionIds?: readonly string[]) => Promise<number>
-  /** Forgets offers exactly as a client listed them: a chat interrupted again since, or being
-   *  resumed by another action right now, keeps its record. */
-  dismissListed: (listed: readonly ListedRestartOffer[]) => Promise<number>
-  /** The chat's agent proved a start: its offer ends unless the start is a resume's own. */
-  onAgentStarted: (sessionId: string) => void
-}
 
 export function createStructuredAgentSessionRestartResume(
   deps: {
@@ -242,12 +210,7 @@ export function createStructuredAgentSessionRestartResume(
   const continueAfterRestart = async (
     sessionIds: readonly string[] | undefined,
     owner: string
-  ): Promise<{
-    resumed: StructuredAgentSessionResumeOutcome[]
-    continued: StructuredAgentSessionContinuationOutcome[]
-    sessions?: StructuredAgentSessionResumeCandidate[]
-    failed?: StructuredAgentSessionResumeFailure[]
-  }> => {
+  ): Promise<StructuredAgentSessionRestartContinueResult> => {
     const continued: StructuredAgentSessionContinuationOutcome[] = []
     const verdicts: Promise<void>[] = []
     // A chat holds its slot until its agent took the continuation or its start failed, so a batch
