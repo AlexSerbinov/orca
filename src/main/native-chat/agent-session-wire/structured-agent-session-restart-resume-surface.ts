@@ -5,6 +5,7 @@ import type { ListedRestartOffer } from '../../runtime/agent-session-recovery-ca
 import type { AgentSessionResumeTrigger } from '../../../shared/agent-session-resume-marker'
 import type { StructuredAgentSessionContinuationOutcome } from './structured-agent-session-restart-continuation'
 import type {
+  StructuredAgentSessionRestartAudience,
   StructuredAgentSessionResumeCandidate,
   StructuredAgentSessionResumeFailure
 } from './structured-agent-session-restart-resume-set'
@@ -26,19 +27,31 @@ export type StructuredAgentSessionRestartResume = {
   captureBeforeStop: (sessionId: string) => void
   confirmStopped: (sessionId: string) => void
   recordMarkers: () => Promise<void>
-  list: () => Promise<StructuredAgentSessionResumeCandidate[]>
+  list: (
+    audience?: StructuredAgentSessionRestartAudience
+  ) => Promise<StructuredAgentSessionResumeCandidate[]>
   /** Offers already acted on whose agent did not carry on. Read-only; nothing here is spent. */
-  listFailures: () => Promise<StructuredAgentSessionResumeFailure[]>
+  listFailures: (
+    audience?: StructuredAgentSessionRestartAudience
+  ) => Promise<StructuredAgentSessionResumeFailure[]>
+  /** Unnamed, continues every offer the audience sees; named, only those of them. */
   continueAfterRestart: (
     sessionIds: readonly string[] | undefined,
-    owner: string
+    owner: string,
+    audience?: StructuredAgentSessionRestartAudience
   ) => Promise<StructuredAgentSessionRestartContinueResult>
-  /** Named sessions forget their offer or failure; unnamed, every record this host
-   *  lists goes (a newer Orca's stay). */
-  dismiss: (sessionIds?: readonly string[]) => Promise<number>
+  /** Named sessions forget their offer or failure; unnamed, every record this host lists goes (a
+   *  newer Orca's stay). An audience limits either to the agents it sees. */
+  dismiss: (
+    sessionIds?: readonly string[],
+    audience?: StructuredAgentSessionRestartAudience
+  ) => Promise<number>
   /** Forgets offers exactly as a client listed them: a chat interrupted again since, or being
-   *  resumed by another action right now, keeps its record. */
-  dismissListed: (listed: readonly ListedRestartOffer[]) => Promise<number>
+   *  resumed by another action right now, keeps its record. An audience limits it as `dismiss`. */
+  dismissListed: (
+    listed: readonly ListedRestartOffer[],
+    audience?: StructuredAgentSessionRestartAudience
+  ) => Promise<number>
   /** The chat's agent proved a start: its offer ends unless the start is a resume's own. */
   onAgentStarted: (sessionId: string) => void
 }

@@ -1,50 +1,149 @@
-import { beforeEach, expect, it, vi } from 'vitest'
-import { call } from './structured-agent-session-rpc.test-fixture'
+// The restart-offer methods act for the calling client: a paired client too old to show an agent
+// is never listed, resumed, dismissed, or answered that agent's offers. The host stub filters by the
+// audience it is handed, as the real host does (structured-agent-session-restart-audience.test.ts).
 
-const shortcut = vi.hoisted(() => ({ empty: vi.fn(async () => true) }))
-vi.mock('./structured-agent-session-restart-offer-read', () => ({
-  restartOffersProvablyEmpty: shortcut.empty
-}))
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
+import {
+  restartRowsFor,
+  type StructuredAgentSessionRestartAudience
+} from '../../../native-chat/agent-session-wire/structured-agent-session-restart-resume-set'
+import { STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
+import { DESKTOP_RENDERER_RUNTIME_CLIENT_CAPABILITIES } from '../../../ipc/desktop-renderer-runtime-capabilities'
+import {
+  call,
+  clearStructuredHostStub,
+  hostStub,
+  STRUCTURED_CLIENT
+} from './structured-agent-session-rpc.test-fixture'
 
-const ensureHost = vi.fn(async () => undefined)
-const HOST_BUILDER = { ensureStructuredAgentSessionHost: ensureHost }
+afterEach(clearStructuredHostStub)
 
-// A paired desktop is a remote client; in-process callers carry no client kind at all.
-function listRestartOffers(clientCapabilities?: string[]) {
-  return call(
-    'agentSession.restartResumable',
-    {},
-    clientCapabilities ? { clientKind: 'runtime', clientCapabilities } : undefined,
-    HOST_BUILDER
-  )
+const CLAUDE_OFFER = { sessionId: 'claude-session', agent: 'claude' }
+const GROK_OFFER = { sessionId: 'grok-session', agent: 'grok' }
+
+// What the desktop renderer really dispatches with: every client that calls these methods
+// advertises Claude support.
+const OLD_CLIENT = {
+  ...STRUCTURED_CLIENT,
+  clientCapabilities: [...DESKTOP_RENDERER_RUNTIME_CLIENT_CAPABILITIES]
+}
+const NEW_CLIENT = {
+  ...OLD_CLIENT,
+  clientCapabilities: [
+    ...OLD_CLIENT.clientCapabilities,
+    STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY
+  ]
 }
 
-beforeEach(() => {
-  ensureHost.mockClear()
-  shortcut.empty.mockClear()
-  shortcut.empty.mockResolvedValue(true)
-})
+/** A host holding a Claude and a Grok offer, plus a recorded Grok failure. */
+function installRestartHost() {
+  let offers = [CLAUDE_OFFER, GROK_OFFER]
+  const failures = [{ ...GROK_OFFER, reason: 'agent_session_resume_refused' }]
+  const list = async (audience?: StructuredAgentSessionRestartAudience) =>
+    restartRowsFor(offers, audience)
+  const listFailures = async (audience?: StructuredAgentSessionRestartAudience) =>
+    restartRowsFor(failures, audience)
+  const restartResume = {
+    list: vi.fn(list),
+    listFailures: vi.fn(listFailures),
+    dismiss: vi.fn(
+      async (sessionIds?: readonly string[], audience?: StructuredAgentSessionRestartAudience) => {
+        const gone = restartRowsFor(offers, audience).filter(
+          (offer) => sessionIds?.includes(offer.sessionId) ?? true
+        )
+        offers = offers.filter((offer) => !gone.includes(offer))
+        return gone.length
+      }
+    ),
+    continueAfterRestart: vi.fn(
+      async (
+        _sessionIds: readonly string[] | undefined,
+        _owner: string,
+        audience?: StructuredAgentSessionRestartAudience
+      ) => ({
+        resumed: [],
+        continued: [],
+        sessions: await list(audience),
+        failed: await listFailures(audience)
+      })
+    )
+  }
+  setStructuredAgentSessionHost(
+    Object.assign(hostStub(), {
+      restartResume,
+      knownAgentIds: () => ['claude', 'codex', 'grok']
+    })
+  )
+  return { restartResume, offers: () => offers }
+}
 
-it('answers an empty capsule without building the chat host', async () => {
-  await expect(listRestartOffers()).resolves.toMatchObject({
-    ok: true,
-    result: { sessions: [], failed: [] }
+describe("a paired client too old to show the host's other agents", () => {
+  it('lists only the offers it can show', async () => {
+    installRestartHost()
+    expect(await call('agentSession.restartResumable', {}, OLD_CLIENT)).toMatchObject({
+      ok: true,
+      result: { sessions: [CLAUDE_OFFER], failed: [] }
+    })
   })
-  expect(ensureHost).not.toHaveBeenCalled()
-})
 
-it('still refuses a client that cannot read structured sessions, before looking at the file', async () => {
-  await expect(listRestartOffers(['terminal.v1'])).resolves.toMatchObject({
-    ok: false,
-    error: { message: expect.stringContaining('structured_agent_session_unsupported') }
+  it('dismisses only the offers it was shown when it dismisses all', async () => {
+    const host = installRestartHost()
+    expect(await call('agentSession.restartResumableDismiss', {}, OLD_CLIENT)).toMatchObject({
+      ok: true,
+      result: { dismissed: 1, sessions: [], failed: [] }
+    })
+    expect(host.offers()).toEqual([GROK_OFFER])
   })
-  expect(shortcut.empty).not.toHaveBeenCalled()
-  expect(ensureHost).not.toHaveBeenCalled()
+
+  it('cannot dismiss an offer it was not shown by naming it', async () => {
+    const host = installRestartHost()
+    expect(
+      await call(
+        'agentSession.restartResumableDismiss',
+        { sessionIds: [GROK_OFFER.sessionId] },
+        OLD_CLIENT
+      )
+    ).toMatchObject({ ok: true, result: { dismissed: 0, sessions: [CLAUDE_OFFER], failed: [] } })
+    expect(host.offers()).toEqual([CLAUDE_OFFER, GROK_OFFER])
+  })
+
+  it('hands the host its audience when it continues all, so hidden offers are not run', async () => {
+    const host = installRestartHost()
+    await call('agentSession.restartContinue', {}, OLD_CLIENT)
+    const audience = host.restartResume.continueAfterRestart.mock.lastCall?.[2]
+    expect(host.restartResume.continueAfterRestart.mock.lastCall?.[0]).toBeUndefined()
+    expect(audience?.('claude')).toBe(true)
+    expect(audience?.('codex')).toBe(true)
+    expect(audience?.('grok')).toBe(false)
+  })
+
+  it('is not answered the hidden offers or failures after a named continuation', async () => {
+    installRestartHost()
+    expect(
+      await call(
+        'agentSession.restartContinue',
+        { sessionIds: [CLAUDE_OFFER.sessionId] },
+        OLD_CLIENT
+      )
+    ).toMatchObject({ ok: true, result: { sessions: [CLAUDE_OFFER], failed: [] } })
+  })
 })
 
-it('builds the host when the capsule may hold an offer', async () => {
-  shortcut.empty.mockResolvedValue(false)
-  // No host comes up in this test, so the build is followed by the usual refusal.
-  await expect(listRestartOffers()).resolves.toMatchObject({ ok: false })
-  expect(ensureHost).toHaveBeenCalledTimes(1)
+describe.each([
+  ["a paired client that shows the host's agents", NEW_CLIENT],
+  ["the host's own process", undefined]
+])('%s', (_label, client) => {
+  it('acts on every offer', async () => {
+    const host = installRestartHost()
+    expect(await call('agentSession.restartResumable', {}, client)).toMatchObject({
+      ok: true,
+      result: { sessions: [CLAUDE_OFFER, GROK_OFFER], failed: [{ agent: 'grok' }] }
+    })
+    await call('agentSession.restartContinue', {}, client)
+    expect(host.restartResume.continueAfterRestart.mock.lastCall?.[2]).toBeUndefined()
+    await call('agentSession.restartResumableDismiss', {}, client)
+    expect(host.restartResume.dismiss.mock.lastCall?.[1]).toBeUndefined()
+    expect(host.offers()).toEqual([])
+  })
 })

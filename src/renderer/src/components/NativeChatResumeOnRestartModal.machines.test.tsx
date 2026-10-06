@@ -321,7 +321,6 @@ it('keeps a user-opened dialog on screen when another dialog opens over it', asy
     entry.textContent?.includes('Resume interrupted chats?')
   )
   expect(resume).toBeTruthy()
-  expect(resume?.hasAttribute('data-stepped-aside')).toBe(false)
 })
 
 // Once on screen, a launch-raised dialog stays until the user closes it, whatever this computer's

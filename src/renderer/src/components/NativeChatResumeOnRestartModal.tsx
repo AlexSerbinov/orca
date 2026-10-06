@@ -140,8 +140,8 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
   )
   // Each opening starts from the rows' defaults. This component never unmounts, so an untick made
   // before a close would otherwise greet a reopen, e.g. as "Resume 0 chats" over what a run left.
-  // Keyed on the request and its machine, not visibility: stepping aside for another dialog, or a
-  // launch request becoming the user's, keeps the user's ticks.
+  // Keyed on the request and its machine, not on whose turn it is: waiting for a turn, or a launch
+  // request becoming the user's, keeps the user's ticks.
   const opening = request ? `open\u0000${request.focus ?? ''}` : null
   const [openedWith, setOpenedWith] = useState(opening)
   if (openedWith !== opening) {
@@ -255,7 +255,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
     resumeOwnershipLabel(machine.ownershipFor(sessionId), machine.name)
 
   return (
-    // Raised by the launch, it steps aside under another dialog; opened by the user, it counts as one.
+    // Raised by the launch, its own dialog never holds it back; opened by the user, it counts as one.
     <AutomaticPromptDialogScope automatic={request.origin !== 'user'}>
       <Dialog
         open

@@ -247,7 +247,8 @@ export type ListedRestartOffer = { sessionId: string; recordedAt: number }
  *  and every record of a chat another action is resuming right now. */
 export function splitDismissedListed(
   state: Pick<RecoveryCapsuleState, 'entries' | 'failed'>,
-  listed: readonly ListedRestartOffer[]
+  listed: readonly ListedRestartOffer[],
+  keepRecord: KeepRecord = () => false
 ): { kept: Pick<RecoveryCapsuleState, 'entries' | 'failed'>; dismissed: Set<string> } {
   const shown = new Map(listed.map((offer) => [offer.sessionId, offer.recordedAt]))
   const resuming = new Set(
@@ -257,7 +258,11 @@ export function splitDismissedListed(
   )
   const dismissed = new Set<string>()
   const keep = (marker: AgentSessionResumeMarker): boolean => {
-    if (resuming.has(marker.sessionId) || shown.get(marker.sessionId) !== marker.recordedAt) {
+    if (
+      resuming.has(marker.sessionId) ||
+      shown.get(marker.sessionId) !== marker.recordedAt ||
+      keepRecord(marker)
+    ) {
       return true
     }
     dismissed.add(marker.sessionId)

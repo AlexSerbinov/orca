@@ -219,21 +219,21 @@ export class AgentSessionRecoveryCapsule {
     })
   }
 
-  /** Forgets the named sessions whatever their state. Unlike `clearAll`, this is not a fence: a
-   *  later teardown of the same chat may record a fresh offer. */
+  /** Forgets the named sessions, or every session, whatever their state. Unlike `clearAll`, this
+   *  is not a fence: a later teardown of the same chat may record a fresh offer. */
   dismiss(
-    sessionIds: readonly string[],
+    sessionIds: readonly string[] | 'all',
     now: number,
     /** A record this answers true for stays: read against the stored marker, under the lock. */
     keep: (marker: AgentSessionResumeMarker) => boolean = () => false
   ): Promise<number> {
     return withFileTransactionLock(this.filePath, async () => {
-      const named = new Set(sessionIds)
+      const named = sessionIds === 'all' ? null : new Set(sessionIds)
       const state = await this.readState()
       const { entries, failed } = normalizeState(state, now)
       const dismissed = new Set(
         [...entries, ...failed]
-          .filter((record) => named.has(record.marker.sessionId) && !keep(record.marker))
+          .filter(({ marker }) => (named?.has(marker.sessionId) ?? true) && !keep(marker))
           .map((record) => record.marker.sessionId)
       )
       if (dismissed.size > 0) {
@@ -252,10 +252,15 @@ export class AgentSessionRecoveryCapsule {
 
   /** Forgets offers exactly as a client listed them. A chat interrupted again since, or being
    *  resumed by another action right now, keeps its record: the listing never named those. */
-  dismissListed(listed: readonly ListedRestartOffer[], now: number): Promise<number> {
+  dismissListed(
+    listed: readonly ListedRestartOffer[],
+    now: number,
+    /** A record this answers true for stays: read against the stored marker, under the lock. */
+    keep: KeepRecord = () => false
+  ): Promise<number> {
     return withFileTransactionLock(this.filePath, async () => {
       const state = await this.readState()
-      const { kept, dismissed } = splitDismissedListed(normalizeState(state, now), listed)
+      const { kept, dismissed } = splitDismissedListed(normalizeState(state, now), listed, keep)
       if (dismissed.size > 0) {
         await this.publish(kept, now, state.dismissedAt)
       }

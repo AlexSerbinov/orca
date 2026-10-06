@@ -19,6 +19,7 @@ import { useAppStore } from '../store'
 import type { UpdateStatus } from '../../../shared/update-status-types'
 import { useLazyModalMounts } from './use-lazy-modal-mounts'
 import { FailedFeatureTip } from '../components/feature-tips/use-app-open-feature-tip'
+import { DialogLoadingSuspense } from '@/lib/dialog-presence'
 import {
   selectAppRootSurfacePetEnabled,
   selectAppRootSurfaceTelemetryOptedIn,
@@ -334,11 +335,12 @@ export function AppRootSurfaces(props: {
         ) : null}
       </Suspense>
       {hasSshCredentialRequest ? (
-        <Suspense fallback={null}>
+        // Not in the modal slot, so it counts as on screen from its request while its code loads.
+        <DialogLoadingSuspense>
           <ModalBoundary boundaryId="modal.ssh-passphrase" resetKey={activeModal}>
             <SshPassphraseDialog />
           </ModalBoundary>
-        </Suspense>
+        </DialogLoadingSuspense>
       ) : null}
       <ModalBoundary boundaryId="modal.markdown-template-picker" resetKey={activeModal}>
         <MarkdownTemplatePicker />

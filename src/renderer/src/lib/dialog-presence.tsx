@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useLayoutEffect,
-  useMemo,
-  useSyncExternalStore
-} from 'react'
+import { createContext, Suspense, useContext, useLayoutEffect } from 'react'
 
 /**
  * Which dialogs are on screen, counted by the shared dialog primitive itself, so a dialog that
@@ -34,33 +27,33 @@ export function isOtherDialogOpen(): boolean {
   return openDialogs.size > 0
 }
 
-function subscribeNowhere(): () => void {
-  return () => {}
+const failedModalSurfaces = new Set<symbol>()
+
+/** A modal surface's error fallback is showing, so the modal slot it held renders no dialog. */
+export function isModalSurfaceFailed(): boolean {
+  return failedModalSurfaces.size > 0
 }
 
-function notOpen(): boolean {
-  return false
+/** Rendered by a modal surface's error fallback, for exactly as long as that fallback shows. */
+export function FailedModalSurfaceMarker(): null {
+  useLayoutEffect(() => {
+    const entry = Symbol('failed-modal-surface')
+    failedModalSurfaces.add(entry)
+    emit()
+    return () => {
+      failedModalSurfaces.delete(entry)
+      emit()
+    }
+  }, [])
+  return null
 }
 
-/** Subscribes only while `enabled`, so callers that do not need it never re-render on it. */
-export function useOtherDialogOpen(enabled = true): boolean {
-  const subscribe = useCallback(
-    (listener: () => void) => (enabled ? subscribeDialogPresence(listener) : subscribeNowhere()),
-    [enabled]
-  )
-  const getSnapshot = enabled ? isOtherDialogOpen : notOpen
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-}
-
-type AutomaticPromptScopeValue = Readonly<{ steppedAside: boolean }>
-
-const AutomaticPromptScopeContext = createContext<AutomaticPromptScopeValue | null>(null)
+const AutomaticPromptScopeContext = createContext(false)
 
 /**
- * Wraps a dialog the app opened by itself. Its own dialogs, and any it opens, never count as
- * another dialog; while another dialog is up it steps aside, hidden but still mounted, so whatever
- * it holds (typed notes, a send in flight, a running terminal) survives until it comes back.
- * `automatic` is false for the same dialog opened by the user, which counts like any other.
+ * Wraps a dialog the app opened by itself: its own dialogs, and any it opens, never count as another
+ * dialog, so they never hold it back. `automatic` is false for the same dialog opened by the user,
+ * which counts like any other.
  */
 export function AutomaticPromptDialogScope({
   automatic = true,
@@ -69,27 +62,22 @@ export function AutomaticPromptDialogScope({
   automatic?: boolean
   children: React.ReactNode
 }): React.JSX.Element {
-  const otherDialogOpen = useOtherDialogOpen(automatic)
-  const value = useMemo(
-    () => (automatic ? { steppedAside: otherDialogOpen } : null),
-    [automatic, otherDialogOpen]
-  )
   return (
-    <AutomaticPromptScopeContext.Provider value={value}>
+    <AutomaticPromptScopeContext.Provider value={automatic}>
       {children}
     </AutomaticPromptScopeContext.Provider>
   )
 }
 
-/** Non-null inside an automatic prompt's own tree. */
-export function useAutomaticPromptScope(): AutomaticPromptScopeValue | null {
+/** Inside an automatic prompt's own tree. */
+export function useInsideAutomaticPrompt(): boolean {
   return useContext(AutomaticPromptScopeContext)
 }
 
 /** Rendered inside the primitive's content, which mounts only while the dialog is open. */
 export function DialogPresenceMarker(): null {
-  const ownedByAutomaticPrompt = useAutomaticPromptScope() !== null
-  // Layout effect: a prompt already showing steps aside before this dialog's first paint.
+  const ownedByAutomaticPrompt = useInsideAutomaticPrompt()
+  // Layout effect: counted before this dialog's first paint, so no prompt starts under it.
   useLayoutEffect(() => {
     if (ownedByAutomaticPrompt) {
       return
@@ -103,4 +91,17 @@ export function DialogPresenceMarker(): null {
     }
   }, [ownedByAutomaticPrompt])
   return null
+}
+
+/**
+ * Wraps dialogs the user opens whose code loads on first use: while loading they already count as
+ * on screen, so an automatic prompt never starts in that gap. A dialog that fails to load renders
+ * its error boundary's fallback instead, which counts as nothing.
+ */
+export function DialogLoadingSuspense({
+  children
+}: {
+  children: React.ReactNode
+}): React.JSX.Element {
+  return <Suspense fallback={<DialogPresenceMarker />}>{children}</Suspense>
 }
