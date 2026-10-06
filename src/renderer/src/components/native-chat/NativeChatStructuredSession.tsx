@@ -7,7 +7,7 @@ import { useMemo, useRef, useState } from 'react'
 import { agentSessionPromptQuestions } from '../../../../shared/agent-session-question-answer'
 import { dispatchStructuredAgentSessionComposerCommand } from '../../../../shared/structured-agent-session-composer'
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
-import type { NativeChatLiveSession } from './use-native-chat-live-session'
+import { useStructuredChatLiveSession } from './use-structured-chat-live-session'
 import { NativeChatApprovalCard } from './NativeChatApprovalCard'
 import { NativeChatComposer, type NativeChatComposerHandle } from './NativeChatComposer'
 import { structuredAgentSessionDraftScopeKey } from './native-chat-composer-draft-store'
@@ -95,34 +95,11 @@ export function NativeChatStructuredSession(
     target: props.target
   })
   const historyPhase = structuredChatHistoryPhase(provisionalLaunch, controller.status)
-  const session = useMemo<NativeChatLiveSession>(
-    () => ({
-      messages: controller.messages,
-      status:
-        controller.status === 'error'
-          ? 'error'
-          : historyPhase !== 'known'
-            ? 'loading'
-            : controller.isWorking
-              ? 'working'
-              : controller.messages.length === 0
-                ? 'empty'
-                : 'ready',
-      sessionId: props.sessionId,
-      agent: props.agent,
-      ...(controller.error ? { error: controller.error } : {}),
-      hasMore: controller.hasOlder,
-      loadingEarlier: controller.loadingOlder,
-      olderHistoryGeneration: controller.olderHistoryGeneration,
-      loadEarlier: controller.loadOlder,
-      readPhase:
-        controller.status === 'loading'
-          ? 'loading'
-          : controller.status === 'error'
-            ? 'error'
-            : 'ready'
-    }),
-    [controller, historyPhase, props.agent, props.sessionId]
+  const session = useStructuredChatLiveSession(
+    controller,
+    historyPhase,
+    props.sessionId,
+    props.agent
   )
   const agentLabel = structuredAgentLabel(props.agent)
   const continuation = useNativeChatInterruptedContinuation({
