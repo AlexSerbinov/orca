@@ -1,8 +1,5 @@
 import { useAppStore } from '../store'
-import {
-  isConnectedRuntimeHostState,
-  runtimeHostConnectionStateForEntry
-} from '@/runtime/runtime-host-connection-state'
+import { runtimeHostConnectionStateForEntry } from '@/runtime/runtime-host-connection-state'
 import { requestNativeChatResumeOnRestartDialog } from './native-chat-resume-on-restart-dialog'
 import { restartMachineTarget, type RestartMachineKey } from './native-chat-restart-machines'
 import {
@@ -16,15 +13,37 @@ function focusOf(machines: readonly RestartMachineKey[]): RestartMachineKey | nu
   return machines.length === 1 ? machines[0]! : null
 }
 
-/** A server out of contact would hold the dialog back until its call timed out; its last listing
- *  is what the dialog shows instead. */
+/** How long a click waits on a server's re-read before the dialog opens on its last listing. A
+ *  connected server lists its offers in well under this (one capability probe at most, then a
+ *  capsule read); past it the click must still feel answered, and the late answer lands in the
+ *  open dialog like any other read. */
+const PAIRED_READ_WAIT_MS = 1_500
+
+/** Only a server whose runtime answers right now is worth a wait; any other state (its runtime not
+ *  answering, contact lost or still being checked) opens on its last listing at once. */
 function readableNow(machine: RestartMachineKey): boolean {
   const target = restartMachineTarget(machine)
   if (target.kind === 'local') {
     return true
   }
   const entry = useAppStore.getState().runtimeStatusByEnvironmentId.get(target.environmentId)
-  return isConnectedRuntimeHostState(runtimeHostConnectionStateForEntry(entry))
+  return runtimeHostConnectionStateForEntry(entry) === 'connected'
+}
+
+/** This computer's read is awaited as main's opener does; a server's only for its budget. */
+async function readForClick(machine: RestartMachineKey): Promise<void> {
+  const target = restartMachineTarget(machine)
+  const read = readNativeChatRestartMachine(target)
+  if (target.kind === 'local') {
+    await read
+    return
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const budget = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, PAIRED_READ_WAIT_MS)
+  })
+  await Promise.race([read, budget])
+  clearTimeout(timer)
 }
 
 /**
@@ -39,11 +58,7 @@ export async function reopenNativeChatRestartOffer(
 ): Promise<void> {
   // Mid-resume the host's answer is already on its way; a re-read racing it could undo it.
   if (getNativeChatRestartResuming().size === 0) {
-    await Promise.all(
-      machines
-        .filter(readableNow)
-        .map((machine) => readNativeChatRestartMachine(restartMachineTarget(machine)))
-    )
+    await Promise.all(machines.filter(readableNow).map(readForClick))
   }
   if (getNativeChatRestartResuming().size > 0 || getNativeChatRestartOffers().size > 0) {
     requestNativeChatResumeOnRestartDialog('user', focusOf(machines))

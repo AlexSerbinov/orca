@@ -295,3 +295,97 @@ it('opens nothing for a connected server whose re-read lists nothing', async () 
   await reopenNativeChatRestartOffer([`environment:${SERVER}`])
   expect(requests).toEqual([])
 })
+
+// The server took the request, then the link dropped: neither the answer nor a re-read came back.
+// It may be continuing every chat, so none is reported as failed, which would invite a second send.
+it('counts a paired resume as unconfirmed when its answer and the re-read are both lost', async () => {
+  pairStudio()
+  let down = false
+  rpc.mockImplementation(async (_target, method) => {
+    if (method === 'agentSession.restartResumable' && !down) {
+      return { sessions: offered, failed: [] }
+    }
+    down = true
+    throw new Error('Remote runtime connection closed')
+  })
+  await readNativeChatRestartMachine(STUDIO)
+  await continueNativeChatRestartOffers([
+    { machine: `environment:${SERVER}`, sessionIds: ['a', 'b'] }
+  ])
+  expect(vi.mocked(toast).mock.calls.map(([title]) => title)).toEqual([
+    'Couldn’t confirm 2 chats on studio-mac were resumed'
+  ])
+  // The last listing still names them, so Show has something to open.
+  expect(lastToastShow()).toBeDefined()
+})
+
+it('offers no Show for a lost paired resume once nothing of that server is listed', async () => {
+  pairStudio()
+  rpc.mockResolvedValueOnce({ sessions: offered, failed: [] })
+  await readNativeChatRestartMachine(STUDIO)
+  rpc.mockImplementation(async () => {
+    // Re-paired while the call was out: the old pairing's listing is gone with it.
+    forgetNativeChatRestartMachine(`environment:${SERVER}`)
+    throw new Error('Remote runtime connection closed')
+  })
+  await continueNativeChatRestartOffers([{ machine: `environment:${SERVER}`, sessionIds: ['a'] }])
+  expect(vi.mocked(toast).mock.calls.map(([title]) => title)).toEqual([
+    'Couldn’t confirm 1 chat on studio-mac was resumed'
+  ])
+  expect(lastToastShow()).toBeUndefined()
+})
+
+/** Transport up, but the server's runtime did not answer its status probe. */
+function studioRuntimeUnavailable(): void {
+  const entry = useAppStore.getState().runtimeStatusByEnvironmentId.get(SERVER)!
+  useAppStore.setState({
+    runtimeStatusByEnvironmentId: new Map([
+      [SERVER, { ...entry, snapshot: { ...entry.snapshot!, verification: 'unavailable' } }]
+    ])
+  })
+}
+
+it('opens at once on the last listing of a server whose runtime is not answering', async () => {
+  pairStudio()
+  rpc.mockResolvedValueOnce({ sessions: offered, failed: [] })
+  await readNativeChatRestartMachine(STUDIO)
+  studioRuntimeUnavailable()
+  const reads = rpc.mock.calls.length
+  await reopenNativeChatRestartOffer([`environment:${SERVER}`])
+  expect(rpc.mock.calls).toHaveLength(reads)
+  expect(getNativeChatResumeOnRestartDialogRequest()).toEqual({
+    origin: 'user',
+    focus: `environment:${SERVER}`
+  })
+})
+
+// A click is never held for long by a slow server: past the budget the dialog opens on the last
+// listing, and the late answer lands in it like any other read, keeping the same opening.
+it('opens on the last listing once a connected server’s read outlasts its budget', async () => {
+  vi.useFakeTimers()
+  try {
+    pairStudio()
+    rpc.mockResolvedValueOnce({ sessions: offered, failed: [] })
+    await readNativeChatRestartMachine(STUDIO)
+    let answer: (value: unknown) => void = () => {}
+    rpc.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve
+        })
+    )
+    const opening = reopenNativeChatRestartOffer([`environment:${SERVER}`])
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(getNativeChatResumeOnRestartDialogRequest()).toBeNull()
+    await vi.advanceTimersByTimeAsync(500)
+    await opening
+    const opened = getNativeChatResumeOnRestartDialogRequest()
+    expect(opened).toEqual({ origin: 'user', focus: `environment:${SERVER}` })
+    answer({ sessions: [offered[1]!], failed: [] })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(offerIds(`environment:${SERVER}`)).toEqual(['b'])
+    expect(getNativeChatResumeOnRestartDialogRequest()).toBe(opened)
+  } finally {
+    vi.useRealTimers()
+  }
+})

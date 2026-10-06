@@ -17,7 +17,8 @@ export type RestartContinuationOutcome = {
 }
 
 /** How one machine's part of a resume ended: the host's answer (or, when the request was lost, the
- *  list re-read after it), or a request refused before it was sent (the server was re-paired). */
+ *  list re-read after it), a paired request whose answer and re-read were both lost, or a request
+ *  refused before it was sent (the server was re-paired). */
 export type RestartContinueResult = {
   machine: RestartMachineKey
   /** Names a paired server; this computer's own chats need no "where". */
@@ -30,6 +31,11 @@ export type RestartContinueResult = {
       results: readonly RestartContinuationOutcome[] | undefined
       /** The failure list after the action, as the dialog shows it; undefined when none was read. */
       hostFailed: readonly Pick<ResumeFailure, 'sessionId' | 'outcome'>[] | undefined
+    }
+  | {
+      kind: 'unconfirmed'
+      /** Whether the machine still has a listing for Show to open. */
+      listed: boolean
     }
   | { kind: 'not-sent' }
 )
@@ -194,6 +200,10 @@ function tallyAnswer(
 
 function tally(result: RestartContinueResult): MachineTally {
   const base = { machine: result.machine, machineName: result.machineName }
+  if (result.kind === 'unconfirmed') {
+    const unconfirmed = new Set(result.requested).size
+    return { ...base, continued: 0, refused: 0, unconfirmed, listed: result.listed }
+  }
   if (result.kind === 'not-sent') {
     // Nothing reached the host and the pairing it was listed under is gone: no list to show.
     const refused = new Set(result.requested).size

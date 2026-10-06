@@ -174,6 +174,10 @@ async function continueOnMachine(
     console.warn('[native-chat-resume] resume request failed or its answer was lost', error)
     markUnsentResumes(machine, sessionIds, Date.now())
     const read = await readNativeChatRestartMachine(target)
+    if (read.kind !== 'answered' && target.kind === 'environment') {
+      // Neither the answer nor a re-read came back: the server may be continuing every chat.
+      return { ...base, kind: 'unconfirmed', listed: getNativeChatRestartOffers().has(machine) }
+    }
     return { ...base, kind: 'answered', results: [], hostFailed: lostRequestFailures(read, base) }
   } finally {
     settle()
