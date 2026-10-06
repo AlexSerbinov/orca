@@ -5,7 +5,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { isTerminalLeafId } from '../../../../shared/stable-pane-id'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import type { PreparedDroppedPaths } from '../../../../shared/native-file-drop-preparation'
-import type { ManagedPane, PaneManager } from '@/lib/pane-manager/pane-manager'
+import type { PaneManager } from '@/lib/pane-manager/pane-manager'
+import type { ManagedPaneInternal } from '@/lib/pane-manager/pane-manager-types'
+import { collectPublicPanes, toPublicPane } from '@/lib/pane-manager/pane-public-view'
 import type { PtyTransport } from './pty-transport'
 import type { TerminalPaneController } from './use-terminal-pane-controller'
 import {
@@ -111,7 +113,7 @@ vi.mock('./TerminalPaneNativeChatPortal', () => ({
     )
 }))
 
-function makePane(id: number): ManagedPane {
+function makePane(id: number): ManagedPaneInternal {
   const leafId = `00000000-0000-4000-8000-00000000000${id}`
   if (!isTerminalLeafId(leafId)) {
     throw new Error('Invalid fixture leaf')
@@ -120,9 +122,10 @@ function makePane(id: number): ManagedPane {
   return {
     id,
     leafId,
+    stablePaneId: leafId,
     container: document.createElement('div'),
     terminal: { focus: vi.fn() }
-  } as unknown as ManagedPane
+  } as unknown as ManagedPaneInternal
 }
 
 function mountSurface(
@@ -135,7 +138,10 @@ function mountSurface(
     worktreeId?: string
   } = {}
 ) {
-  const panes = [makePane(1), makePane(2)]
+  const internalPanes = [makePane(1), makePane(2)]
+  const paneRecords = new Map(internalPanes.map((pane) => [pane.id, pane]))
+  const getPanes = () => collectPublicPanes(paneRecords, paneRecords.size)
+  const panes = getPanes()
   const sends = panes.map(() => vi.fn(() => true))
   const ptyIds = ['pty-A', 'pty-B']
   const transports = new Map<number, PtyTransport>()
@@ -149,9 +155,9 @@ function mountSurface(
       getRuntimeEnvironmentId: () => options.runtime ?? null
     } as unknown as PtyTransport)
   })
-  const active = panes[1]
+  const active = internalPanes[1]
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The surface and drop handlers only enumerate panes and read active identity.
-  const manager = { getPanes: () => panes, getActivePane: () => active } as unknown as PaneManager
+  const manager = { getPanes, getActivePane: () => toPublicPane(active) } as unknown as PaneManager
   const divider = document.createElement('div')
   const activate = vi.fn()
   mocks.chatPane = options.chat ? panes[0].container : null
@@ -203,7 +209,13 @@ function mountSurface(
     ptyIds,
     divider,
     title: titles[0],
-    body: panes[0].container
+    body: panes[0].container,
+    replacePaneContainer: () => {
+      paneRecords.set(panes[0].id, {
+        ...internalPanes[0],
+        container: document.createElement('div')
+      })
+    }
   }
 }
 
@@ -264,6 +276,17 @@ afterEach(() => {
 })
 
 describe('terminal element file drops', () => {
+  it('enumerates fresh public views of the same pane identities', () => {
+    const fixture = mountSurface()
+    const first = fixture.manager.getPanes()
+    const second = fixture.manager.getPanes()
+    for (const [index, pane] of first.entries()) {
+      expect(pane).not.toBe(fixture.panes[index])
+      expect(pane).not.toBe(second[index])
+      expect(second[index]).toEqual(pane)
+      expect(pane.container).toBe(fixture.panes[index].container)
+    }
+  })
   it.each(['title', 'body'] as const)(
     'delivers to A from its %s while B stays active and never broadcasts',
     async (root) => {
@@ -274,7 +297,7 @@ describe('terminal element file drops', () => {
       expect(fixture.sends[1]).not.toHaveBeenCalled()
       expect(fixture.panes[0].terminal.focus).not.toHaveBeenCalled()
       expect(fixture.activate).not.toHaveBeenCalled()
-      expect(fixture.manager.getActivePane()).toBe(fixture.panes[1])
+      expect(fixture.manager.getActivePane()).toEqual(fixture.panes[1])
       expect(mocks.broadcast).not.toHaveBeenCalled()
       expect(mocks.legacyIpc).not.toHaveBeenCalled()
       expect(mocks.prepare).toHaveBeenCalledExactlyOnceWith({
@@ -284,6 +307,45 @@ describe('terminal element file drops', () => {
       expect(
         fixture.view.container.querySelector('[data-native-file-drop-target="terminal"]')
       ).toBeNull()
+    }
+  )
+  it.each(['title', 'body'] as const)(
+    'refuses a retired %s owner with the same pane and leaf IDs but a replaced container',
+    async (root) => {
+      const fixture = mountSurface()
+      fixture.replacePaneContainer()
+      expect(fixture[root].isConnected).toBe(true)
+      expect(fixture.manager.getPanes()[0]).toMatchObject({
+        id: fixture.panes[0].id,
+        leafId: fixture.panes[0].leafId
+      })
+      expect(fixture.manager.getPanes()[0].container).not.toBe(fixture.body)
+      drop(fixture[root])
+      await settle()
+      expect(mocks.prepare).not.toHaveBeenCalled()
+      expect(fixture.sends[0]).not.toHaveBeenCalled()
+      expect(fixture.sends[1]).not.toHaveBeenCalled()
+    }
+  )
+  it.each(['title', 'body'] as const)(
+    'refuses delivery from %s when its container is replaced during preparation',
+    async (root) => {
+      let finish: ((prepared: PreparedDroppedPaths) => void) | undefined
+      mocks.prepare.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve
+          })
+      )
+      const fixture = mountSurface()
+      drop(fixture[root])
+      expect(mocks.prepare).toHaveBeenCalledOnce()
+      fixture.replacePaneContainer()
+      await act(async () => {
+        finish?.({ paths: ['/client/file.txt'], failures: [] })
+      })
+      expect(fixture.sends[0]).not.toHaveBeenCalled()
+      expect(fixture.sends[1]).not.toHaveBeenCalled()
     }
   )
   it('leaves divider drops unowned', async () => {

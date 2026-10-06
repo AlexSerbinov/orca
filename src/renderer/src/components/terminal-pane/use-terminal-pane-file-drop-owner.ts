@@ -34,6 +34,19 @@ function sequenceForPane(pane: ManagedPane, paneKey: PaneKey): OsFileDropSequenc
   return sequence
 }
 
+function paneIsCurrent(manager: PaneManager | null, pane: ManagedPane): boolean {
+  return Boolean(
+    manager
+      ?.getPanes()
+      .some(
+        (current) =>
+          current.id === pane.id &&
+          current.leafId === pane.leafId &&
+          current.container === pane.container
+      )
+  )
+}
+
 export function useTerminalPaneFileDropOwner(
   args: TerminalPaneFileDropOwnerArgs
 ): (root: HTMLElement | null) => void {
@@ -49,7 +62,7 @@ export function useTerminalPaneFileDropOwner(
         rootRef.current?.isConnected &&
         !rootRef.current.closest('[inert]') &&
         !isElementDisplayNone(rootRef.current) &&
-        managerRef.current?.getPanes().includes(pane) &&
+        paneIsCurrent(managerRef.current, pane) &&
         paneTransportsRef.current.get(pane.id)?.isConnected()
       ),
     captureDestination: () => {
@@ -64,7 +77,7 @@ export function useTerminalPaneFileDropOwner(
           managerRef.current !== manager ||
           paneTransportsRef.current !== paneTransports ||
           makePaneKey(tabId, pane.leafId) !== paneKey ||
-          !manager.getPanes().includes(pane)
+          !paneIsCurrent(manager, pane)
         ) {
           return
         }
