@@ -214,9 +214,7 @@ export class RuntimeMobileDictationController {
   }
 
   private cancelSession(session: MobileDictationSession): void {
-    if (session.state === 'closing') {
-      return
-    }
+    // Why: a finish may still be uploading; the discard stop aborts it since nobody will read the text.
     session.state = 'closing'
     void getSpeechSttService(this.requireStore())
       .stopDictation(session.owner, { discard: true })

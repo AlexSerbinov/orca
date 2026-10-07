@@ -156,4 +156,23 @@ describe('registerSpeechHandlers', () => {
       modelId: 'model-1'
     })
   })
+
+  it('rejects desktop audio with an unsupported sample rate before decoding it', async () => {
+    const sttService = { feedAudio: vi.fn() }
+    getSpeechSttServiceMock.mockReturnValue(sttService)
+    registerSpeechHandlers({} as never)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: speech:feedAudio is registered with (event, buffer, sampleRate, sessionId).
+    const feed = getHandler('speech:feedAudio') as unknown as (
+      event: { sender: { id: number } },
+      buffer: Buffer,
+      sampleRate: number
+    ) => Promise<void>
+
+    await expect(feed({ sender: { id: 7 } }, Buffer.alloc(8), 0.001)).rejects.toThrow(
+      'Unsupported audio sample rate'
+    )
+    await feed({ sender: { id: 7 } }, Buffer.alloc(8), 48_000)
+
+    expect(sttService.feedAudio).toHaveBeenCalledTimes(1)
+  })
 })

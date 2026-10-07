@@ -13,15 +13,23 @@ vi.mock('ws', () => ({
   }
 }))
 
-import { openProviderWebSocket, PROVIDER_HANDSHAKE_TIMEOUT_MS } from './cloud-speech-websocket'
+import {
+  openProviderWebSocket,
+  PROVIDER_HANDSHAKE_TIMEOUT_MS,
+  PROVIDER_MAX_PAYLOAD_BYTES
+} from './cloud-speech-websocket'
 
 describe('openProviderWebSocket', () => {
-  it('bounds the handshake so a blackholed host surfaces an error', () => {
+  it('bounds the handshake and inbound frame size', () => {
     openProviderWebSocket('wss://example.test', { Authorization: 'Token k' })
 
     expect(constructed.at(-1)).toEqual([
       'wss://example.test',
-      { handshakeTimeout: PROVIDER_HANDSHAKE_TIMEOUT_MS, headers: { Authorization: 'Token k' } }
+      {
+        handshakeTimeout: PROVIDER_HANDSHAKE_TIMEOUT_MS,
+        maxPayload: PROVIDER_MAX_PAYLOAD_BYTES,
+        headers: { Authorization: 'Token k' }
+      }
     ])
   })
 })

@@ -1,5 +1,6 @@
 import { CLOUD_TRANSCRIPTION_SAMPLE_RATE } from './cloud-speech-session'
 import { resampleToRate } from './stt-audio-resample'
+import { assertSupportedDictationSampleRate } from '../../shared/speech-audio-sample-rate'
 
 const MAX_BATCH_AUDIO_SECONDS = 10 * 60
 
@@ -37,7 +38,14 @@ export function encodePcm16Wav(samples: Float32Array, sampleRate: number): Buffe
 }
 
 export function resampleForCloud(samples: Float32Array, sampleRate: number): Float32Array {
+  assertSupportedDictationSampleRate(sampleRate)
   return resampleToRate(samples, sampleRate, CLOUD_TRANSCRIPTION_SAMPLE_RATE)
+}
+
+/** Seconds of audio a chunk adds, computed before resampling so caps are checked pre-allocation. */
+export function cloudAudioSeconds(sampleCount: number, sampleRate: number): number {
+  assertSupportedDictationSampleRate(sampleRate)
+  return sampleCount / sampleRate
 }
 
 /** Collects one dictation's audio at 16 kHz for providers that transcribe the whole file. */
@@ -46,11 +54,12 @@ export class BatchDictationAudioBuffer {
   private sampleCount = 0
 
   append(samples: Float32Array, sampleRate: number): void {
-    const normalized = resampleForCloud(samples, sampleRate)
-    const nextCount = this.sampleCount + normalized.length
-    if (nextCount / CLOUD_TRANSCRIPTION_SAMPLE_RATE > MAX_BATCH_AUDIO_SECONDS) {
+    const bufferedSeconds = this.sampleCount / CLOUD_TRANSCRIPTION_SAMPLE_RATE
+    if (bufferedSeconds + cloudAudioSeconds(samples.length, sampleRate) > MAX_BATCH_AUDIO_SECONDS) {
       throw new Error('Cloud transcription is limited to 10 minutes per dictation')
     }
+    const normalized = resampleForCloud(samples, sampleRate)
+    const nextCount = this.sampleCount + normalized.length
     // Why: the caller may transfer or reuse its buffer after feeding.
     this.chunks.push(new Float32Array(normalized))
     this.sampleCount = nextCount

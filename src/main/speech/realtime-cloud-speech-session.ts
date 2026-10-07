@@ -1,14 +1,11 @@
 import type WebSocket from 'ws'
-import { encodePcm16, resampleForCloud } from './cloud-speech-audio-encoding'
+import { cloudAudioSeconds, encodePcm16, resampleForCloud } from './cloud-speech-audio-encoding'
 import { describeProviderFailure, redactCloudSpeechSecrets } from './cloud-speech-provider-errors'
-import {
-  CLOUD_TRANSCRIPTION_SAMPLE_RATE,
-  type CloudSpeechSession,
-  type CloudSpeechSessionOptions
-} from './cloud-speech-session'
+import type { CloudSpeechSession, CloudSpeechSessionOptions } from './cloud-speech-session'
 
 const MAX_REALTIME_AUDIO_SECONDS = 30 * 60
 export const REALTIME_FINISH_TIMEOUT_MS = 10_000
+export const MAX_REALTIME_BUFFERED_BYTES = 2 * 1024 * 1024
 // Why: a provider that opens but never acknowledges the session would otherwise eat the recording.
 export const REALTIME_ACCEPT_TIMEOUT_MS = 15_000
 
@@ -40,13 +37,15 @@ export abstract class RealtimeCloudSpeechSession implements CloudSpeechSession {
   /** Opens the socket; called by the factory right after construction. */
   start(): void {
     let apiKey: string
+    let socket: WebSocket
     try {
       apiKey = this.options.readApiKey()
+      socket = this.createSocket(apiKey)
     } catch (error) {
-      this.fail(describeProviderFailure(this.label, error))
-      return
+      // Why: throwing lets start reject instead of reporting 'ready' for a dead session; ws can echo the key.
+      this.close()
+      throw new Error(describeProviderFailure(this.label, error))
     }
-    const socket = this.createSocket(apiKey)
     this.socket = socket
     socket.on('open', () => this.onOpen(apiKey))
     socket.on('message', (data, isBinary) => {
@@ -76,13 +75,18 @@ export abstract class RealtimeCloudSpeechSession implements CloudSpeechSession {
     if (this.closed || this.failure) {
       return
     }
-    const normalized = resampleForCloud(samples, sampleRate)
-    this.audioSeconds += normalized.length / CLOUD_TRANSCRIPTION_SAMPLE_RATE
-    if (this.audioSeconds > MAX_REALTIME_AUDIO_SECONDS) {
+    const nextSeconds = this.audioSeconds + cloudAudioSeconds(samples.length, sampleRate)
+    if (nextSeconds > MAX_REALTIME_AUDIO_SECONDS) {
       throw new Error('Real-time transcription is limited to 30 minutes per dictation')
     }
-    const pcm = encodePcm16(normalized)
+    const pcm = encodePcm16(resampleForCloud(samples, sampleRate))
+    this.audioSeconds = nextSeconds
     if (this.accepting && this.isSocketOpen()) {
+      // Why: a stalled socket would otherwise buffer the whole dictation in memory.
+      if ((this.socket?.bufferedAmount ?? 0) + pcm.length > MAX_REALTIME_BUFFERED_BYTES) {
+        this.fail(`${this.label} connection is too slow.`)
+        return
+      }
       this.sendAudio(pcm)
     } else {
       this.pending.push(pcm)
@@ -103,6 +107,10 @@ export abstract class RealtimeCloudSpeechSession implements CloudSpeechSession {
           this.signalEnd()
         }
       })
+      // Why: audio queued for a provider that never accepted was dropped; say so instead of "no speech".
+      if (!this.accepting) {
+        this.fail(`${this.label} did not start the stream in time.`)
+      }
     }
     this.close()
     // Why: a mid-stream failure was already reported through the sink; keep what was committed.

@@ -34,8 +34,10 @@ export async function startSttDictation(
     }
     return
   }
-  // Why: a cloud stop clears cloudSession before its upload settles; `stopping` keeps that finish
-  // from delivering its final text into another owner's session.
+  // Why: a cloud finish still owns the provider result; even a same-owner restart would race it.
+  if (state.finishingCloudSession) {
+    throw new Error('dictation_already_active')
+  }
   if (
     (state.worker || state.cloudSession || state.stopping) &&
     state.activeOwner &&
@@ -90,19 +92,29 @@ async function startSttSession(
     // Why: a same-owner restart replaces the session; close any open provider socket first.
     state.cloudSession?.cancel()
     state.cloudSession = null
-    // Why: realtime sessions can report a key/socket failure synchronously while being created.
     state.eventSink = sink
-    state.cloudSession = createCloudSpeechSession(manifest, {
-      readApiKey: () => readCloudSpeechApiKey(provider),
-      // Why: a hint the model cannot honour would fail the request; auto-detect instead.
-      language: resolveModelLanguageHint(manifest.transcriptionLanguages, options.language),
-      // Why: late provider events after stop must not reach the next dictation's sink.
-      sink: (event) => {
-        if (state.eventSink === sink) {
-          sink(event)
+    try {
+      state.cloudSession = createCloudSpeechSession(manifest, {
+        readApiKey: () => readCloudSpeechApiKey(provider),
+        // Why: a hint the model cannot honour would fail the request; auto-detect instead.
+        language: resolveModelLanguageHint(manifest.transcriptionLanguages, options.language),
+        // Why: late provider events after stop must not reach the next dictation's sink.
+        sink: (event) => {
+          if (state.eventSink === sink) {
+            sink(event)
+          }
         }
+      })
+    } catch (error) {
+      // Why: a rejected start must not leave a half-claimed session that swallows audio.
+      if (state.eventSink === sink) {
+        state.eventSink = null
       }
-    })
+      state.activeOwner = null
+      state.activeModelId = null
+      throw error
+    }
+    state.cloudFeedFailureReported = false
     state.activeModelId = modelId
     state.activeHotwordsFilePath = undefined
     sink({ type: 'ready' })

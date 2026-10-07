@@ -4,6 +4,10 @@ import {
   isWellFormedCloudSpeechApiKey,
   MALFORMED_CLOUD_SPEECH_API_KEY_MESSAGE
 } from '../cloud-speech-providers'
+import {
+  MAX_DICTATION_INPUT_SAMPLE_RATE,
+  MIN_DICTATION_INPUT_SAMPLE_RATE
+} from '../speech-audio-sample-rate'
 
 export const AUDIO_BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/
 
@@ -40,7 +44,11 @@ export const DictationChunk = z.object({
     // Why: Buffer.from(..., 'base64') silently drops malformed bytes; reject
     // bad mobile audio chunks instead of feeding empty/corrupt PCM.
     .refine(isValidAudioBase64, 'Audio chunk must be base64'),
-  sampleRate: z.number().finite().positive()
+  sampleRate: z
+    .number()
+    .int()
+    .min(MIN_DICTATION_INPUT_SAMPLE_RATE)
+    .max(MAX_DICTATION_INPUT_SAMPLE_RATE)
 })
 
 export const DictationHandle = z.object({

@@ -1,5 +1,6 @@
 import type { Worker } from 'node:worker_threads'
-import type { SttSessionState } from './stt-session-state'
+import type { CloudSpeechSession } from './cloud-speech-session'
+import type { FinishingCloudSession, SttSessionState } from './stt-session-state'
 import { waitForSttWorkerStop, type SttWorkerStopOutcome } from './stt-worker-stop'
 import { IDLE_WORKER_TEARDOWN_MS } from './stt-session-timeouts'
 
@@ -19,6 +20,9 @@ export async function stopSttDictation(
   if (options.cancelStarting !== false && state.startingOwner === owner) {
     state.canceledOwners.add(owner)
   }
+  if (state.finishingCloudSession) {
+    return joinFinishingCloudStop(state.finishingCloudSession, owner, options)
+  }
   if (!state.worker && !state.cloudSession) {
     return
   }
@@ -28,35 +32,7 @@ export async function stopSttDictation(
   }
 
   if (state.cloudSession) {
-    state.stopping = true
-    try {
-      const session = state.cloudSession
-      state.cloudSession = null
-      try {
-        if (options.discard) {
-          session.cancel()
-          return
-        }
-        const text = await session.finish()
-        if (text) {
-          state.eventSink?.({ type: 'final', text })
-        }
-      } catch (error) {
-        state.eventSink?.({
-          type: 'error',
-          error: error instanceof Error ? error.message : String(error)
-        })
-      } finally {
-        state.eventSink?.({ type: 'stopped' })
-        state.activeModelId = null
-        state.activeHotwordsFilePath = undefined
-        state.activeOwner = null
-        state.eventSink = null
-      }
-    } finally {
-      state.stopping = false
-    }
-    return
+    return stopCloudSession(state, state.cloudSession, currentOwner ?? owner, options)
   }
 
   const worker = state.worker
@@ -89,6 +65,82 @@ export async function stopSttDictation(
     await stopPromise
   } finally {
     state.stopping = false
+  }
+}
+
+function joinFinishingCloudStop(
+  finishing: FinishingCloudSession,
+  owner: string,
+  options: SttStopOptions
+): Promise<void> {
+  if (finishing.owner !== owner) {
+    throw new Error('dictation_owner_mismatch')
+  }
+  if (options.discard && !finishing.discarded) {
+    // Why: a disconnect or cancel during the upload must abort it instead of billing it.
+    finishing.discarded = true
+    finishing.session.cancel()
+  }
+  return finishing.promise
+}
+
+function stopCloudSession(
+  state: SttSessionState,
+  session: CloudSpeechSession,
+  owner: string,
+  options: SttStopOptions
+): Promise<void> {
+  // Why: the finish may outlive this owner's turn; deliver its result only to the sink it began with.
+  const sink = state.eventSink
+  state.cloudSession = null
+  const finishing: FinishingCloudSession = {
+    session,
+    owner,
+    sink,
+    discarded: options.discard === true,
+    promise: Promise.resolve()
+  }
+  finishing.promise = runCloudFinish(state, finishing)
+  return finishing.promise
+}
+
+async function runCloudFinish(
+  state: SttSessionState,
+  finishing: FinishingCloudSession
+): Promise<void> {
+  const { session, sink } = finishing
+  if (finishing.discarded) {
+    session.cancel()
+    endCloudStop(state, finishing)
+    return
+  }
+  state.finishingCloudSession = finishing
+  state.stopping = true
+  try {
+    const text = await session.finish()
+    if (text && !finishing.discarded) {
+      sink?.({ type: 'final', text })
+    }
+  } catch (error) {
+    if (!finishing.discarded) {
+      sink?.({ type: 'error', error: error instanceof Error ? error.message : String(error) })
+    }
+  } finally {
+    if (state.finishingCloudSession === finishing) {
+      state.finishingCloudSession = null
+      state.stopping = false
+    }
+    endCloudStop(state, finishing)
+  }
+}
+
+function endCloudStop(state: SttSessionState, finishing: FinishingCloudSession): void {
+  finishing.sink?.({ type: 'stopped' })
+  if (state.eventSink === finishing.sink) {
+    state.activeModelId = null
+    state.activeHotwordsFilePath = undefined
+    state.activeOwner = null
+    state.eventSink = null
   }
 }
 

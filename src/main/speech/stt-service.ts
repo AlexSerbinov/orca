@@ -1,3 +1,4 @@
+import type { CloudSpeechSession } from './cloud-speech-session'
 import type { ModelManager } from './model-manager'
 import { startSttDictation } from './stt-session-start'
 import { createSttSessionState, type SttSessionState } from './stt-session-state'
@@ -52,12 +53,32 @@ export class SttService {
       throw new Error('dictation_owner_mismatch')
     }
     if (this.state.cloudSession) {
-      this.state.cloudSession.feedAudio(samples, sampleRate)
+      this.feedCloudAudio(this.state.cloudSession, samples, sampleRate)
       return
     }
     this.state.worker?.postMessage({ type: 'feed', samples, sampleRate }, [
       samples.buffer as ArrayBuffer
     ])
+  }
+
+  private feedCloudAudio(
+    session: CloudSpeechSession,
+    samples: Float32Array,
+    sampleRate: number
+  ): void {
+    try {
+      session.feedAudio(samples, sampleRate)
+    } catch (error) {
+      // Why: desktop capture ignores feed rejections, so the sink is the only place the user sees it.
+      if (!this.state.cloudFeedFailureReported) {
+        this.state.cloudFeedFailureReported = true
+        this.state.eventSink?.({
+          type: 'error',
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+      throw error
+    }
   }
 
   stopDictation(

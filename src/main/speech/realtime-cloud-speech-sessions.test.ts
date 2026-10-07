@@ -5,7 +5,9 @@ const { FakeWebSocket } = await vi.hoisted(async () => {
   class HoistedFakeWebSocket extends EventEmitter {
     readonly OPEN = 1
     static instances: HoistedFakeWebSocket[] = []
+    static constructError: Error | null = null
     readyState = 0
+    bufferedAmount = 0
     sent: (string | Buffer)[] = []
     closedWith: number | 'terminated' | null = null
 
@@ -14,6 +16,9 @@ const { FakeWebSocket } = await vi.hoisted(async () => {
       readonly headers?: Record<string, string>
     ) {
       super()
+      if (HoistedFakeWebSocket.constructError) {
+        throw HoistedFakeWebSocket.constructError
+      }
       HoistedFakeWebSocket.instances.push(this)
     }
 
@@ -56,7 +61,11 @@ vi.mock('./cloud-speech-websocket', () => ({
 
 import { getCatalogModel } from './model-catalog'
 import { createCloudSpeechSession } from './cloud-speech-session-factory'
-import { REALTIME_ACCEPT_TIMEOUT_MS } from './realtime-cloud-speech-session'
+import {
+  MAX_REALTIME_BUFFERED_BYTES,
+  REALTIME_ACCEPT_TIMEOUT_MS,
+  REALTIME_FINISH_TIMEOUT_MS
+} from './realtime-cloud-speech-session'
 
 function start(modelId: string, language?: string) {
   const manifest = getCatalogModel(modelId)
@@ -80,6 +89,7 @@ const SPEECH = new Float32Array(1600).fill(0.2)
 
 beforeEach(() => {
   FakeWebSocket.instances = []
+  FakeWebSocket.constructError = null
 })
 
 describe('Soniox realtime session', () => {
@@ -305,6 +315,82 @@ describe('realtime session lifecycle', () => {
 
     await expect(session.finish()).resolves.toBe('')
     expect(socket.closedWith).toBe('terminated')
+  })
+})
+
+describe('realtime session failures', () => {
+  function startWith(modelId: string, readApiKey: () => string) {
+    const manifest = getCatalogModel(modelId)
+    if (!manifest) {
+      throw new Error(`missing ${modelId}`)
+    }
+    return createCloudSpeechSession(manifest, { readApiKey, sink: vi.fn() })
+  }
+
+  it('rejects creation when the key cannot be read', () => {
+    expect(() =>
+      startWith('soniox-stt-rt-v5', () => {
+        throw new Error('Soniox API key is not configured')
+      })
+    ).toThrow('Soniox API key is not configured')
+    expect(FakeWebSocket.instances).toHaveLength(0)
+  })
+
+  it('rejects creation without echoing the key when the socket cannot be built', () => {
+    FakeWebSocket.constructError = new Error('Invalid header value: "sk-live-secret-value"')
+
+    expect(() => startWith('deepgram-nova-3', () => 'sk-live-secret-value')).toThrow(
+      'API key contains invalid characters.'
+    )
+  })
+
+  it('reports a socket error once, sanitized, and closes the socket', () => {
+    const { sink, socket } = start('deepgram-nova-3')
+    socket.open()
+
+    socket.emit('error', new Error('connect failed for token=abcdef123456'))
+    socket.emit('error', new Error('second failure'))
+
+    expect(sink.mock.calls).toEqual([[{ type: 'error', error: 'connect failed for [redacted]' }]])
+    expect(socket.closedWith).toBe(1000)
+  })
+
+  it('surfaces audio dropped because the provider never accepted before stop', async () => {
+    vi.useFakeTimers()
+    try {
+      const { session, sink, socket } = start('elevenlabs-scribe-v2-realtime')
+      socket.open()
+      session.feedAudio(SPEECH, 16_000)
+
+      const finished = session.finish()
+      await vi.advanceTimersByTimeAsync(REALTIME_FINISH_TIMEOUT_MS)
+
+      await expect(finished).resolves.toBe('')
+      expect(sink).toHaveBeenCalledWith({
+        type: 'error',
+        error: 'ElevenLabs did not start the stream in time.'
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('fails instead of buffering when the socket stops draining', () => {
+    const { session, sink, socket } = start('soniox-stt-rt-v5')
+    socket.open()
+    socket.bufferedAmount = MAX_REALTIME_BUFFERED_BYTES
+
+    session.feedAudio(SPEECH, 16_000)
+
+    expect(sink).toHaveBeenCalledWith({ type: 'error', error: 'Soniox connection is too slow.' })
+    expect(socket.sent.filter((frame) => Buffer.isBuffer(frame))).toHaveLength(0)
+  })
+
+  it('refuses an unsupported sample rate before resampling', () => {
+    const { session } = start('soniox-stt-rt-v5')
+
+    expect(() => session.feedAudio(SPEECH, 1)).toThrow('Unsupported audio sample rate')
+    expect(() => session.feedAudio(SPEECH, Number.NaN)).toThrow('Unsupported audio sample rate')
   })
 })
 

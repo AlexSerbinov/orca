@@ -54,6 +54,25 @@ describe('mobile dictation live captions', () => {
     expect(stt.stopDictation).toHaveBeenLastCalledWith('mobile:d1', { discard: true })
   })
 
+  it('aborts a finishing upload when the phone disconnects', async () => {
+    const controller = createController()
+    await controller.start({ dictationId: 'd1', ...CLIENT })
+    let releaseStop!: () => void
+    stt.stopDictation.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseStop = resolve
+        })
+    )
+    const finishing = controller.finish({ dictationId: 'd1', ...CLIENT })
+
+    controller.cancelForConnection('conn')
+
+    expect(stt.stopDictation).toHaveBeenLastCalledWith('mobile:d1', { discard: true })
+    releaseStop()
+    await finishing
+  })
+
   it('passes the language hint to the speech service', async () => {
     const controller = createController('uk')
 
