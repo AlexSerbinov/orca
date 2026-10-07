@@ -8,6 +8,8 @@ import type { MobileSpeechProvidersState } from '../dictation/speech-provider-re
 
 const fetchSpeechProviders = vi.hoisted(() => vi.fn())
 const fetchDictationSetup = vi.hoisted(() => vi.fn())
+const setDictationConfig = vi.hoisted(() => vi.fn())
+const downloadDictationModel = vi.hoisted(() => vi.fn())
 
 vi.mock('react-native', () => ({
   View: 'View',
@@ -38,7 +40,9 @@ vi.mock('../settings/speech-model-grouped-list', async () => {
 vi.mock('../dictation/mobile-speech-providers', () => ({ fetchSpeechProviders }))
 vi.mock('../dictation/mobile-dictation-setup', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../dictation/mobile-dictation-setup')>()),
-  fetchDictationSetup
+  fetchDictationSetup,
+  setDictationConfig,
+  downloadDictationModel
 }))
 
 let renderer: ReactTestRenderer | undefined
@@ -48,6 +52,8 @@ afterEach(() => {
   renderer = undefined
   fetchSpeechProviders.mockReset()
   fetchDictationSetup.mockReset()
+  setDictationConfig.mockReset()
+  downloadDictationModel.mockReset()
 })
 
 function deferred<T>() {
@@ -172,5 +178,30 @@ describe('MobileDictationSetupSheet legacy rows', () => {
       const text = renderer?.root.findByProps({ children: action })
       expect(text?.props.maxFontSizeMultiplier).toBe(1.5)
     }
+  })
+})
+
+describe('MobileDictationSetupSheet errors', () => {
+  it('keeps a failed model select error after a download refreshes the setup', async () => {
+    fetchSpeechProviders.mockResolvedValue(null)
+    fetchDictationSetup.mockResolvedValue({
+      enabled: true,
+      dictationMode: 'toggle',
+      selectedModelId: '',
+      models: [
+        { id: 'ready', label: 'Ready', provider: 'local', status: 'ready', sizeBytes: 1 },
+        { id: 'fresh', label: 'Fresh', provider: 'local', status: 'not-downloaded', sizeBytes: 1 }
+      ]
+    })
+    setDictationConfig.mockRejectedValue(new Error('Desktop refused the model'))
+    downloadDictationModel.mockResolvedValue(undefined)
+    await render(fakeClient())
+
+    const useReady = renderer?.root.findByProps({ accessibilityLabel: 'Use Ready' })
+    await act(async () => useReady?.props.onPress())
+    const downloadFresh = renderer?.root.findByProps({ accessibilityLabel: 'Download Fresh' })
+    await act(async () => downloadFresh?.props.onPress())
+    expect(fetchDictationSetup).toHaveBeenCalledTimes(2)
+    expect(JSON.stringify(renderer?.toJSON())).toContain('Desktop refused the model')
   })
 })

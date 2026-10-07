@@ -6,6 +6,7 @@ import { hasSpeechModelInFlight } from '../dictation/speech-provider-presentatio
 import type { MobileSpeechProvidersState } from '../dictation/speech-provider-reply-schema'
 import type { SpeechModelBusy } from './speech-model-picker-drawer'
 import { useVoiceRequestFence } from './use-voice-request-fence'
+import { useVoiceScopedErrors } from './use-voice-scoped-errors'
 
 const POLL_INTERVAL_MS = 1500
 
@@ -39,7 +40,7 @@ export function useVoiceSettingsController(
   const [setup, setSetup] = useState<MobileSpeechSetup | null>(null)
   const [cabinet, setCabinet] = useState<MobileSpeechProvidersState | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { error, setScopeError, clearErrors } = useVoiceScopedErrors()
   const [busyAction, setBusyAction] = useState<SpeechModelBusy | null>(null)
   const [modelDrawerOpen, setModelDrawerOpen] = useState(false)
   const [languageDrawerOpen, setLanguageDrawerOpen] = useState(false)
@@ -54,7 +55,7 @@ export function useVoiceSettingsController(
     setSetup(null)
     setCabinet(null)
     setLoading(true)
-    setError(null)
+    clearErrors()
     setBusyAction(null)
     setModelDrawerOpen(false)
     setLanguageDrawerOpen(false)
@@ -82,7 +83,7 @@ export function useVoiceSettingsController(
         if (next) {
           cabinetSupported.current = true
           setCabinet(next)
-          setError(null)
+          setScopeError('read', null)
           return hasSpeechModelInFlight(next)
         }
         cabinetSupported.current = false
@@ -93,11 +94,11 @@ export function useVoiceSettingsController(
         return undefined
       }
       setSetup(next)
-      setError(null)
+      setScopeError('read', null)
       return next.models.some(isModelInFlight)
     } catch (err) {
       if (fence.isLatest(ticket)) {
-        setError(errorText(err, 'Failed to load voice settings'))
+        setScopeError('read', errorText(err, 'Failed to load voice settings'))
       }
       return undefined
     } finally {
@@ -105,7 +106,7 @@ export function useVoiceSettingsController(
         setLoading(false)
       }
     }
-  }, [fence, operations])
+  }, [fence, operations, setScopeError])
 
   const polling = cabinet
     ? hasSpeechModelInFlight(cabinet)
@@ -128,7 +129,7 @@ export function useVoiceSettingsController(
         return
       }
       const ticket = fence.begin('config')
-      setError(null)
+      setScopeError('config', null)
       // Optimistic flip so the control responds instantly; reconcile below.
       const { enabled, dictationMode } = params
       const flip = {
@@ -144,12 +145,12 @@ export function useVoiceSettingsController(
         }
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {
-          setError(errorText(err, 'Could not update'))
+          setScopeError('config', errorText(err, 'Could not update'))
           void refreshSetup()
         }
       }
     },
-    [applySetup, fence, operations, refreshSetup]
+    [applySetup, fence, operations, refreshSetup, setScopeError]
   )
 
   const selectModel = useCallback(
@@ -160,7 +161,7 @@ export function useVoiceSettingsController(
       const ticket = fence.begin('config')
       const busy: SpeechModelBusy = { modelId, type: 'select' }
       setBusyAction(busy)
-      setError(null)
+      setScopeError('config', null)
       try {
         const next = await operations.configure({ enabled: true, modelId })
         if (fence.claimSnapshot(ticket)) {
@@ -171,13 +172,13 @@ export function useVoiceSettingsController(
         }
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {
-          setError(errorText(err, 'Could not select model'))
+          setScopeError('config', errorText(err, 'Could not select model'))
         }
       } finally {
         setBusyAction((prev) => (prev === busy ? null : prev))
       }
     },
-    [applySetup, fence, operations]
+    [applySetup, fence, operations, setScopeError]
   )
 
   const downloadModel = useCallback(
@@ -188,19 +189,19 @@ export function useVoiceSettingsController(
       const ticket = fence.begin('model')
       const busy: SpeechModelBusy = { modelId, type: 'download' }
       setBusyAction(busy)
-      setError(null)
+      setScopeError('model', null)
       try {
         await operations.download(modelId)
         await refreshSetup()
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {
-          setError(errorText(err, 'Download failed'))
+          setScopeError('model', errorText(err, 'Download failed'))
         }
       } finally {
         setBusyAction((prev) => (prev === busy ? null : prev))
       }
     },
-    [fence, operations, refreshSetup]
+    [fence, operations, refreshSetup, setScopeError]
   )
 
   const deleteModel = useCallback(
@@ -213,7 +214,7 @@ export function useVoiceSettingsController(
       const ticket = fence.begin('model')
       const busy: SpeechModelBusy = { modelId, type: 'delete' }
       setBusyAction(busy)
-      setError(null)
+      setScopeError('model', null)
       try {
         const next = await operations.delete(modelId)
         if (fence.claimSnapshot(ticket)) {
@@ -224,13 +225,13 @@ export function useVoiceSettingsController(
         }
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {
-          setError(errorText(err, 'Delete failed'))
+          setScopeError('model', errorText(err, 'Delete failed'))
         }
       } finally {
         setBusyAction((prev) => (prev === busy ? null : prev))
       }
     },
-    [applySetup, cabinet?.selectedModelId, fence, operations, setup?.selectedModelId]
+    [applySetup, cabinet?.selectedModelId, fence, operations, setScopeError, setup?.selectedModelId]
   )
 
   const setLanguage = useCallback(
@@ -241,7 +242,7 @@ export function useVoiceSettingsController(
       }
       const ticket = fence.begin('config')
       setLanguageDrawerOpen(false)
-      setError(null)
+      setScopeError('config', null)
       setCabinet((prev) => (prev ? { ...prev, language } : prev))
       try {
         const next = await providerOps.setLanguage(language)
@@ -250,12 +251,12 @@ export function useVoiceSettingsController(
         }
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {
-          setError(errorText(err, 'Could not change the language'))
+          setScopeError('config', errorText(err, 'Could not change the language'))
           void refreshSetup()
         }
       }
     },
-    [fence, operations, refreshSetup]
+    [fence, operations, refreshSetup, setScopeError]
   )
 
   return {

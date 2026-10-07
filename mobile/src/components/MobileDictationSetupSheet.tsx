@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ChevronRight } from 'lucide-react-native'
@@ -19,6 +19,7 @@ import { hasSpeechModelInFlight } from '../dictation/speech-provider-presentatio
 import type { MobileSpeechProvidersState } from '../dictation/speech-provider-reply-schema'
 import { SpeechModelGroupedList } from '../settings/speech-model-grouped-list'
 import { useVoiceRequestFence } from '../settings/use-voice-request-fence'
+import { useVoiceScopedErrors } from '../settings/use-voice-scoped-errors'
 import { MobileDictationLegacyModelRow } from './MobileDictationLegacyModelRow'
 
 const POLL_INTERVAL_MS = 1500
@@ -43,7 +44,8 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
   // Why: keyed by client so a re-pair probes the new desktop instead of trusting the old answer.
   const cabinetSupport = useRef(new WeakMap<object, boolean>())
   const [cabinetClient, setCabinetClient] = useState(client)
-  const [error, setError] = useState<string | null>(null)
+  const { error, setScopeError, clearErrors } = useVoiceScopedErrors()
+  const [shownVisible, setShownVisible] = useState(visible)
   const [busy, setBusy] = useState<string | null>(null)
   // Why: replies still in flight from the previous desktop must not repaint this one.
   const fence = useVoiceRequestFence(client)
@@ -52,7 +54,14 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
     setCabinet(null)
     setSetup(null)
     setBusy(null)
-    setError(null)
+    clearErrors()
+  }
+  if (visible !== shownVisible) {
+    setShownVisible(visible)
+    // Why: reopening the sheet starts without the previous session's errors.
+    if (visible) {
+      clearErrors()
+    }
   }
   const refresh = useCallback(async (): Promise<boolean | undefined> => {
     if (!client) {
@@ -68,7 +77,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
         }
         if (providers) {
           setCabinet(providers)
-          setError(null)
+          setScopeError('read', null)
           return hasSpeechModelInFlight(providers)
         }
       }
@@ -77,15 +86,15 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
         return undefined
       }
       setSetup(next)
-      setError(null)
+      setScopeError('read', null)
       return next.models.some(isModelInFlight)
     } catch (err) {
       if (fence.isLatest(ticket)) {
-        setError(err instanceof Error ? err.message : 'Failed to load')
+        setScopeError('read', err instanceof Error ? err.message : 'Failed to load')
       }
       return undefined
     }
-  }, [client, fence])
+  }, [client, fence, setScopeError])
 
   const polling = cabinet
     ? hasSpeechModelInFlight(cabinet)
@@ -97,12 +106,6 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
     intervalMs: POLL_INTERVAL_MS
   })
 
-  useEffect(() => {
-    if (visible) {
-      setError(null)
-    }
-  }, [visible])
-
   const handleDownload = useCallback(
     async (model: { id: string }) => {
       if (!client) {
@@ -110,14 +113,14 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
       }
       const ticket = fence.begin('model')
       setBusy(model.id)
-      setError(null)
+      setScopeError('model', null)
       try {
         await downloadDictationModel(client, model.id)
         await refreshSetup()
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {
           triggerError()
-          setError(err instanceof Error ? err.message : 'Download failed')
+          setScopeError('model', err instanceof Error ? err.message : 'Download failed')
         }
       } finally {
         if (fence.isSameHost(ticket)) {
@@ -125,7 +128,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
         }
       }
     },
-    [client, fence, refreshSetup]
+    [client, fence, refreshSetup, setScopeError]
   )
 
   const handleUseModel = useCallback(
@@ -135,7 +138,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
       }
       const ticket = fence.begin('config')
       setBusy(model.id)
-      setError(null)
+      setScopeError('config', null)
       try {
         const next = await setDictationConfig(client, { enabled: true, modelId: model.id })
         if (fence.claimSnapshot(ticket)) {
@@ -152,7 +155,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {
           triggerError()
-          setError(err instanceof Error ? err.message : 'Could not select model')
+          setScopeError('config', err instanceof Error ? err.message : 'Could not select model')
         }
       } finally {
         if (fence.isSameHost(ticket)) {
@@ -160,7 +163,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
         }
       }
     },
-    [client, fence, onReady]
+    [client, fence, onReady, setScopeError]
   )
 
   const handleToggleEnabled = useCallback(
@@ -169,7 +172,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
         return
       }
       const ticket = fence.begin('config')
-      setError(null)
+      setScopeError('config', null)
       try {
         const next = await setDictationConfig(client, { enabled })
         if (fence.claimSnapshot(ticket)) {
@@ -178,11 +181,11 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
         }
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {
-          setError(err instanceof Error ? err.message : 'Could not update')
+          setScopeError('config', err instanceof Error ? err.message : 'Could not update')
         }
       }
     },
-    [client, fence]
+    [client, fence, setScopeError]
   )
 
   return (

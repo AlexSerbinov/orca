@@ -9,6 +9,7 @@ import type {
 } from '../dictation/speech-provider-reply-schema'
 import type { SpeechModelBusy } from './speech-model-picker-drawer'
 import { useVoiceRequestFence } from './use-voice-request-fence'
+import { useVoiceScopedErrors } from './use-voice-scoped-errors'
 
 const POLL_INTERVAL_MS = 1500
 
@@ -25,7 +26,7 @@ export function useVoiceProviderController(
 ) {
   const [state, setState] = useState<MobileSpeechProvidersState | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { error, setScopeError, clearErrors } = useVoiceScopedErrors()
   const [busyAction, setBusyAction] = useState<SpeechModelBusy | null>(null)
   // Why: an object per request so only the request that started the spinner can end it.
   const [keyActionRun, setKeyActionRun] = useState<{ action: ProviderKeyAction } | null>(null)
@@ -42,7 +43,7 @@ export function useVoiceProviderController(
     setStateOperations(operations)
     setState(null)
     setLoading(true)
-    setError(null)
+    clearErrors()
     setBusyAction(null)
     setKeyActionRun(null)
     setKeyError(null)
@@ -71,15 +72,15 @@ export function useVoiceProviderController(
         return undefined
       }
       if (!next) {
-        setError(SPEECH_PROVIDERS_UNAVAILABLE_MESSAGE)
+        setScopeError('read', SPEECH_PROVIDERS_UNAVAILABLE_MESSAGE)
         return false
       }
       setState(next)
-      setError(null)
+      setScopeError('read', null)
       return hasSpeechModelInFlight(next)
     } catch (err) {
       if (fence.isLatest(ticket)) {
-        setError(errorText(err, 'Failed to load speech providers'))
+        setScopeError('read', errorText(err, 'Failed to load speech providers'))
       }
       return undefined
     } finally {
@@ -87,7 +88,7 @@ export function useVoiceProviderController(
         setLoading(false)
       }
     }
-  }, [fence, providerOps])
+  }, [fence, providerOps, setScopeError])
 
   const refreshNow = useDictationSetupPoller({
     visible: focused && providerOps !== null,
@@ -157,7 +158,7 @@ export function useVoiceProviderController(
       }
       const ticket = fence.begin('key')
       const keyRun = startKeyAction('removing')
-      setError(null)
+      setScopeError('key', null)
       setTestResult(null)
       try {
         const next = await providerOps.clearKey(providerId)
@@ -166,33 +167,34 @@ export function useVoiceProviderController(
         }
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {
-          setError(errorText(err, 'Could not remove the API key'))
+          setScopeError('key', errorText(err, 'Could not remove the API key'))
         }
       } finally {
         endKeyAction(keyRun)
       }
     },
-    [endKeyAction, fence, providerOps, startKeyAction]
+    [endKeyAction, fence, providerOps, setScopeError, startKeyAction]
   )
 
   const runModelAction = useCallback(
     async (busy: SpeechModelBusy, action: () => Promise<unknown>, fallback: string) => {
       // Why: selecting is a config write; download/delete change model files, so neither hides the other.
-      const ticket = fence.begin(busy.type === 'select' ? 'config' : 'model')
+      const scope = busy.type === 'select' ? 'config' : 'model'
+      const ticket = fence.begin(scope)
       setBusyAction(busy)
-      setError(null)
+      setScopeError(scope, null)
       try {
         await action()
         await refreshNow()
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {
-          setError(errorText(err, fallback))
+          setScopeError(scope, errorText(err, fallback))
         }
       } finally {
         setBusyAction((prev) => (prev === busy ? null : prev))
       }
     },
-    [fence, refreshNow]
+    [fence, refreshNow, setScopeError]
   )
 
   const selectModel = useCallback(
