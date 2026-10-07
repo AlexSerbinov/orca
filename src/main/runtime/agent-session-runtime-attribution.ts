@@ -6,7 +6,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
-import type { AgentSessionStoreState } from './agent-session-record-store-file'
+import type { AgentSessionStoreState } from './agent-session-store-state'
 
 /** This Orca runtime: one per process, so a relaunch is a new one. */
 let incarnation = randomUUID()
