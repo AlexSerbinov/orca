@@ -132,6 +132,39 @@ describe('batch cloud transcription clients', () => {
     )
   })
 
+  it.each([
+    ['openai-gpt-4o-transcribe', { text: 42 }, 'OpenAI'],
+    ['groq-whisper-large-v3', {}, 'Groq'],
+    ['elevenlabs-scribe-v2', { text: null }, 'ElevenLabs'],
+    ['mistral-voxtral-mini', ['text'], 'Mistral'],
+    ['gemini-2.5-flash', { candidates: [{ content: { parts: 'hello' } }] }, 'Gemini']
+  ])('rejects a malformed %s success body', async (modelId, body, label) => {
+    stubFetch(body)
+
+    await expect(transcribe(modelId)).rejects.toThrow(
+      `${label} returned an invalid transcription response`
+    )
+  })
+
+  it('keeps a Gemini STOP reply without parts as silence', async () => {
+    stubFetch({ candidates: [{ content: { role: 'model' }, finishReason: 'STOP' }] })
+
+    await expect(transcribe('gemini-2.5-flash')).resolves.toBe('')
+  })
+
+  it('names the provider when the upload times out', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+      })
+    )
+
+    await expect(transcribe('mistral-voxtral-mini')).rejects.toThrow(
+      'Mistral did not respond in time.'
+    )
+  })
+
   it('skips the request when no audio was captured', async () => {
     const requests = stubFetch({ text: 'never' })
     const manifest = getCatalogModel('mistral-voxtral-mini')

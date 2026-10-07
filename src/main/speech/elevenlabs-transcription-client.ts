@@ -1,5 +1,9 @@
 import { wavBlob, type BatchTranscribe } from './batch-cloud-speech-session'
 import { assertProviderResponseOk } from './cloud-speech-provider-errors'
+import {
+  readTranscriptionJson,
+  TEXT_TRANSCRIPTION_RESPONSE
+} from './cloud-speech-transcription-response'
 
 export const ELEVENLABS_API_BASE_URL = 'https://api.elevenlabs.io'
 
@@ -21,10 +25,7 @@ export function createElevenLabsTranscribe(apiModel: string): BatchTranscribe {
       signal
     })
     await assertProviderResponseOk('ElevenLabs', response)
-    const data: { text?: unknown } = await response.json().catch(() => ({}))
-    if (typeof data.text !== 'string') {
-      throw new Error('ElevenLabs transcription response did not include text')
-    }
+    const data = await readTranscriptionJson('ElevenLabs', response, TEXT_TRANSCRIPTION_RESPONSE)
     return data.text
   }
 }

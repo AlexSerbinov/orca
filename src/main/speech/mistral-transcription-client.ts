@@ -1,5 +1,9 @@
 import { wavBlob, type BatchTranscribe } from './batch-cloud-speech-session'
 import { assertProviderResponseOk } from './cloud-speech-provider-errors'
+import {
+  readTranscriptionJson,
+  TEXT_TRANSCRIPTION_RESPONSE
+} from './cloud-speech-transcription-response'
 
 export const MISTRAL_API_BASE_URL = 'https://api.mistral.ai'
 
@@ -20,10 +24,7 @@ export function createMistralTranscribe(apiModel: string): BatchTranscribe {
       signal
     })
     await assertProviderResponseOk('Mistral', response)
-    const data: { text?: unknown } = await response.json().catch(() => ({}))
-    if (typeof data.text !== 'string') {
-      throw new Error('Mistral transcription response did not include text')
-    }
+    const data = await readTranscriptionJson('Mistral', response, TEXT_TRANSCRIPTION_RESPONSE)
     return data.text
   }
 }

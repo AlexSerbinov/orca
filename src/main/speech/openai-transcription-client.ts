@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import {
   BatchCloudSpeechSession,
   wavBlob,
@@ -5,16 +6,18 @@ import {
 } from './batch-cloud-speech-session'
 import { getCloudSpeechApiModel } from './cloud-speech-model-catalog'
 import { readProviderErrorMessage, redactCloudSpeechSecrets } from './cloud-speech-provider-errors'
+import {
+  invalidTranscriptionResponse,
+  readTranscriptionJson
+} from './cloud-speech-transcription-response'
 
 export const OPENAI_API_BASE_URL = 'https://api.openai.com'
 export const GROQ_API_BASE_URL = 'https://api.groq.com/openai'
 
-type OpenAiTranscriptionResponse = {
-  text?: unknown
-  error?: {
-    message?: unknown
-  }
-}
+const OPENAI_TRANSCRIPTION_RESPONSE = z.object({
+  text: z.string().optional(),
+  error: z.object({ message: z.string().optional() }).optional()
+})
 
 export function sanitizeOpenAiTranscriptionErrorMessage(label: string, message: string): string {
   // Why: this phrasing echoes part of the key and is shared by OpenAI-compatible hosts such as Groq.
@@ -26,15 +29,15 @@ export function sanitizeOpenAiTranscriptionErrorMessage(label: string, message: 
 
 function parseOpenAiTranscriptionResponse(
   label: string,
-  data: OpenAiTranscriptionResponse
+  data: z.infer<typeof OPENAI_TRANSCRIPTION_RESPONSE>
 ): string {
-  if (typeof data.text === 'string') {
+  if (data.text !== undefined) {
     return data.text.trim()
   }
-  if (typeof data.error?.message === 'string') {
+  if (data.error?.message !== undefined) {
     throw new Error(sanitizeOpenAiTranscriptionErrorMessage(label, data.error.message))
   }
-  throw new Error(`${label} transcription response did not include text`)
+  throw invalidTranscriptionResponse(label)
 }
 
 /** Multipart `/v1/audio/transcriptions` call shared by OpenAI and OpenAI-compatible hosts. */
@@ -68,7 +71,7 @@ export function createOpenAiCompatibleTranscribe(options: {
       )
       throw new Error(`${options.label} transcription failed: ${message}`)
     }
-    const data: OpenAiTranscriptionResponse = await response.json().catch(() => ({}))
+    const data = await readTranscriptionJson(options.label, response, OPENAI_TRANSCRIPTION_RESPONSE)
     return parseOpenAiTranscriptionResponse(options.label, data)
   }
 }
@@ -84,6 +87,7 @@ function requireApiModel(modelId: string, label: string): string {
 export class OpenAiTranscriptionSession extends BatchCloudSpeechSession {
   constructor(modelId: string, readApiKey: () => string, options: { language?: string } = {}) {
     super(
+      'OpenAI',
       createOpenAiCompatibleTranscribe({
         label: 'OpenAI',
         baseUrl: OPENAI_API_BASE_URL,

@@ -3,10 +3,7 @@ import {
   BatchCloudSpeechSession,
   type BatchTranscriptionRequest
 } from './batch-cloud-speech-session'
-import {
-  CLOUD_SPEECH_REQUEST_TIMEOUT_MS,
-  describeProviderFailure
-} from './cloud-speech-provider-errors'
+import { CLOUD_SPEECH_REQUEST_TIMEOUT_MS } from './cloud-speech-provider-errors'
 
 const AUDIO = new Float32Array(1600).fill(0.1)
 
@@ -20,7 +17,7 @@ describe('BatchCloudSpeechSession', () => {
           request.signal.addEventListener('abort', () => reject(request.signal.reason))
         })
     )
-    const session = new BatchCloudSpeechSession(transcribe, () => 'key', undefined)
+    const session = new BatchCloudSpeechSession('Groq', transcribe, () => 'key', undefined)
     session.feedAudio(AUDIO, 16_000)
 
     const finished = session.finish()
@@ -30,7 +27,7 @@ describe('BatchCloudSpeechSession', () => {
     expect(seen[0]?.signal.aborted).toBe(true)
   })
 
-  it('passes a request timeout signal that providers report as a timeout', async () => {
+  it('reports a request timeout under the provider name', async () => {
     const timeout = new AbortController()
     const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal)
     try {
@@ -40,7 +37,7 @@ describe('BatchCloudSpeechSession', () => {
             request.signal.addEventListener('abort', () => reject(request.signal.reason))
           })
       )
-      const session = new BatchCloudSpeechSession(transcribe, () => 'key', undefined)
+      const session = new BatchCloudSpeechSession('Groq', transcribe, () => 'key', undefined)
       session.feedAudio(AUDIO, 16_000)
 
       const finished = session.finish().catch((error: unknown) => error)
@@ -48,8 +45,7 @@ describe('BatchCloudSpeechSession', () => {
       const error = await finished
 
       expect(timeoutSpy).toHaveBeenCalledWith(CLOUD_SPEECH_REQUEST_TIMEOUT_MS)
-      expect(error).toMatchObject({ name: 'TimeoutError' })
-      expect(describeProviderFailure('Groq', error)).toBe('Groq did not respond in time.')
+      expect(error).toMatchObject({ message: 'Groq did not respond in time.' })
     } finally {
       timeoutSpy.mockRestore()
     }

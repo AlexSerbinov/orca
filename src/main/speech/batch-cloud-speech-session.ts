@@ -1,6 +1,9 @@
 import { BatchDictationAudioBuffer, type BatchAudioLimit } from './cloud-speech-audio-encoding'
 import type { CloudSpeechSession } from './cloud-speech-session'
-import { CLOUD_SPEECH_REQUEST_TIMEOUT_MS } from './cloud-speech-provider-errors'
+import {
+  CLOUD_SPEECH_REQUEST_TIMEOUT_MS,
+  describeProviderFailure
+} from './cloud-speech-provider-errors'
 
 export type BatchTranscriptionRequest = {
   wav: Buffer
@@ -17,6 +20,7 @@ export class BatchCloudSpeechSession implements CloudSpeechSession {
   private readonly abort = new AbortController()
 
   constructor(
+    private readonly label: string,
     private readonly transcribe: BatchTranscribe,
     private readonly readApiKey: () => string,
     private readonly language: string | undefined,
@@ -36,16 +40,25 @@ export class BatchCloudSpeechSession implements CloudSpeechSession {
     const wav = this.audio.takeWav()
     // Why: read lazily so an unused session never decrypts the key (keychain prompt).
     const apiKey = this.readApiKey()
-    const text = await this.transcribe({
-      wav,
-      apiKey,
-      language: this.language,
-      signal: AbortSignal.any([
-        this.abort.signal,
-        AbortSignal.timeout(CLOUD_SPEECH_REQUEST_TIMEOUT_MS)
-      ])
-    })
-    return text.trim()
+    try {
+      const text = await this.transcribe({
+        wav,
+        apiKey,
+        language: this.language,
+        signal: AbortSignal.any([
+          this.abort.signal,
+          AbortSignal.timeout(CLOUD_SPEECH_REQUEST_TIMEOUT_MS)
+        ])
+      })
+      return text.trim()
+    } catch (error) {
+      // Why: a cancel is not a failure the user should read; callers drop canceled sessions.
+      if (this.abort.signal.aborted) {
+        throw error
+      }
+      // Why: a timeout surfaces as a raw DOMException ("The operation was aborted due to timeout").
+      throw new Error(describeProviderFailure(this.label, error))
+    }
   }
 
   cancel(): void {

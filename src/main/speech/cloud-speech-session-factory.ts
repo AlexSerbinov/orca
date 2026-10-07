@@ -36,23 +36,25 @@ function createRealtimeSession(
   }
 }
 
-function createBatchTranscribe(
-  manifest: SpeechModelManifest,
-  apiModel: string
-): BatchTranscribe | null {
+type BatchClient = { label: string; transcribe: BatchTranscribe }
+
+function createBatchClient(manifest: SpeechModelManifest, apiModel: string): BatchClient | null {
   switch (manifest.provider) {
     case 'groq':
-      return createOpenAiCompatibleTranscribe({
+      return {
         label: 'Groq',
-        baseUrl: GROQ_API_BASE_URL,
-        apiModel
-      })
+        transcribe: createOpenAiCompatibleTranscribe({
+          label: 'Groq',
+          baseUrl: GROQ_API_BASE_URL,
+          apiModel
+        })
+      }
     case 'elevenlabs':
-      return createElevenLabsTranscribe(apiModel)
+      return { label: 'ElevenLabs', transcribe: createElevenLabsTranscribe(apiModel) }
     case 'gemini':
-      return createGeminiTranscribe(apiModel)
+      return { label: 'Gemini', transcribe: createGeminiTranscribe(apiModel) }
     case 'mistral':
-      return createMistralTranscribe(apiModel)
+      return { label: 'Mistral', transcribe: createMistralTranscribe(apiModel) }
     case 'soniox':
     case 'deepgram':
     case 'openai':
@@ -83,12 +85,13 @@ export function createCloudSpeechSession(
     session.start()
     return session
   }
-  const transcribe = createBatchTranscribe(manifest, apiModel)
-  if (!transcribe) {
+  const client = createBatchClient(manifest, apiModel)
+  if (!client) {
     throw new Error(`No batch client for ${manifest.provider}`)
   }
   return new BatchCloudSpeechSession(
-    transcribe,
+    client.label,
+    client.transcribe,
     options.readApiKey,
     options.language,
     manifest.provider === 'gemini' ? GEMINI_BATCH_AUDIO_LIMIT : undefined

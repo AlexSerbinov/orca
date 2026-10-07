@@ -1,6 +1,8 @@
+import { z } from 'zod'
 import type { BatchTranscribe } from './batch-cloud-speech-session'
 import type { BatchAudioLimit } from './cloud-speech-audio-encoding'
 import { assertProviderResponseOk } from './cloud-speech-provider-errors'
+import { readTranscriptionJson } from './cloud-speech-transcription-response'
 import { SPEECH_TRANSCRIPTION_LANGUAGES } from '../../shared/speech-transcription-languages'
 
 export const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com'
@@ -22,24 +24,33 @@ function buildPrompt(language: string | undefined): string {
     : TRANSCRIBE_PROMPT
 }
 
-type GeminiPart = { text?: unknown; audioTranscription?: { text?: unknown } }
+const GEMINI_PART = z.object({
+  text: z.string().optional(),
+  audioTranscription: z.object({ text: z.string().optional() }).optional()
+})
 
-type GeminiResponse = {
-  promptFeedback?: { blockReason?: unknown }
-  candidates?: { content?: { parts?: GeminiPart[] }; finishReason?: unknown }[]
-}
+const GEMINI_RESPONSE = z.object({
+  promptFeedback: z.object({ blockReason: z.string().optional() }).optional(),
+  candidates: z
+    .array(
+      z.object({
+        content: z.object({ parts: z.array(GEMINI_PART).optional() }).optional(),
+        finishReason: z.string().optional()
+      })
+    )
+    .optional()
+})
+
+type GeminiPart = z.infer<typeof GEMINI_PART>
+type GeminiResponse = z.infer<typeof GEMINI_RESPONSE>
 
 // Why: Gemini Transcribe models answer in audioTranscription.text; chat models answer in text.
 function readPartText(part: GeminiPart): string {
-  if (typeof part.text === 'string') {
-    return part.text
-  }
-  const transcription = part.audioTranscription?.text
-  return typeof transcription === 'string' ? transcription : ''
+  return part.text ?? part.audioTranscription?.text ?? ''
 }
 
-function describeReason(reason: unknown): string {
-  return typeof reason === 'string' && reason ? ` (${reason})` : ''
+function describeReason(reason: string | undefined): string {
+  return reason ? ` (${reason})` : ''
 }
 
 // Why: a blocked or truncated answer must not read as silence ("No speech detected").
@@ -49,8 +60,8 @@ export function readGeminiTranscript(data: GeminiResponse): string {
   }
   const candidate = data.candidates?.[0]
   const parts = candidate?.content?.parts
-  if (!Array.isArray(parts) || parts.length === 0) {
-    // Why: a normal stop with nothing to say is how Gemini answers silence.
+  if (!parts || parts.length === 0) {
+    // Why: Gemini answers silence with STOP and no parts (verified live).
     if (candidate?.finishReason === 'STOP') {
       return ''
     }
@@ -85,7 +96,7 @@ export function createGeminiTranscribe(apiModel: string): BatchTranscribe {
       }
     )
     await assertProviderResponseOk('Gemini', response)
-    const data: GeminiResponse = await response.json().catch(() => ({}))
+    const data = await readTranscriptionJson('Gemini', response, GEMINI_RESPONSE)
     return readGeminiTranscript(data)
   }
 }
