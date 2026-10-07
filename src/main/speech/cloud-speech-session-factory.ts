@@ -5,7 +5,7 @@ import type { CloudSpeechSession, CloudSpeechSessionOptions } from './cloud-spee
 import { DeepgramRealtimeSession } from './deepgram-realtime-session'
 import { ElevenLabsRealtimeSession } from './elevenlabs-realtime-session'
 import { createElevenLabsTranscribe } from './elevenlabs-transcription-client'
-import { createGeminiTranscribe } from './gemini-transcription-client'
+import { createGeminiTranscribe, GEMINI_BATCH_AUDIO_LIMIT } from './gemini-transcription-client'
 import { createMistralTranscribe } from './mistral-transcription-client'
 import {
   GROQ_API_BASE_URL,
@@ -87,5 +87,10 @@ export function createCloudSpeechSession(
   if (!transcribe) {
     throw new Error(`No batch client for ${manifest.provider}`)
   }
-  return new BatchCloudSpeechSession(transcribe, options.readApiKey, options.language)
+  return new BatchCloudSpeechSession(
+    transcribe,
+    options.readApiKey,
+    options.language,
+    manifest.provider === 'gemini' ? GEMINI_BATCH_AUDIO_LIMIT : undefined
+  )
 }

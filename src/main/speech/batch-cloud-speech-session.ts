@@ -1,4 +1,4 @@
-import { BatchDictationAudioBuffer } from './cloud-speech-audio-encoding'
+import { BatchDictationAudioBuffer, type BatchAudioLimit } from './cloud-speech-audio-encoding'
 import type { CloudSpeechSession } from './cloud-speech-session'
 import { CLOUD_SPEECH_REQUEST_TIMEOUT_MS } from './cloud-speech-provider-errors'
 
@@ -13,14 +13,17 @@ export type BatchTranscribe = (request: BatchTranscriptionRequest) => Promise<st
 
 /** Buffers a dictation and uploads it once on finish; providers supply only the HTTP call. */
 export class BatchCloudSpeechSession implements CloudSpeechSession {
-  private readonly audio = new BatchDictationAudioBuffer()
+  private readonly audio: BatchDictationAudioBuffer
   private readonly abort = new AbortController()
 
   constructor(
     private readonly transcribe: BatchTranscribe,
     private readonly readApiKey: () => string,
-    private readonly language: string | undefined
-  ) {}
+    private readonly language: string | undefined,
+    limit?: BatchAudioLimit
+  ) {
+    this.audio = new BatchDictationAudioBuffer(limit)
+  }
 
   feedAudio(samples: Float32Array, sampleRate: number): void {
     this.audio.append(samples, sampleRate)

@@ -2,7 +2,15 @@ import { CLOUD_TRANSCRIPTION_SAMPLE_RATE } from './cloud-speech-session'
 import { resampleToRate } from './stt-audio-resample'
 import { assertSupportedDictationSampleRate } from '../../shared/speech-audio-sample-rate'
 
-const MAX_BATCH_AUDIO_SECONDS = 10 * 60
+export type BatchAudioLimit = {
+  maxSeconds: number
+  message: string
+}
+
+export const DEFAULT_BATCH_AUDIO_LIMIT: BatchAudioLimit = {
+  maxSeconds: 10 * 60,
+  message: 'Cloud transcription is limited to 10 minutes per dictation'
+}
 
 function floatToInt16(sample: number): number {
   const clamped = Math.max(-1, Math.min(1, sample))
@@ -53,10 +61,12 @@ export class BatchDictationAudioBuffer {
   private chunks: Float32Array[] = []
   private sampleCount = 0
 
+  constructor(private readonly limit: BatchAudioLimit = DEFAULT_BATCH_AUDIO_LIMIT) {}
+
   append(samples: Float32Array, sampleRate: number): void {
     const bufferedSeconds = this.sampleCount / CLOUD_TRANSCRIPTION_SAMPLE_RATE
-    if (bufferedSeconds + cloudAudioSeconds(samples.length, sampleRate) > MAX_BATCH_AUDIO_SECONDS) {
-      throw new Error('Cloud transcription is limited to 10 minutes per dictation')
+    if (bufferedSeconds + cloudAudioSeconds(samples.length, sampleRate) > this.limit.maxSeconds) {
+      throw new Error(this.limit.message)
     }
     const normalized = resampleForCloud(samples, sampleRate)
     const nextCount = this.sampleCount + normalized.length
