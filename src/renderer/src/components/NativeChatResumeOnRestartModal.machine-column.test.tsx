@@ -19,7 +19,11 @@ import { readNativeChatRestartMachine } from './native-chat-resume-on-restart-st
 import { _resetNativeChatRestartOffer } from './native-chat-restart-offer-triggers'
 import { pairedEnvironment } from './native-chat-restart-offer-test-support'
 import { button, chatBox, namedBox } from './native-chat-resume-on-restart-modal.test-support'
-import { machineRowFixture as row, machineToggle } from './native-chat-resume-machines.test-support'
+import {
+  machineRow,
+  machineRowFixture as row,
+  machineToggle
+} from './native-chat-resume-machines.test-support'
 
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/structured-agent-session-client', () => ({
@@ -213,4 +217,25 @@ it('names a paired server once, on its machine row, not again on each workspace'
     const workspace = rowOf(namedBox(`Select all chats in workspace-${sessionId}`))
     expect(workspace.textContent).not.toContain('studio')
   }
+})
+
+// The machine row and a workspace's host chip read one source, the sidebar's host names; a host
+// renamed in its settings reads the new name on both, and no name shows twice for one host.
+it('names each machine as the sidebar does, a rename included, and an SSH host only on its chip', async () => {
+  useAppStore.setState({
+    settings: {
+      ...getDefaultSettings(''),
+      experimentalStructuredNativeChat: false,
+      hostSettingOverrides: { 'runtime:studio': { displayLabel: 'Studio' } }
+    },
+    sshTargetLabels: new Map([['devbox-1', 'devbox']])
+  })
+  const onSsh = { ...row('l2', 'own'), executionHostId: 'ssh:devbox-1' as const }
+  await stage({ sessions: [row('l1', 'own'), onSsh] }, { studio: { sessions: SERVER_ROWS } })
+  await open('environment:studio')
+  expect(machineToggle('Studio')).toBeTruthy()
+  await act(async () => machineRow(LOCAL).click())
+  expect(rowOf(namedBox('Select all chats in workspace-l2')).textContent).toContain('devbox')
+  expect(rowOf(namedBox('Select all chats in workspace-l1')).textContent).not.toContain(LOCAL)
+  expect(rowOf(namedBox('Select all chats in workspace-s1')).textContent).not.toContain('Studio')
 })
