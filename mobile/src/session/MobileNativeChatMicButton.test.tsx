@@ -75,8 +75,18 @@ describe('MobileNativeChatMicButton accessibility', () => {
       label: 'Starting dictation',
       disabled: false
     })
+  })
+
+  it('lets a hold-mode press cancel an upload but not a salvage in its grace period', () => {
     expect(renderButton(false, 'processing', 'hold')).toMatchObject({
+      label: 'Cancel transcription',
+      state: { disabled: false, busy: true },
+      disabled: false,
+      spinner: true
+    })
+    expect(renderButton(false, 'salvaging', 'hold')).toMatchObject({
       label: 'Finishing dictation',
+      state: { disabled: true, busy: true },
       disabled: true
     })
   })

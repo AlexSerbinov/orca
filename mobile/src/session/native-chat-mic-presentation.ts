@@ -8,7 +8,7 @@ export type NativeChatMicPresentation = {
   ignoresPress: boolean
 }
 
-/** Mirrors what a press does in each phase (see nativeChatDictationToggleAction and the hold handlers). */
+/** Mirrors what a press does in each phase (nativeChatDictationToggleAction / HoldPressInAction). */
 export function nativeChatMicPresentation(
   phase: MobileDictationPhase,
   hold: boolean
@@ -20,9 +20,8 @@ export function nativeChatMicPresentation(
     case 'recording':
       return { label: 'Stop dictation', icon: 'stop', busy: false, ignoresPress: false }
     case 'processing':
-      return hold
-        ? { label: 'Finishing dictation', icon: 'spinner', busy: true, ignoresPress: true }
-        : { label: 'Cancel transcription', icon: 'spinner', busy: true, ignoresPress: false }
+      // Why: both modes cancel an upload on a press (see nativeChatDictationHoldPressInAction).
+      return { label: 'Cancel transcription', icon: 'spinner', busy: true, ignoresPress: false }
     case 'salvaging':
       return { label: 'Finishing dictation', icon: 'spinner', busy: true, ignoresPress: true }
     default:
