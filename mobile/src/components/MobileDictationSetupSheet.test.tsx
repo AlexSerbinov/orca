@@ -153,4 +153,24 @@ describe('MobileDictationSetupSheet legacy rows', () => {
     expect(text?.props.style).toMatchObject({ flexShrink: 1 })
     expect(text?.parent?.props.style).toMatchObject({ minWidth: 0 })
   })
+
+  it('caps Dynamic Type on the trailing row actions so the model label keeps its room', async () => {
+    fetchSpeechProviders.mockResolvedValue(null)
+    fetchDictationSetup.mockResolvedValue({
+      enabled: true,
+      dictationMode: 'toggle',
+      selectedModelId: 'in-use',
+      models: [
+        { id: 'in-use', label: 'A', provider: 'local', status: 'ready', sizeBytes: 1 },
+        { id: 'ready', label: 'B', provider: 'local', status: 'ready', sizeBytes: 1 },
+        { id: 'fresh', label: 'C', provider: 'local', status: 'not-downloaded', sizeBytes: 1 },
+        { id: 'cloud', label: 'D', provider: 'openai', status: 'not-downloaded', sizeBytes: null }
+      ]
+    })
+    await render(fakeClient())
+    for (const action of ['In use', 'Use', 'Download', 'Set up on desktop']) {
+      const text = renderer?.root.findByProps({ children: action })
+      expect(text?.props.maxFontSizeMultiplier).toBe(1.5)
+    }
+  })
 })
