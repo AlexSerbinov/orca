@@ -159,7 +159,24 @@ describe('mobile dictation live captions', () => {
     )
     await expect(controller.finish({ dictationId: 'd1', ...CLIENT })).resolves.toEqual({
       dictationId: 'd1',
-      text: 'Kept words.'
+      text: 'Kept words.',
+      error: 'Soniox closed the stream (1000).'
+    })
+  })
+
+  it('returns the committed text with the error when the provider fails during the stop flush', async () => {
+    const controller = createController()
+    await controller.start({ dictationId: 'd1', ...CLIENT })
+    stt.sink?.({ type: 'final', text: 'First part.' })
+    stt.stopDictation.mockImplementationOnce(async () => {
+      stt.sink?.({ type: 'error', error: 'Deepgram error: Flush failed' })
+      stt.sink?.({ type: 'stopped' })
+    })
+
+    await expect(controller.finish({ dictationId: 'd1', ...CLIENT })).resolves.toEqual({
+      dictationId: 'd1',
+      text: 'First part.',
+      error: 'Deepgram error: Flush failed'
     })
   })
 

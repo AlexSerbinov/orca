@@ -69,3 +69,17 @@ export type RuntimeDictationChunkReply = {
   dictationId: string
   caption?: RuntimeDictationCaption
 }
+
+/**
+ * Reply to `speech.dictation.finish`.
+ *
+ * `error` is set when the provider failed but some text was still committed (e.g. a failure
+ * during the stop flush, or one already raised on a chunk), so the phone can insert `text`
+ * and then report why the rest may be missing. Without text the call rejects instead.
+ * Optional on the wire: old hosts omit it and old phones ignore it.
+ */
+export type RuntimeDictationFinishReply = {
+  dictationId: string
+  text: string
+  error?: string
+}

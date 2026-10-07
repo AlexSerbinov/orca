@@ -1,5 +1,8 @@
 import { getDefaultVoiceSettings } from '../../shared/constants'
-import type { RuntimeDictationChunkReply } from '../../shared/runtime-speech-provider-contracts'
+import type {
+  RuntimeDictationChunkReply,
+  RuntimeDictationFinishReply
+} from '../../shared/runtime-speech-provider-contracts'
 import { resolveTranscriptionLanguageHint } from '../../shared/speech-transcription-languages'
 import { formatDictationStreamFailure } from '../../shared/dictation-stream-failure'
 import { getSpeechModelManager, getSpeechSttService } from '../speech/speech-runtime-service'
@@ -126,17 +129,20 @@ export class RuntimeMobileDictationController {
     dictationId: string
     clientId?: string
     connectionId?: string
-  }): Promise<{ dictationId: string; text: string }> {
+  }): Promise<RuntimeDictationFinishReply> {
     const session = this.requireOwnedSession(params)
     session.state = 'closing'
     try {
       await getSpeechSttService(this.requireStore()).stopDictation(session.owner)
       const text = joinTranscript(session)
       // Why: a stream that failed mid-dictation already committed text; returning it beats losing it.
-      if (session.errors.length > 0 && !text) {
-        throw new Error(session.errors[0])
+      const error = session.errors[0]
+      if (error !== undefined && !text) {
+        throw new Error(error)
       }
-      return { dictationId: params.dictationId, text }
+      return error === undefined
+        ? { dictationId: params.dictationId, text }
+        : { dictationId: params.dictationId, text, error }
     } finally {
       if (this.session?.id === session.id) {
         this.session = null
