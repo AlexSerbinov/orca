@@ -21,6 +21,7 @@ import {
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import type { AppState } from '@/store/types'
 import { reportTerminalDropUploadSkipsAndFailures } from '../terminal-pane/terminal-drop-upload-report'
+import { NATIVE_FILE_DROP_MAX_PATHS } from '../../../../shared/native-file-drop'
 import { findTerminalTabWorktreeId } from './native-chat-file-link'
 import {
   captureDirectSshMutationExpectation,
@@ -47,6 +48,7 @@ export type NativeChatAttachmentOwner =
 type NativeChatAttachmentOwnerState = Pick<
   AppState,
   | 'detectedWorktreesByRepo'
+  | 'floatingWorkspacePath'
   | 'folderWorkspaces'
   | 'projectGroups'
   | 'repos'
@@ -146,6 +148,14 @@ export function nativeChatAttachmentUnreadableNotice(): string {
   return translate(
     'components.native-chat.composer.attachmentUnreadable',
     "Couldn't read the dropped files."
+  )
+}
+
+export function nativeChatTooManyAttachmentsNotice(): string {
+  return translate(
+    'components.native-chat.composer.tooManyAttachments',
+    'Attach {{value0}} or fewer files at a time.',
+    { value0: NATIVE_FILE_DROP_MAX_PATHS }
   )
 }
 

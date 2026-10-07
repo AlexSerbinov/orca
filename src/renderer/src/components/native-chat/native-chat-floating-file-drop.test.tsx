@@ -27,11 +27,11 @@ vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => f
 
 const stat = vi.fn(async () => ({ isDirectory: false }))
 const prepare = vi.fn(async ({ paths }: { paths: string[] }) => ({ paths, failures: [] }))
-const pick = vi.fn(async () => '/picked/file.txt')
+const pick = vi.fn(async () => ['/picked/file.txt'])
 const upload = vi.fn()
 
 function Composer({ attach, notice }: { attach: () => void; notice: () => void }) {
-  const { pickAttachment } = useNativeChatFileDrops({
+  const { pickAttachments } = useNativeChatFileDrops({
     paneKey: 'floating-pane',
     draftScopeKey: 'floating-draft',
     terminalTabId: 'floating-tab',
@@ -40,7 +40,7 @@ function Composer({ attach, notice }: { attach: () => void; notice: () => void }
     attachResolvedPaths: attach,
     setNotice: notice
   })
-  return <button onClick={pickAttachment}>Attach file</button>
+  return <button onClick={pickAttachments}>Attach file</button>
 }
 
 beforeEach(() => {
@@ -66,7 +66,7 @@ beforeEach(() => {
       prepareDroppedPaths: prepare,
       resolveDroppedPathsForAgent: upload
     },
-    shell: { pickAttachment: pick }
+    shell: { pickAttachments: pick }
   })
 })
 afterEach(() => {

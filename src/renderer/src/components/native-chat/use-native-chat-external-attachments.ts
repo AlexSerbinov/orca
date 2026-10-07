@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, useRef } from 'react'
 import { useAppStore } from '@/store'
+import { NATIVE_FILE_DROP_MAX_PATHS } from '../../../../shared/native-file-drop'
 import {
   nativeChatAttachmentOwnerUnchanged,
   type NativeChatResolvedPathOptions
@@ -8,6 +9,7 @@ import {
   nativeChatAttachmentOwnerChangedNotice,
   nativeChatAttachmentUnreadableNotice,
   nativeChatLocalAttachmentUnsupportedNotice,
+  nativeChatTooManyAttachmentsNotice,
   nativeChatWorktreeNotReadyNotice,
   resolveNativeChatAttachmentOwner,
   resolveNativeChatAttachmentOwnerForWorktree,
@@ -112,6 +114,11 @@ export function useNativeChatExternalAttachments({
         }
         if (owner.kind === 'runtime') {
           setNotice(nativeChatLocalAttachmentUnsupportedNotice())
+          return
+        }
+        // The picker shares the drop limit without partially attaching a batch.
+        if (paths.length > NATIVE_FILE_DROP_MAX_PATHS) {
+          setNotice(nativeChatTooManyAttachmentsNotice())
           return
         }
         if (!ownerStillCurrent()) {
