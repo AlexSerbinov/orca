@@ -16,11 +16,10 @@ export function recordStoppedSession(
     for (const resolve of waiters) {
       resolve()
     }
-    return
   }
 
-  // Why: stopped events can arrive for abandoned startup attempts that will
-  // never wait on the id. Keep the early-event cache bounded across sessions.
+  // Why: cached even when waiters existed so a later waiter on this session resolves at once.
+  // Stopped events can also arrive for abandoned startups, so the cache stays bounded.
   stoppedSessionIdsRef.current.delete(sessionId)
   stoppedSessionIdsRef.current.add(sessionId)
   while (stoppedSessionIdsRef.current.size > MAX_EARLY_STOPPED_SESSION_IDS) {

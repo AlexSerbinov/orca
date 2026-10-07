@@ -43,7 +43,28 @@ describe('dictation stopped sessions', () => {
 
     expect(resolved).toBe(true)
     expect(stoppedResolversRef.current.has('session-1')).toBe(false)
-    expect(stoppedSessionIdsRef.current.has('session-1')).toBe(false)
+    expect(stoppedSessionIdsRef.current.has('session-1')).toBe(true)
+  })
+
+  it('resolves a waiter registered after a stop that already had waiters at once', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('window', {
+      setTimeout: globalThis.setTimeout,
+      clearTimeout: globalThis.clearTimeout
+    })
+    const { stoppedSessionIdsRef, stoppedResolversRef } = refs()
+    const early = waitForStoppedSession('session-1', stoppedSessionIdsRef, stoppedResolversRef)
+    recordStoppedSession('session-1', stoppedSessionIdsRef, stoppedResolversRef)
+    await early
+
+    let lateResolved = false
+    void waitForStoppedSession('session-1', stoppedSessionIdsRef, stoppedResolversRef).then(() => {
+      lateResolved = true
+    })
+    await Promise.resolve()
+
+    expect(lateResolved).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('bounds early stopped sessions that are never awaited', () => {
