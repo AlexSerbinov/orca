@@ -113,6 +113,7 @@ export default function VoiceProviderScreen({
                   selected={model.id === state?.selectedModelId}
                   busy={busyAction?.modelId === model.id ? busyAction.type : null}
                   locked={busyAction !== null}
+                  readOnly={kind === 'unknown'}
                   variant="manage"
                   onSelect={() => void controller.selectModel(model.id)}
                   onDownload={() => void controller.downloadModel(model.id)}

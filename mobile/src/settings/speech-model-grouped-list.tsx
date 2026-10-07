@@ -9,6 +9,7 @@ import { SpeechModelRow, type SpeechModelBusyAction } from './speech-model-row'
 import {
   isCloudSpeechProvider,
   isLocalSpeechProvider,
+  speechProviderKind,
   speechProviderLabel,
   speechProviderStatusText
 } from '../dictation/speech-provider-presentation'
@@ -76,6 +77,7 @@ export function SpeechModelGroupedList({
                   selected={model.id === state.selectedModelId}
                   busy={busy?.modelId === model.id ? busy.type : null}
                   locked={busy !== null}
+                  readOnly={speechProviderKind(provider) === 'unknown'}
                   variant="picker"
                   onSelect={() => onSelect(model)}
                   onDownload={() => onDownload(model)}

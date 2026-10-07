@@ -108,6 +108,7 @@ describe('voice provider screen', () => {
     expect(text()).not.toContain('API KEY')
     expect(renderer.root.findAllByProps({ testID: 'voice-provider-add-key' })).toHaveLength(0)
     expect(text()).toContain('Update Orca on this phone to manage Acme')
+    expect(renderer.root.findAllByProps({ accessibilityLabel: 'Use Acme One' })).toHaveLength(0)
   })
 
   it('verifies and saves a new key, then shows the provider connected', async () => {

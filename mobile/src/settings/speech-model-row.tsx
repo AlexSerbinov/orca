@@ -25,6 +25,8 @@ type Props = {
   busy: SpeechModelBusyAction | null
   /** Another row's action is in flight; this row's buttons wait for it. */
   locked: boolean
+  /** The provider's kind is unknown to this build: its models are shown, never selected. */
+  readOnly?: boolean
   /** 'picker' selects on row tap and marks the choice; 'manage' shows Use / In use and Delete. */
   variant: 'picker' | 'manage'
   onSelect: () => void
@@ -56,10 +58,11 @@ function modelMetaText(model: MobileSpeechProviderModel, local: boolean): string
 }
 
 export function SpeechModelRow(props: Props) {
-  const { model, local, selected, locked, variant, onSelect } = props
+  const { model, local, selected, locked, readOnly = false, variant, onSelect } = props
   const usable = isSpeechModelUsable(model)
+  const selectable = usable && !readOnly
   const meta = modelMetaText(model, local)
-  const rowTappable = variant === 'picker' && usable && !selected && !locked
+  const rowTappable = variant === 'picker' && selectable && !selected && !locked
   const content = (
     <>
       <View style={styles.modelInfo}>
@@ -98,7 +101,7 @@ export function SpeechModelRow(props: Props) {
     <Pressable
       style={({ pressed }) => [
         styles.modelRow,
-        !usable && styles.modelRowDimmed,
+        !selectable && styles.modelRowDimmed,
         pressed && rowTappable && styles.actionPressed
       ]}
       disabled={!rowTappable}
@@ -120,6 +123,7 @@ function SpeechModelRowAction({
   selected,
   busy,
   locked,
+  readOnly,
   variant,
   usable,
   onSelect,
@@ -140,7 +144,7 @@ function SpeechModelRowAction({
             <Check size={14} color={colors.statusGreen} strokeWidth={2.4} />
             <Text style={styles.selectedText}>In use</Text>
           </View>
-        ) : (
+        ) : readOnly ? null : (
           <Pressable
             style={({ pressed }) => [styles.actionButton, pressed && styles.actionPressed]}
             hitSlop={voiceCabinetHitSlop.actionButton}

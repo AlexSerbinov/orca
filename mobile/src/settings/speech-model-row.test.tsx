@@ -45,7 +45,12 @@ function model(status: MobileSpeechProviderModel['status']): MobileSpeechProvide
 function renderRow(
   variant: 'picker' | 'manage',
   status: MobileSpeechProviderModel['status'],
-  options: { local?: boolean; model?: Partial<MobileSpeechProviderModel> } = {}
+  options: {
+    local?: boolean
+    readOnly?: boolean
+    onSelect?: () => void
+    model?: Partial<MobileSpeechProviderModel>
+  } = {}
 ) {
   act(() => {
     renderer = create(
@@ -55,8 +60,9 @@ function renderRow(
         selected: false,
         busy: null,
         locked: false,
+        readOnly: options.readOnly,
         variant,
-        onSelect: vi.fn(),
+        onSelect: options.onSelect ?? vi.fn(),
         onDownload: vi.fn(),
         onDelete: vi.fn()
       })
@@ -158,5 +164,16 @@ describe('SpeechModelRow unknown status', () => {
     expect(row.findAllByProps({ accessibilityLabel: 'Download Model' })).toHaveLength(0)
     const failed = renderRow('manage', 'error', { local: true })
     expect(failed.findAllByProps({ accessibilityLabel: 'Download Model' })).toHaveLength(1)
+  })
+})
+
+describe('SpeechModelRow read-only provider', () => {
+  it('never selects a ready model of a provider kind this build does not know', () => {
+    const onSelect = vi.fn()
+    const picker = renderRow('picker', 'ready', { readOnly: true, onSelect })
+    expect(picker.props.disabled).toBe(true)
+    const manage = renderRow('manage', 'ready', { readOnly: true, onSelect })
+    expect(manage.findAllByProps({ accessibilityLabel: 'Use Model' })).toHaveLength(0)
+    expect(onSelect).not.toHaveBeenCalled()
   })
 })
