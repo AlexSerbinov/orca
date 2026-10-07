@@ -64,10 +64,17 @@ export function useVoiceRequestFence(host: object | null) {
     }
     return scopeEpochs.current[ticket.scope] <= ticket.epoch
   }, [])
-  /** A write's state snapshot may land unless its scope moved on or a newer write's snapshot landed. */
+  /**
+   * A write's state snapshot may land unless its scope moved on or a newer write's snapshot landed.
+   * In the latter case the screen may lack this write's effect, so `resync` re-reads the desktop.
+   */
   const claimSnapshot = useCallback(
-    (ticket: VoiceRequestTicket) => {
-      if (!isLatestInScope(ticket) || ticket.epoch <= appliedSnapshotEpoch.current) {
+    (ticket: VoiceRequestTicket, resync?: () => unknown) => {
+      if (!isLatestInScope(ticket)) {
+        return false
+      }
+      if (ticket.epoch <= appliedSnapshotEpoch.current) {
+        resync?.()
         return false
       }
       appliedSnapshotEpoch.current = ticket.epoch

@@ -141,7 +141,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
       setScopeError('config', null)
       try {
         const next = await setDictationConfig(client, { enabled: true, modelId: model.id })
-        if (fence.claimSnapshot(ticket)) {
+        if (fence.claimSnapshot(ticket, refreshSetup)) {
           setSetup(next)
           setCabinet((prev) =>
             prev ? { ...prev, enabled: true, selectedModelId: model.id } : prev
@@ -163,7 +163,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
         }
       }
     },
-    [client, fence, onReady, setScopeError]
+    [client, fence, onReady, refreshSetup, setScopeError]
   )
 
   const handleToggleEnabled = useCallback(
@@ -175,7 +175,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
       setScopeError('config', null)
       try {
         const next = await setDictationConfig(client, { enabled })
-        if (fence.claimSnapshot(ticket)) {
+        if (fence.claimSnapshot(ticket, refreshSetup)) {
           setSetup(next)
           setCabinet((prev) => (prev ? { ...prev, enabled } : prev))
         }
@@ -185,7 +185,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
         }
       }
     },
-    [client, fence, setScopeError]
+    [client, fence, refreshSetup, setScopeError]
   )
 
   return (

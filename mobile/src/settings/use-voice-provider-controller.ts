@@ -107,7 +107,7 @@ export function useVoiceProviderController(
       setKeyError(null)
       try {
         const next = await providerOps.saveKey(providerId, apiKey)
-        if (fence.claimSnapshot(ticket)) {
+        if (fence.claimSnapshot(ticket, refreshNow)) {
           setState(next)
         }
         if (!fence.isLatestInScope(ticket)) {
@@ -124,7 +124,7 @@ export function useVoiceProviderController(
         endKeyAction(keyRun)
       }
     },
-    [endKeyAction, fence, providerOps, startKeyAction]
+    [endKeyAction, fence, providerOps, refreshNow, startKeyAction]
   )
 
   const testKey = useCallback(
@@ -162,7 +162,7 @@ export function useVoiceProviderController(
       setTestResult(null)
       try {
         const next = await providerOps.clearKey(providerId)
-        if (fence.claimSnapshot(ticket)) {
+        if (fence.claimSnapshot(ticket, refreshNow)) {
           setState(next)
         }
       } catch (err) {
@@ -173,7 +173,7 @@ export function useVoiceProviderController(
         endKeyAction(keyRun)
       }
     },
-    [endKeyAction, fence, providerOps, setScopeError, startKeyAction]
+    [endKeyAction, fence, providerOps, refreshNow, setScopeError, startKeyAction]
   )
 
   const runModelAction = useCallback(

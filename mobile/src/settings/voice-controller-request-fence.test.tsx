@@ -277,7 +277,7 @@ describe('voice request fence scopes', () => {
 
   it('does not let an older snapshot overwrite a newer write that already landed', async () => {
     const slowSelect = deferred<MobileSpeechSetup>()
-    const { operations } = voiceOperations({})
+    const { operations, providerOps } = voiceOperations({})
     operations.configure = vi.fn().mockReturnValue(slowSelect.promise)
     operations.delete = vi.fn().mockResolvedValue({ ...legacySetup, selectedModelId: 'parakeet' })
     const hook = mountHook((ops) => useVoiceSettingsController(ops, true))
@@ -285,8 +285,27 @@ describe('voice request fence scopes', () => {
     await act(async () => void current<SettingsController>(hook.latest).selectModel('whisper-tiny'))
     await act(async () => current<SettingsController>(hook.latest).deleteModel('other'))
     expect(current<SettingsController>(hook.latest).cabinet?.selectedModelId).toBe('parakeet')
+    // Why: the stale snapshot triggers a re-read; holding it open isolates the snapshot fence.
+    providerOps.list = vi.fn().mockReturnValue(new Promise(() => {}))
 
     await act(async () => slowSelect.resolve({ ...legacySetup, selectedModelId: 'whisper-tiny' }))
     expect(current<SettingsController>(hook.latest).cabinet?.selectedModelId).toBe('parakeet')
+  })
+
+  it('re-reads the desktop when a still-current write loses its snapshot to a newer one', async () => {
+    const slowSelect = deferred<MobileSpeechSetup>()
+    const { operations, providerOps } = voiceOperations({})
+    operations.configure = vi.fn().mockReturnValue(slowSelect.promise)
+    operations.delete = vi.fn().mockResolvedValue({ ...legacySetup, selectedModelId: 'parakeet' })
+    const hook = mountHook((ops) => useVoiceSettingsController(ops, true))
+    await hook.render(operations)
+    await act(async () => void current<SettingsController>(hook.latest).selectModel('whisper-tiny'))
+    await act(async () => current<SettingsController>(hook.latest).deleteModel('other'))
+    expect(providerOps.list).toHaveBeenCalledTimes(1)
+
+    providerOps.list = vi.fn().mockResolvedValue(cabinetState({ selectedModelId: 'whisper-tiny' }))
+    await act(async () => slowSelect.resolve({ ...legacySetup, selectedModelId: 'whisper-tiny' }))
+    expect(providerOps.list).toHaveBeenCalledOnce()
+    expect(current<SettingsController>(hook.latest).cabinet?.selectedModelId).toBe('whisper-tiny')
   })
 })

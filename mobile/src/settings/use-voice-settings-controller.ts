@@ -140,7 +140,7 @@ export function useVoiceSettingsController(
       setCabinet((prev) => (prev ? { ...prev, ...flip } : prev))
       try {
         const next = await operations.configure(params)
-        if (fence.claimSnapshot(ticket)) {
+        if (fence.claimSnapshot(ticket, refreshSetup)) {
           applySetup(next)
         }
       } catch (err) {
@@ -164,7 +164,7 @@ export function useVoiceSettingsController(
       setScopeError('config', null)
       try {
         const next = await operations.configure({ enabled: true, modelId })
-        if (fence.claimSnapshot(ticket)) {
+        if (fence.claimSnapshot(ticket, refreshSetup)) {
           applySetup(next)
         }
         if (fence.isLatestInScope(ticket)) {
@@ -178,7 +178,7 @@ export function useVoiceSettingsController(
         setBusyAction((prev) => (prev === busy ? null : prev))
       }
     },
-    [applySetup, fence, operations, setScopeError]
+    [applySetup, fence, operations, refreshSetup, setScopeError]
   )
 
   const downloadModel = useCallback(
@@ -217,7 +217,7 @@ export function useVoiceSettingsController(
       setScopeError('model', null)
       try {
         const next = await operations.delete(modelId)
-        if (fence.claimSnapshot(ticket)) {
+        if (fence.claimSnapshot(ticket, refreshSetup)) {
           applySetup(next)
         }
         if (deletedSelectedModel && fence.isLatestInScope(ticket)) {
@@ -246,7 +246,7 @@ export function useVoiceSettingsController(
       setCabinet((prev) => (prev ? { ...prev, language } : prev))
       try {
         const next = await providerOps.setLanguage(language)
-        if (fence.claimSnapshot(ticket)) {
+        if (fence.claimSnapshot(ticket, refreshSetup)) {
           setCabinet(next)
         }
       } catch (err) {
