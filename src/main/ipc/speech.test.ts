@@ -171,8 +171,13 @@ describe('registerSpeechHandlers', () => {
     await expect(feed({ sender: { id: 7 } }, Buffer.alloc(8), 0.001)).rejects.toThrow(
       'Unsupported audio sample rate'
     )
+    await expect(feed({ sender: { id: 7 } }, Buffer.alloc(8), 1_000_000)).rejects.toThrow(
+      'Unsupported audio sample rate'
+    )
     await feed({ sender: { id: 7 } }, Buffer.alloc(8), 48_000)
+    // Why: some pro interfaces capture at 384 kHz; on-device dictation must still accept it.
+    await feed({ sender: { id: 7 } }, Buffer.alloc(8), 384_000)
 
-    expect(sttService.feedAudio).toHaveBeenCalledTimes(1)
+    expect(sttService.feedAudio).toHaveBeenCalledTimes(2)
   })
 })

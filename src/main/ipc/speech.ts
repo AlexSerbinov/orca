@@ -13,7 +13,10 @@ import {
 } from '../speech/openai-api-key-store'
 import type { Store } from '../persistence'
 import { resolveTranscriptionLanguageHint } from '../../shared/speech-transcription-languages'
-import { assertSupportedDictationSampleRate } from '../../shared/speech-audio-sample-rate'
+import {
+  assertSupportedDictationSampleRate,
+  MAX_DESKTOP_CAPTURE_SAMPLE_RATE
+} from '../../shared/speech-audio-sample-rate'
 import { registerCloudSpeechKeyHandlers } from './speech-cloud-keys'
 
 export function registerSpeechHandlers(store: Store): void {
@@ -207,8 +210,8 @@ export function registerSpeechHandlers(store: Store): void {
   ipcMain.handle(
     'speech:feedAudio',
     async (_event, buffer: Buffer, sampleRate: number, sessionId = 'desktop') => {
-      // Why: renderer input is untrusted; an absurd rate would make resampling allocate unboundedly.
-      assertSupportedDictationSampleRate(sampleRate)
+      // Why: renderer input is untrusted; cloud paths re-check the tighter 192 kHz resample cap.
+      assertSupportedDictationSampleRate(sampleRate, MAX_DESKTOP_CAPTURE_SAMPLE_RATE)
       // Why: the preload sends audio as a Buffer to avoid Float32Array data
       // being zeroed out during contextBridge + IPC serialization.
       const samples = new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4)

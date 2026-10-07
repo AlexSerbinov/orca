@@ -37,6 +37,8 @@ export function DictationController() {
   const holdGestureActiveRef = useRef(false)
   const insertionTargetRef = useRef<DictationInsertionTarget | null>(null)
   const activeSessionIdRef = useRef<string | null>(null)
+  // Why: after an error (e.g. a duration cap) the stop still yields the text so far; keep accepting it.
+  const salvageSessionIdRef = useRef<string | null>(null)
   const stoppedSessionIdsRef = useRef(new Set<string>())
   const stoppedResolversRef = useRef(new Map<string, () => void>())
   const stopRequestedDuringStartRef = useRef(false)
@@ -360,7 +362,10 @@ export function DictationController() {
     })
 
     const cleanupFinal = window.api.speech.onFinalTranscript((data) => {
-      if (data.sessionId !== activeSessionIdRef.current || !data.text) {
+      const accepted =
+        data.sessionId === activeSessionIdRef.current ||
+        data.sessionId === salvageSessionIdRef.current
+      if (!accepted || !data.text) {
         return
       }
       setPartialTranscript('')
@@ -395,6 +400,7 @@ export function DictationController() {
       erroredSessionIdsRef.current.add(sessionId)
       dictationRunRef.current += 1
       activeSessionIdRef.current = null
+      salvageSessionIdRef.current = sessionId
       toast.error(
         translate(
           'auto.components.dictation.DictationController.de136f1199',
@@ -409,6 +415,9 @@ export function DictationController() {
       void (async () => {
         await window.api.speech.stopDictation(sessionId).catch(() => undefined)
         await waitForStoppedSession(sessionId, stoppedSessionIdsRef, stoppedResolversRef)
+        if (salvageSessionIdRef.current === sessionId) {
+          salvageSessionIdRef.current = null
+        }
         insertionTargetRef.current = null
         intentionalTargetCancellationRef.current = false
         stopRequestedDuringStartRef.current = false
