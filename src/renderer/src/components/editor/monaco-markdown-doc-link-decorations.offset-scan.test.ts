@@ -169,7 +169,7 @@ describe('getMarkdownDocLinkDecorationRanges offset scan', () => {
     const realPush = Array.prototype.push
     let spanReads = 0
     Array.prototype.push = function <T>(this: T[], ...values: T[]): number {
-      const length: number = Reflect.apply(realPush, this, values)
+      const length = realPush.call(this, ...values)
       // Why: the production scanner stores spans as flat numeric pairs; count their reads without changing values.
       if (values.length === 2 && values.every((value) => typeof value === 'number')) {
         for (let index = 0; index < values.length; index += 1) {
