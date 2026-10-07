@@ -4,7 +4,7 @@ import { KeyRound } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
 import { SpeechProviderLogo } from '../components/SpeechProviderLogo'
 import { voiceSettingsStyles } from './voice-settings-styles'
-import { voiceCabinetStyles as styles } from './voice-cabinet-styles'
+import { voiceCabinetHitSlop, voiceCabinetStyles as styles } from './voice-cabinet-styles'
 import { SpeechModelRow, type SpeechModelBusyAction } from './speech-model-row'
 import {
   isLocalSpeechProvider,
@@ -49,6 +49,7 @@ export function SpeechModelGroupedList({
             {!local && !provider.keyConfigured ? (
               <Pressable
                 style={({ pressed }) => [styles.groupKeyButton, pressed && styles.actionPressed]}
+                hitSlop={voiceCabinetHitSlop.groupKeyButton}
                 disabled={busy !== null}
                 onPress={() => onOpenProvider(provider)}
                 accessibilityRole="button"

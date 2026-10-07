@@ -19,8 +19,11 @@ import { hasSpeechModelInFlight } from '../dictation/speech-provider-presentatio
 import type { MobileSpeechProvidersState } from '../dictation/speech-provider-reply-schema'
 import { SpeechModelGroupedList } from '../settings/speech-model-grouped-list'
 import { useVoiceRequestFence } from '../settings/use-voice-request-fence'
+import { VOICE_BADGE_MAX_FONT_SCALE } from '../settings/voice-cabinet-styles'
 
 const POLL_INTERVAL_MS = 1500
+// Why: the compact Use/Download buttons are ~26pt tall; stretch the touch target to 44pt.
+const ACTION_HIT_SLOP = { top: 9, bottom: 9 } as const
 
 type Props = {
   visible: boolean
@@ -255,7 +258,12 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
                     <View style={styles.modelTitleRow}>
                       <Text style={styles.modelLabel}>{model.label}</Text>
                       {model.recommended ? (
-                        <Text style={styles.recommended}>Recommended</Text>
+                        <Text
+                          style={styles.recommended}
+                          maxFontSizeMultiplier={VOICE_BADGE_MAX_FONT_SCALE}
+                        >
+                          Recommended
+                        </Text>
                       ) : null}
                     </View>
                     <Text style={styles.modelMeta}>
@@ -283,6 +291,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
                           styles.actionButton,
                           pressed && styles.actionPressed
                         ]}
+                        hitSlop={ACTION_HIT_SLOP}
                         disabled={rowBusy}
                         onPress={() => void handleUseModel(model)}
                       >
@@ -297,6 +306,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
                         styles.actionButton,
                         pressed && styles.actionPressed
                       ]}
+                      hitSlop={ACTION_HIT_SLOP}
                       disabled={rowBusy}
                       onPress={() => void handleDownload(model)}
                     >
@@ -380,6 +390,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: spacing.lg,
+    minHeight: 44,
     paddingVertical: spacing.sm
   },
   manageLinkText: { color: colors.textSecondary, fontSize: typography.bodySize, fontWeight: '500' }

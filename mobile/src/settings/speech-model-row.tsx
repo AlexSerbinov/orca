@@ -1,7 +1,11 @@
 import { ActivityIndicator, Pressable, Text, View } from 'react-native'
 import { AudioLines, Check, Download, Trash2 } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
-import { voiceCabinetStyles as styles } from './voice-cabinet-styles'
+import {
+  VOICE_BADGE_MAX_FONT_SCALE,
+  voiceCabinetHitSlop,
+  voiceCabinetStyles as styles
+} from './voice-cabinet-styles'
 import {
   formatSpeechModelSize,
   isSpeechModelInFlight,
@@ -31,7 +35,9 @@ export function SpeechModelLivePill() {
   return (
     <View style={styles.livePill} accessibilityLabel="Live captions">
       <AudioLines size={10} color={colors.textSecondary} strokeWidth={2.4} />
-      <Text style={styles.livePillText}>LIVE</Text>
+      <Text style={styles.livePillText} maxFontSizeMultiplier={VOICE_BADGE_MAX_FONT_SCALE}>
+        LIVE
+      </Text>
     </View>
   )
 }
@@ -61,7 +67,11 @@ export function SpeechModelRow(props: Props) {
             {speechModelLabel(model)}
           </Text>
           {model.realtime ? <SpeechModelLivePill /> : null}
-          {model.recommended ? <Text style={styles.recommended}>Recommended</Text> : null}
+          {model.recommended ? (
+            <Text style={styles.recommended} maxFontSizeMultiplier={VOICE_BADGE_MAX_FONT_SCALE}>
+              Recommended
+            </Text>
+          ) : null}
         </View>
         {meta ? (
           <Text
@@ -132,6 +142,7 @@ function SpeechModelRowAction({
         ) : (
           <Pressable
             style={({ pressed }) => [styles.actionButton, pressed && styles.actionPressed]}
+            hitSlop={voiceCabinetHitSlop.actionButton}
             disabled={locked}
             onPress={onSelect}
             accessibilityLabel={'Use ' + speechModelLabel(model)}
@@ -146,6 +157,7 @@ function SpeechModelRowAction({
         {local && onDelete ? (
           <Pressable
             style={({ pressed }) => [styles.iconButton, pressed && styles.actionPressed]}
+            hitSlop={voiceCabinetHitSlop.iconButton}
             disabled={locked}
             onPress={onDelete}
             accessibilityLabel={'Delete ' + speechModelLabel(model)}
@@ -170,6 +182,7 @@ function SpeechModelRowAction({
   return (
     <Pressable
       style={({ pressed }) => [styles.iconButton, pressed && styles.actionPressed]}
+      hitSlop={voiceCabinetHitSlop.iconButton}
       disabled={locked}
       onPress={onDownload}
       accessibilityLabel={'Download ' + speechModelLabel(model)}

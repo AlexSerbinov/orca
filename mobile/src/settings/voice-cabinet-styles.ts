@@ -1,6 +1,16 @@
 import { StyleSheet } from 'react-native'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 
+/** Why: stretch compact buttons to a 44pt touch target without overlapping their neighbours. */
+export const voiceCabinetHitSlop = {
+  actionButton: { top: 7, bottom: 7 },
+  iconButton: { top: 5, bottom: 5, left: 2, right: 5 },
+  groupKeyButton: { top: 10, bottom: 10, left: 6, right: 6 }
+} as const
+
+/** Why: badges sit inline with the model title; past 1.5x Dynamic Type they push it off the row. */
+export const VOICE_BADGE_MAX_FONT_SCALE = 1.5
+
 // Provider-cabinet additions on top of voiceSettingsStyles (sections, rows, headings).
 export const voiceCabinetStyles = StyleSheet.create({
   iconTile: {

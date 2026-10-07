@@ -1,6 +1,18 @@
-import { useEffect, useRef } from 'react'
-import { ActivityIndicator, Animated, StyleSheet, Text, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import {
+  ActivityIndicator,
+  Animated,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+  type LayoutChangeEvent
+} from 'react-native'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
+import { captionCharBudget, captionTail } from './dictation-caption-tail'
+
+const CAPTION_LINE_HEIGHT = 19
 
 export type MobileDictationCaptionState = {
   readonly isRecording: boolean
@@ -17,10 +29,20 @@ type Props = {
 /** Shows what the desktop is hearing while the mic is open. Never writes into a TextInput: iOS
  *  drops the IME when JS rewrites a focused field, so the caption stays display-only. */
 export function MobileDictationCaptionStrip({ dictation, variant }: Props) {
+  const { fontScale } = useWindowDimensions()
+  const [captionWidth, setCaptionWidth] = useState(0)
   if (!dictation.isRecording && !dictation.isProcessing) {
     return null
   }
-  const caption = dictation.isRecording ? dictation.caption : ''
+  const caption = dictation.isRecording
+    ? captionTail(
+        dictation.caption,
+        captionCharBudget(captionWidth, typography.bodySize, fontScale)
+      )
+    : ''
+  const onCaptionLayout = (event: LayoutChangeEvent) => {
+    setCaptionWidth(event.nativeEvent.layout.width)
+  }
   return (
     <View
       style={[styles.strip, variant === 'dock' ? styles.dock : styles.card]}
@@ -34,11 +56,17 @@ export function MobileDictationCaptionStrip({ dictation, variant }: Props) {
         <ActivityIndicator size="small" color={colors.textMuted} style={styles.spinner} />
       )}
       {caption ? (
-        <Text style={styles.caption} numberOfLines={2} ellipsizeMode="head">
+        <Text
+          style={styles.caption}
+          numberOfLines={2}
+          // Why: iOS head-ellipsizes multi-line text natively; Android only honours tail there.
+          ellipsizeMode={Platform.OS === 'ios' ? 'head' : 'tail'}
+          onLayout={onCaptionLayout}
+        >
           {caption}
         </Text>
       ) : (
-        <Text style={styles.status} numberOfLines={1}>
+        <Text style={styles.status} numberOfLines={1} onLayout={onCaptionLayout}>
           {dictation.isRecording ? 'Listening…' : 'Transcribing…'}
         </Text>
       )}
@@ -67,7 +95,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm
+    paddingVertical: spacing.sm,
+    // Why: reserve both caption lines so the strip doesn't jump as the first words arrive.
+    minHeight: CAPTION_LINE_HEIGHT * 2 + spacing.sm * 2
   },
   dock: {
     borderTopWidth: 1,
@@ -92,7 +122,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.textPrimary,
     fontSize: typography.bodySize,
-    lineHeight: 19
+    lineHeight: CAPTION_LINE_HEIGHT
   },
   status: {
     flex: 1,
