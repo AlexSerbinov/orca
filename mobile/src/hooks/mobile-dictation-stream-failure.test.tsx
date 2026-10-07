@@ -64,8 +64,15 @@ import { useMobileDictation, type UseMobileDictationResult } from './use-mobile-
 
 const held: { dictation: UseMobileDictationResult | null } = { dictation: null }
 
-/** Answers every request; chunks are refused with `chunkError`, finish carries the transcript. */
-async function pump(rpc: FakeRpcClient, sent: SentRequest[], chunkError: string): Promise<void> {
+type FinishReply = { text: string; error?: string } | 'hold'
+
+/** Answers every request; chunks are refused with `chunkError`, finish answers `finishReply`. */
+async function pump(
+  rpc: FakeRpcClient,
+  sent: SentRequest[],
+  chunkError: string,
+  finishReply: FinishReply = { text: 'kept words' }
+): Promise<void> {
   for (let round = 0; round < 8; round += 1) {
     for (const request of rpc.requests.splice(0)) {
       sent.push(request)
@@ -77,18 +84,18 @@ async function pump(rpc: FakeRpcClient, sent: SentRequest[], chunkError: string)
         })
         continue
       }
-      request.resolve({
-        id: 'desktop',
-        ok: true,
-        result: request.method === 'speech.dictation.finish' ? { text: 'kept words' } : {}
-      })
+      const isFinish = request.method === 'speech.dictation.finish'
+      if (isFinish && finishReply === 'hold') {
+        continue
+      }
+      request.resolve({ id: 'desktop', ok: true, result: isFinish ? finishReply : {} })
     }
     await Promise.resolve()
     await Promise.resolve()
   }
 }
 
-async function recordAndFailChunk(chunkError: string) {
+async function recordAndFailChunk(chunkError: string, finishReply?: FinishReply) {
   const rpc = createFakeRpcClient()
   const sent: SentRequest[] = []
   const onTranscript = vi.fn()
@@ -110,8 +117,8 @@ async function recordAndFailChunk(chunkError: string) {
       handler({ data: Uint8Array.from([1, 2, 3, 4]), droppedBytes: 0 })
       handler({ data: Uint8Array.from([5, 6, 7, 8]), droppedBytes: 0 })
     }
-    await pump(rpc, sent, chunkError)
-    await pump(rpc, sent, chunkError)
+    await pump(rpc, sent, chunkError, finishReply)
+    await pump(rpc, sent, chunkError, finishReply)
   })
   return { methods: sent.map((request) => request.method), onTranscript, onError }
 }
@@ -133,6 +140,22 @@ describe('a dictation whose provider stream failed', () => {
     expect(onTranscript).toHaveBeenCalledWith('kept words')
     expect(onError).toHaveBeenCalledWith(new Error('Soniox closed the stream (1000).'))
     expect(held.dictation?.status).toBe('error')
+  })
+
+  it('shows the provider error once when the finish reply repeats it', async () => {
+    const { onTranscript, onError } = await recordAndFailChunk(
+      'dictation_stream_failed: Soniox closed the stream (1000).',
+      { text: 'kept words', error: 'Soniox closed the stream (1000).' }
+    )
+    expect(onTranscript).toHaveBeenCalledWith('kept words')
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect(onError).toHaveBeenCalledWith(new Error('Soniox closed the stream (1000).'))
+  })
+
+  it('reports the failed stream finish while it is underway, so a tap does not discard it', async () => {
+    await recordAndFailChunk('dictation_stream_failed: Soniox closed the stream (1000).', 'hold')
+    expect(held.dictation?.status).toBe('processing')
+    expect(held.dictation?.isFinishingFailedStream()).toBe(true)
   })
 
   it('still cancels on any other chunk failure', async () => {

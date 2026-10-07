@@ -18,7 +18,7 @@ import {
   dictationSessionCancel,
   dictationSessionFinish
 } from '../dictation/mobile-dictation-operations'
-import { rpcPayloadMember } from '../transport/rpc-reader-payload'
+import { deliverMobileDictationFinish } from './mobile-dictation-finish-outcome'
 import type {
   DictationStatus,
   UseMobileDictationOptions,
@@ -257,18 +257,11 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
       if (!isCurrent()) {
         return
       }
-      const transcript = rpcPayloadMember(finished, 'text')
-      const text = typeof transcript === 'string' ? transcript.trim() : ''
       activeIdRef.current = null
       resetChunkQueue(false)
       applyStatus('idle')
       const streamFailure = streamSalvageRef.current.take(dictationId)
-      if (text) {
-        onTranscriptRef.current(text)
-      }
-      if (streamFailure || !text) {
-        reportError(new Error(streamFailure ?? 'No speech detected.'))
-      }
+      deliverMobileDictationFinish(finished, streamFailure, onTranscriptRef.current, reportError)
     } catch (err) {
       failActiveDictation(dictationId, err)
     }
@@ -311,6 +304,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
   )
 
   const cancel = useCallback(() => abandonDictation(null), [abandonDictation])
+  const isFinishingFailedStream = useCallback(() => streamSalvageRef.current.isPending(), [])
 
   useEffect(() => {
     const sub = capture.onInterruption(() => {
@@ -346,6 +340,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
     isStarting: status === 'starting',
     isRecording: status === 'recording',
     isProcessing: status === 'processing',
+    isFinishingFailedStream,
     error,
     captionStore,
     start,

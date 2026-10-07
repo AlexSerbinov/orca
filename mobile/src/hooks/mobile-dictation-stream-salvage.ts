@@ -6,6 +6,8 @@ export type MobileDictationStreamSalvage = {
   claim: (dictationId: string, err: unknown, finish: (() => Promise<void>) | null) => boolean
   /** The provider message to show once the salvaged text is inserted; clears it. */
   take: (dictationId: string) => string | null
+  /** A failed stream's finish is underway (or its message not yet shown). */
+  isPending: () => boolean
   reset: () => void
 }
 
@@ -28,6 +30,7 @@ export function createMobileDictationStreamSalvage(): MobileDictationStreamSalva
       pending = null
       return message
     },
+    isPending: () => pending !== null,
     reset: () => {
       pending = null
     }

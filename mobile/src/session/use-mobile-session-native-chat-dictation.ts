@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react'
 import { useFocusEffect } from 'expo-router'
 import { useMobileDictation } from '../hooks/use-mobile-dictation'
+import { nativeChatDictationToggleAction } from './native-chat-dictation-toggle'
 import { triggerError } from '../platform/haptics'
 import {
   appendBufferedDictation,
@@ -176,13 +177,12 @@ export function useMobileSessionNativeChatDictation(
 
   // Toggle mode: one tap starts, the next stops; long-press cancels mid-record.
   const handleDictationToggle = useCallback(() => {
-    if (dictation.isProcessing) {
+    const action = nativeChatDictationToggleAction(dictation)
+    if (action === 'cancel') {
       cancelDictation()
-    } else if (dictation.isStarting) {
-      // The start request is still settling; a second toggle is intentionally ignored.
-    } else if (dictation.isRecording) {
+    } else if (action === 'stop') {
       void dictation.stop()
-    } else {
+    } else if (action === 'start') {
       startDictation()
     }
   }, [cancelDictation, dictation, startDictation])

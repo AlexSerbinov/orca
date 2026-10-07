@@ -102,12 +102,22 @@ export type MobileDictationCaptionReply = NonNullable<
  * start and cancel replies are interpreted for their acceptance verdict alone. Declaring a
  * member on any of them would be a requirement with no reader behind it.
  *
- * `speech.dictation.finish` is here for a different reason, and it is the one site in this domain
- * left deliberately unchecked. Its transcript is read at the call site through `rpcPayloadMember`
- * (use-mobile-dictation.ts:237) *after* a staleness guard (:225), and the interpretation that a
- * schema would fail runs before that guard. Checking it would report an unreadable reply for a
- * dictation
- * the user had already superseded, where main returned silently; the member read itself is guarded
- * by `typeof transcript === 'string'` and is fenced by the raw-port inventory.
+ * `speech.dictation.finish` is here for a different reason: the operation's reader would run
+ * before the staleness guard in use-mobile-dictation.ts, and failing it would report an unreadable
+ * reply for a dictation the user had already superseded. Its body is read after that guard with
+ * dictationFinishReplySchema below instead.
  */
 export const dictationUnreadReplySchema = z.unknown()
+
+/**
+ * The finish reply's members (RuntimeDictationFinishReply), read only after the staleness guard.
+ *
+ * `error` is wire-additive: old hosts omit it. Both members salvage, and the `.catch` keeps an
+ * unreadable body a reply with no text, the same `typeof text === 'string'` degrade as before.
+ */
+export const dictationFinishReplySchema = z
+  .looseObject({
+    text: salvagedOptional('text', z.string()),
+    error: salvagedOptional('error', z.string())
+  })
+  .catch(() => ({ text: undefined, error: undefined }))

@@ -19,6 +19,8 @@ export type UseMobileDictationResult = {
   isStarting: boolean
   isRecording: boolean
   isProcessing: boolean
+  /** The processing was started by a failed provider stream, to keep its committed text. */
+  isFinishingFailedStream: () => boolean
   error: string | null
   /** Live transcript so far while recording (realtime cloud models); read it with useMobileDictationCaption. */
   captionStore: MobileDictationCaptionStore
