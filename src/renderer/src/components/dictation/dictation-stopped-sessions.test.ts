@@ -4,7 +4,7 @@ import { recordStoppedSession, waitForStoppedSession } from './dictation-stopped
 function refs() {
   return {
     stoppedSessionIdsRef: { current: new Set<string>() },
-    stoppedResolversRef: { current: new Map<string, () => void>() }
+    stoppedResolversRef: { current: new Map<string, Set<() => void>>() }
   }
 }
 
@@ -58,13 +58,58 @@ describe('dictation stopped sessions', () => {
     expect(stoppedSessionIdsRef.current.has('session-19')).toBe(true)
   })
 
-  it('consumes an early stopped session without leaving a resolver', async () => {
+  it('resolves every waiter for an early stopped session', async () => {
     const { stoppedSessionIdsRef, stoppedResolversRef } = refs()
 
     recordStoppedSession('session-1', stoppedSessionIdsRef, stoppedResolversRef)
     await waitForStoppedSession('session-1', stoppedSessionIdsRef, stoppedResolversRef)
+    await waitForStoppedSession('session-1', stoppedSessionIdsRef, stoppedResolversRef)
 
-    expect(stoppedSessionIdsRef.current.has('session-1')).toBe(false)
     expect(stoppedResolversRef.current.has('session-1')).toBe(false)
+  })
+
+  it('resolves every pending waiter on one stopped event', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('window', {
+      setTimeout: globalThis.setTimeout,
+      clearTimeout: globalThis.clearTimeout
+    })
+    const { stoppedSessionIdsRef, stoppedResolversRef } = refs()
+    const resolved: string[] = []
+
+    const first = waitForStoppedSession('session-1', stoppedSessionIdsRef, stoppedResolversRef)
+    const second = waitForStoppedSession('session-1', stoppedSessionIdsRef, stoppedResolversRef)
+    void first.then(() => resolved.push('first'))
+    void second.then(() => resolved.push('second'))
+    recordStoppedSession('session-1', stoppedSessionIdsRef, stoppedResolversRef)
+    await Promise.all([first, second])
+
+    expect(resolved).toEqual(['first', 'second'])
+    expect(vi.getTimerCount()).toBe(0)
+    expect(stoppedResolversRef.current.has('session-1')).toBe(false)
+  })
+
+  it('times out one waiter without dropping another waiter on the same session', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('window', {
+      setTimeout: globalThis.setTimeout,
+      clearTimeout: globalThis.clearTimeout
+    })
+    const { stoppedSessionIdsRef, stoppedResolversRef } = refs()
+
+    const first = waitForStoppedSession('session-1', stoppedSessionIdsRef, stoppedResolversRef)
+    vi.advanceTimersByTime(600)
+    let secondResolved = false
+    const second = waitForStoppedSession('session-1', stoppedSessionIdsRef, stoppedResolversRef)
+    void second.then(() => {
+      secondResolved = true
+    })
+    vi.advanceTimersByTime(500)
+    await first
+
+    expect(stoppedResolversRef.current.get('session-1')?.size).toBe(1)
+    recordStoppedSession('session-1', stoppedSessionIdsRef, stoppedResolversRef)
+    await second
+    expect(secondResolved).toBe(true)
   })
 })

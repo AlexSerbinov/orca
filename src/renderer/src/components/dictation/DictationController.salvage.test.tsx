@@ -108,6 +108,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
 })
 
 describe('DictationController after a dictation error', () => {
@@ -147,5 +148,83 @@ describe('DictationController after a dictation error', () => {
     emit('final', { sessionId: '1', text: 'Too late.' })
 
     expect(mocks.insertText).not.toHaveBeenCalled()
+  })
+
+  it('keeps a dictation started right after an error during the stop flush', async () => {
+    vi.useFakeTimers()
+    render(<DictationController />)
+    await act(async () => {
+      dispatchDictationControl('start')
+    })
+    let firstStop = true
+    stopDictation.mockImplementation(async (sessionId) => {
+      if (sessionId === '1' && firstStop) {
+        firstStop = false
+        emit('error', { sessionId, error: 'Provider failed during flush.' })
+        return
+      }
+      emit('stopped', { sessionId })
+    })
+
+    await act(async () => {
+      dispatchDictationControl('stop')
+    })
+    expect(storeState.dictationState).toBe('idle')
+
+    stopDictation.mockImplementation(async () => {})
+    await act(async () => {
+      dispatchDictationControl('start')
+    })
+    expect(storeState.dictationState).toBe('listening')
+    await act(async () => {
+      vi.advanceTimersByTime(1500)
+    })
+
+    expect(storeState.dictationState).toBe('listening')
+    emit('final', { sessionId: '3', text: 'Second run.' })
+    expect(mocks.insertText).toHaveBeenCalledWith('Second run.', TARGET)
+  })
+
+  it('keeps the insertion target for a final salvaged while startup is still running', async () => {
+    let finishStartup: () => void = () => {}
+    window.api.speech.startDictation = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishStartup = resolve
+        })
+    )
+    stopDictation.mockImplementation(async (sessionId) => {
+      emit('stopped', { sessionId })
+    })
+    render(<DictationController />)
+    await act(async () => {
+      dispatchDictationControl('start')
+    })
+    let releaseSalvageStop: () => void = () => {}
+    stopDictation.mockImplementationOnce(
+      (sessionId) =>
+        new Promise<void>((resolve) => {
+          releaseSalvageStop = () => {
+            emit('final', { sessionId, text: 'Salvaged words.' })
+            emit('stopped', { sessionId })
+            resolve()
+          }
+        })
+    )
+
+    await act(async () => {
+      emit('error', { sessionId: '1', error: 'boom' })
+    })
+    await act(async () => {
+      finishStartup()
+    })
+    await act(async () => {
+      releaseSalvageStop()
+    })
+
+    expect(mocks.insertText).toHaveBeenCalledWith('Salvaged words.', TARGET)
+    expect(mocks.toastMessage).not.toHaveBeenCalledWith(
+      'Dictation finished, but no text field was focused.'
+    )
   })
 })
