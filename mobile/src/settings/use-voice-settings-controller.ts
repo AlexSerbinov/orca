@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { VoiceSettingsOperations } from './voice-settings-operations'
 import { useDictationSetupPoller } from '../dictation/use-dictation-setup-poller'
 import { isModelInFlight, type MobileSpeechSetup } from '../dictation/mobile-dictation-setup'
@@ -46,9 +46,22 @@ export function useVoiceSettingsController(
   const fence = useVoiceRequestFence(operations)
   // Why: null = not probed yet; false sticks so polling an old desktop doesn't re-probe each tick.
   const cabinetSupported = useRef<boolean | null>(null)
+  const [stateOperations, setStateOperations] = useState(operations)
+  // Why: a disconnect (null) keeps the last desktop's state on screen; only a different client resets it.
+  if (operations && stateOperations !== operations) {
+    // Why: actions now go to the new desktop, so the old one's models must not stay actionable.
+    setStateOperations(operations)
+    setSetup(null)
+    setCabinet(null)
+    setLoading(true)
+    setError(null)
+    setBusyAction(null)
+    setModelDrawerOpen(false)
+    setLanguageDrawerOpen(false)
+  }
 
-  // Why: a new client may be an older desktop; keep the old state shown until the re-probe lands.
-  useEffect(() => {
+  // Why: a new client may be an older desktop, so it must be probed before the next read.
+  useLayoutEffect(() => {
     cabinetSupported.current = null
   }, [operations])
 
@@ -130,7 +143,7 @@ export function useVoiceSettingsController(
           applySetup(next)
         }
       } catch (err) {
-        if (fence.isSameHost(ticket)) {
+        if (fence.isLatest(ticket)) {
           setError(errorText(err, 'Could not update'))
           void refreshSetup()
         }
@@ -155,7 +168,7 @@ export function useVoiceSettingsController(
           setModelDrawerOpen(false)
         }
       } catch (err) {
-        if (fence.isSameHost(ticket)) {
+        if (fence.isLatest(ticket)) {
           setError(errorText(err, 'Could not select model'))
         }
       } finally {
@@ -178,7 +191,7 @@ export function useVoiceSettingsController(
         await operations.download(modelId)
         await refreshSetup()
       } catch (err) {
-        if (fence.isSameHost(ticket)) {
+        if (fence.isLatest(ticket)) {
           setError(errorText(err, 'Download failed'))
         }
       } finally {
@@ -208,7 +221,7 @@ export function useVoiceSettingsController(
           }
         }
       } catch (err) {
-        if (fence.isSameHost(ticket)) {
+        if (fence.isLatest(ticket)) {
           setError(errorText(err, 'Delete failed'))
         }
       } finally {
@@ -234,7 +247,7 @@ export function useVoiceSettingsController(
           setCabinet(next)
         }
       } catch (err) {
-        if (fence.isSameHost(ticket)) {
+        if (fence.isLatest(ticket)) {
           setError(errorText(err, 'Could not change the language'))
           void refreshSetup()
         }

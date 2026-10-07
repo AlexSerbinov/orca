@@ -27,15 +27,36 @@ export function useVoiceProviderController(
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyAction, setBusyAction] = useState<SpeechModelBusy | null>(null)
-  const [keyAction, setKeyAction] = useState<ProviderKeyAction | null>(null)
+  // Why: an object per request so only the request that started the spinner can end it.
+  const [keyActionRun, setKeyActionRun] = useState<{ action: ProviderKeyAction } | null>(null)
   const [keyError, setKeyError] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<MobileSpeechProviderKeyTest | null>(null)
   const [keyDrawerOpen, setKeyDrawerOpen] = useState(false)
   const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false)
   const providerOps = operations?.providers ?? null
   const fence = useVoiceRequestFence(operations)
-  const endKeyAction = useCallback((action: ProviderKeyAction) => {
-    setKeyAction((prev) => (prev === action ? null : prev))
+  const [stateOperations, setStateOperations] = useState(operations)
+  // Why: a disconnect (null) keeps the last desktop's state on screen; only a different client resets it.
+  if (operations && stateOperations !== operations) {
+    // Why: key and model actions now go to the new desktop, so the old one's state must not linger.
+    setStateOperations(operations)
+    setState(null)
+    setLoading(true)
+    setError(null)
+    setBusyAction(null)
+    setKeyActionRun(null)
+    setKeyError(null)
+    setTestResult(null)
+    setKeyDrawerOpen(false)
+    setConfirmRemoveOpen(false)
+  }
+  const startKeyAction = useCallback((action: ProviderKeyAction) => {
+    const run = { action }
+    setKeyActionRun(run)
+    return run
+  }, [])
+  const endKeyAction = useCallback((run: { action: ProviderKeyAction }) => {
+    setKeyActionRun((prev) => (prev === run ? null : prev))
   }, [])
 
   const refresh = useCallback(async (): Promise<boolean | undefined> => {
@@ -81,7 +102,7 @@ export function useVoiceProviderController(
         return
       }
       const ticket = fence.begin()
-      setKeyAction('saving')
+      const keyRun = startKeyAction('saving')
       setKeyError(null)
       try {
         const next = await providerOps.saveKey(providerId, apiKey)
@@ -93,14 +114,14 @@ export function useVoiceProviderController(
         // Why: the host verified the key before saving, so the connection is known good.
         setTestResult({ ok: true, message: null })
       } catch (err) {
-        if (fence.isSameHost(ticket)) {
+        if (fence.isLatest(ticket)) {
           setKeyError(errorText(err, 'Could not save the API key'))
         }
       } finally {
-        endKeyAction('saving')
+        endKeyAction(keyRun)
       }
     },
-    [endKeyAction, fence, providerOps]
+    [endKeyAction, fence, providerOps, startKeyAction]
   )
 
   const testKey = useCallback(
@@ -110,7 +131,7 @@ export function useVoiceProviderController(
       }
       // Why: a save or remove after this test started makes its verdict about a key that is gone.
       const ticket = fence.peek()
-      setKeyAction('testing')
+      const keyRun = startKeyAction('testing')
       setTestResult(null)
       let result: MobileSpeechProviderKeyTest
       try {
@@ -118,13 +139,13 @@ export function useVoiceProviderController(
       } catch (err) {
         result = { ok: false, message: errorText(err, 'Could not test the API key') }
       } finally {
-        endKeyAction('testing')
+        endKeyAction(keyRun)
       }
       if (fence.isLatest(ticket)) {
         setTestResult(result)
       }
     },
-    [endKeyAction, fence, providerOps]
+    [endKeyAction, fence, providerOps, startKeyAction]
   )
 
   const removeKey = useCallback(
@@ -133,7 +154,7 @@ export function useVoiceProviderController(
         return
       }
       const ticket = fence.begin()
-      setKeyAction('removing')
+      const keyRun = startKeyAction('removing')
       setError(null)
       setTestResult(null)
       try {
@@ -142,14 +163,14 @@ export function useVoiceProviderController(
           setState(next)
         }
       } catch (err) {
-        if (fence.isSameHost(ticket)) {
+        if (fence.isLatest(ticket)) {
           setError(errorText(err, 'Could not remove the API key'))
         }
       } finally {
-        endKeyAction('removing')
+        endKeyAction(keyRun)
       }
     },
-    [endKeyAction, fence, providerOps]
+    [endKeyAction, fence, providerOps, startKeyAction]
   )
 
   const runModelAction = useCallback(
@@ -161,7 +182,7 @@ export function useVoiceProviderController(
         await action()
         await refreshNow()
       } catch (err) {
-        if (fence.isSameHost(ticket)) {
+        if (fence.isLatest(ticket)) {
           setError(errorText(err, fallback))
         }
       } finally {
@@ -215,7 +236,7 @@ export function useVoiceProviderController(
     loading,
     error,
     busyAction,
-    keyAction,
+    keyAction: keyActionRun?.action ?? null,
     keyError,
     setKeyError,
     testResult,

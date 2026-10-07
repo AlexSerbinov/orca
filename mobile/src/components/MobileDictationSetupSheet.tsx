@@ -124,7 +124,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
         await downloadDictationModel(client, model.id)
         await refreshSetup()
       } catch (err) {
-        if (fence.isSameHost(ticket)) {
+        if (fence.isLatest(ticket)) {
           triggerError()
           setError(err instanceof Error ? err.message : 'Download failed')
         }
@@ -155,7 +155,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
         triggerSuccess()
         onReady?.()
       } catch (err) {
-        if (fence.isSameHost(ticket)) {
+        if (fence.isLatest(ticket)) {
           triggerError()
           setError(err instanceof Error ? err.message : 'Could not select model')
         }
@@ -183,7 +183,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
         setSetup(next)
         setCabinet((prev) => (prev ? { ...prev, enabled } : prev))
       } catch (err) {
-        if (fence.isSameHost(ticket)) {
+        if (fence.isLatest(ticket)) {
           setError(err instanceof Error ? err.message : 'Could not update')
         }
       }

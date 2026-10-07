@@ -3,7 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useVoiceSettingsController } from './use-voice-settings-controller'
 import { useVoiceProviderController } from './use-voice-provider-controller'
-import { cabinetState, voiceOperations } from './voice-cabinet.test-fixture'
+import { cabinetState, legacySetup, voiceOperations } from './voice-cabinet.test-fixture'
 import type { VoiceSettingsOperations } from './voice-settings-operations'
 import type { MobileSpeechProvidersState } from '../dictation/speech-provider-reply-schema'
 import type { MobileSpeechSetup } from '../dictation/mobile-dictation-setup'
@@ -95,15 +95,12 @@ describe('voice settings controller request fencing', () => {
   it('keeps the newer write when an older configure answers last', async () => {
     const first = deferred<MobileSpeechSetup>()
     const { operations } = voiceOperations({})
-    operations.configure = vi
-      .fn()
-      .mockReturnValueOnce(first.promise)
-      .mockResolvedValueOnce({
-        enabled: true,
-        dictationMode: 'hold',
-        selectedModelId: '',
-        models: []
-      })
+    operations.configure = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValueOnce({
+      enabled: true,
+      dictationMode: 'hold',
+      selectedModelId: '',
+      models: []
+    })
     const hook = mountHook((ops) => useVoiceSettingsController(ops, true))
     await hook.render(operations)
     await act(async () => {
@@ -113,6 +110,42 @@ describe('voice settings controller request fencing', () => {
     await act(async () =>
       first.resolve({ enabled: true, dictationMode: 'toggle', selectedModelId: '', models: [] })
     )
+    expect(current<SettingsController>(hook.latest).cabinet?.dictationMode).toBe('hold')
+  })
+
+  it('clears the previous desktop state and drawers as soon as the client changes', async () => {
+    const pendingList = deferred<MobileSpeechProvidersState>()
+    const oldHost = voiceOperations({})
+    const newHost = voiceOperations({ list: vi.fn().mockReturnValue(pendingList.promise) })
+    const hook = mountHook((ops) => useVoiceSettingsController(ops, true))
+    await hook.render(oldHost.operations)
+    await act(async () => current<SettingsController>(hook.latest).setModelDrawerOpen(true))
+    await act(async () => current<SettingsController>(hook.latest).setLanguageDrawerOpen(true))
+    expect(current<SettingsController>(hook.latest).cabinet).not.toBeNull()
+
+    await hook.render(newHost.operations)
+    const controller = current<SettingsController>(hook.latest)
+    expect(controller.cabinet).toBeNull()
+    expect(controller.loading).toBe(true)
+    expect(controller.modelDrawerOpen).toBe(false)
+    expect(controller.languageDrawerOpen).toBe(false)
+  })
+
+  it('drops an older configure failure that lands after a newer write succeeded', async () => {
+    const first = deferred<MobileSpeechSetup>()
+    const { operations } = voiceOperations({})
+    operations.configure = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ ...legacySetup, dictationMode: 'hold' })
+    const hook = mountHook((ops) => useVoiceSettingsController(ops, true))
+    await hook.render(operations)
+    await act(async () => {
+      void current<SettingsController>(hook.latest).configure({ dictationMode: 'toggle' })
+      void current<SettingsController>(hook.latest).configure({ dictationMode: 'hold' })
+    })
+    await act(async () => first.reject(new Error('stale failure')))
+    expect(current<SettingsController>(hook.latest).error).toBeNull()
     expect(current<SettingsController>(hook.latest).cabinet?.dictationMode).toBe('hold')
   })
 
@@ -141,6 +174,39 @@ describe('voice provider controller request fencing', () => {
 
     await act(async () => slowTest.resolve({ ok: false, message: 'Old key rejected (401).' }))
     expect(current<ProviderController>(hook.latest).testResult).toEqual({ ok: true, message: null })
+  })
+
+  it('keeps the new desktop key spinner when the old desktop save settles', async () => {
+    const oldSave = deferred<MobileSpeechProvidersState>()
+    const newSave = deferred<MobileSpeechProvidersState>()
+    const oldHost = voiceOperations({ saveKey: vi.fn().mockReturnValue(oldSave.promise) })
+    const newHost = voiceOperations({ saveKey: vi.fn().mockReturnValue(newSave.promise) })
+    const hook = mountHook((ops) => useVoiceProviderController(ops, true))
+    await hook.render(oldHost.operations)
+    await act(async () => current<ProviderController>(hook.latest).openKeyDrawer())
+    await act(async () => void current<ProviderController>(hook.latest).saveKey('deepgram', 'a'))
+    await hook.render(newHost.operations)
+    expect(current<ProviderController>(hook.latest).keyDrawerOpen).toBe(false)
+    expect(current<ProviderController>(hook.latest).keyAction).toBeNull()
+
+    await act(async () => void current<ProviderController>(hook.latest).saveKey('deepgram', 'b'))
+    await act(async () => oldSave.reject(new Error('old desktop failed')))
+    const controller = current<ProviderController>(hook.latest)
+    expect(controller.keyAction).toBe('saving')
+    expect(controller.keyError).toBeNull()
+  })
+
+  it('drops an older key save failure once a newer key change was made', async () => {
+    const slowSave = deferred<MobileSpeechProvidersState>()
+    const { operations } = voiceOperations({ saveKey: vi.fn().mockReturnValue(slowSave.promise) })
+    const hook = mountHook((ops) => useVoiceProviderController(ops, true))
+    await hook.render(operations)
+    await act(async () => void current<ProviderController>(hook.latest).saveKey('deepgram', 'a'))
+    await act(async () => current<ProviderController>(hook.latest).removeKey('deepgram'))
+    await act(async () => slowSave.reject(new Error('stale failure')))
+    const controller = current<ProviderController>(hook.latest)
+    expect(controller.keyError).toBeNull()
+    expect(controller.keyAction).toBeNull()
   })
 
   it('ignores a key save that the previous desktop answers after the client changes', async () => {

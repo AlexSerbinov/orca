@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 
 export type VoiceRequestTicket = { epoch: number; host: object | null }
 
@@ -10,8 +10,8 @@ export function useVoiceRequestFence(host: object | null) {
   const epoch = useRef(0)
   const currentHost = useRef(host)
 
-  // Why: replies from the previous desktop must never land on the new one's screen.
-  useEffect(() => {
+  // Why: layout timing closes the gap where an old-desktop reply could land before a passive effect ran.
+  useLayoutEffect(() => {
     if (currentHost.current !== host) {
       currentHost.current = host
       epoch.current += 1
@@ -29,7 +29,7 @@ export function useVoiceRequestFence(host: object | null) {
       ticket.epoch === epoch.current && ticket.host === currentHost.current,
     []
   )
-  /** Still the same desktop: errors and spinners from this reply are still the user's. */
+  /** Still the same desktop: a read's loading spinner is still the user's (errors need isLatest). */
   const isSameHost = useCallback(
     (ticket: VoiceRequestTicket) => ticket.host === currentHost.current,
     []
