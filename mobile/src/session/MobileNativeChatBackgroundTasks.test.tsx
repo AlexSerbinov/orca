@@ -138,7 +138,12 @@ describe('MobileNativeChatBackgroundTasks', () => {
 
   it('starts narrow on a phone-width window, as desktop starts from its viewport', () => {
     windowWidth.value = 375
-    const mounted = mount(tasksFor({ state: 'monitoring', children: [view('a'), view('b')] }))
+    const mounted = mount(
+      tasksFor({
+        state: 'monitoring',
+        children: [view('a'), view('s', { kind: 'command', description: 'npm test' })]
+      })
+    )
     expect(header(mounted).props.accessibilityLabel).toBe('2 background tasks')
   })
 
@@ -237,8 +242,43 @@ describe('MobileNativeChatBackgroundTasks', () => {
 
   it('starts narrow when the window less its margins is narrow', () => {
     windowWidth.value = 400
-    const mounted = mount(tasksFor({ state: 'monitoring', children: [view('a'), view('b')] }))
+    const mounted = mount(
+      tasksFor({
+        state: 'monitoring',
+        children: [view('a'), view('s', { kind: 'command', description: 'npm test' })]
+      })
+    )
     expect(header(mounted).props.accessibilityLabel).toBe('2 background tasks')
+  })
+
+  it('keeps one kind in its state forms on a phone-width strip', () => {
+    windowWidth.value = 375
+    const waiting = mount(
+      tasksFor({
+        state: 'monitoring',
+        children: [view('a', { state: 'waiting' }), view('b', { state: 'waiting' })]
+      })
+    )
+    expect(header(waiting).props.accessibilityLabel).toBe('2 agents waiting — needs approval')
+    const mixed = mount(
+      tasksFor({ state: 'monitoring', children: [view('a'), view('b', { state: 'waiting' })] })
+    )
+    expect(header(mixed).props.accessibilityLabel).toBe('2 agents — 1 working, 1 waiting')
+  })
+
+  it('cuts the header off on one line on the smallest phones, never wrapping it', () => {
+    windowWidth.value = 320
+    const mounted = mount(
+      tasksFor({
+        state: 'monitoring',
+        children: [view('a'), view('b', { state: 'waiting' }), view('c', { state: 'unverifiable' })]
+      })
+    )
+    const texts = header(mounted).findAll((node) => String(node.type) === 'Text')
+    expect(texts.length).toBeGreaterThan(0)
+    expect(texts.map((text) => [text.props.numberOfLines, text.props.ellipsizeMode])).toEqual(
+      texts.map(() => [1, 'tail'])
+    )
   })
 
   it('claims no live work once the stream is lost', () => {

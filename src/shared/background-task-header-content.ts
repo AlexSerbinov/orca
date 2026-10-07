@@ -19,8 +19,9 @@ type TaskKind = AgentSessionBackgroundTask['kind']
 type RunState = AgentSessionBackgroundTaskRunState
 
 /** Below this strip width (in root-font units; 16 px each where a surface has no root font) the
- *  header drops its per-kind breakdown for an honest total. Measured on the strip itself, so a
- *  narrow split pane behaves like a narrow window. */
+ *  header drops a breakdown across several kinds for an honest total. A single kind keeps its state
+ *  forms ("2 agents waiting — needs approval"): they are one segment and fit. Measured on the strip
+ *  itself, so a narrow split pane behaves like a narrow window. */
 export const NARROW_BACKGROUND_TASKS_STRIP_REM = 24
 
 function kindCountLabel(kind: TaskKind, count: number, say: BackgroundTaskSay): string {
@@ -72,9 +73,10 @@ export type BackgroundTasksHeaderContent = {
   detail: string | null
 }
 
-/** Every variant in the signed-off mock, plus the overflow and narrow forms.
- *  Any lossy form (fallback or total) leaves the detail reachable — the strip
- *  stays expandable regardless of task count. */
+/** Every variant in the signed-off mock, plus the overflow and narrow forms. Narrow replaces
+ *  only a breakdown across kinds; one kind reads the same at every width. Any lossy form
+ *  (fallback or total) leaves the detail reachable — the strip stays expandable regardless of
+ *  task count. */
 export function backgroundTasksHeaderContent(
   groups: readonly BackgroundTaskGroup[],
   options: { narrow: boolean; now: number },
@@ -84,7 +86,7 @@ export function backgroundTasksHeaderContent(
   if (all.length === 0) {
     return { segments: [], detail: say('monitoring') }
   }
-  if (groups.length > HEADER_SEGMENT_CAP || (options.narrow && all.length > 1)) {
+  if (groups.length > HEADER_SEGMENT_CAP || (options.narrow && groups.length > 1)) {
     return {
       segments: [{ text: say('headerTotal', { value0: all.length }), kind: null }],
       detail: null

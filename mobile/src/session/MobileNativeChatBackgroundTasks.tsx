@@ -219,14 +219,14 @@ function MobileNativeChatBackgroundTasksImpl({
                       <KindIcon kind={segment.kind} size={12} />
                     </View>
                   ) : null}
-                  <Text style={styles.segmentText} numberOfLines={1}>
+                  <Text style={styles.segmentText} numberOfLines={1} ellipsizeMode="tail">
                     {segment.text}
                   </Text>
                 </View>
               )
             })}
             {header.detail ? (
-              <Text style={styles.detail} numberOfLines={1}>
+              <Text style={styles.detail} numberOfLines={1} ellipsizeMode="tail">
                 {header.segments.length > 0 ? `— ${header.detail}` : header.detail}
               </Text>
             ) : null}

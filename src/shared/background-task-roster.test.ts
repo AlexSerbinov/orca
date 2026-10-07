@@ -122,11 +122,21 @@ describe('backgroundTasksHeaderContent', () => {
     ).toEqual({ segments: [{ text: '7 background tasks', kind: null }], detail: null })
   })
 
-  it('falls back to the total on a narrow strip', () => {
+  it('totals a breakdown across kinds on a narrow strip', () => {
     expect(
       header([agent('a'), { id: 's', kind: 'command', state: 'working', startedAt: NOW }], [], true)
     ).toEqual({ segments: [{ text: '2 background tasks', kind: null }], detail: null })
-    // A single task stays named: the short form fits.
+  })
+
+  it('keeps one kind in its state forms on a narrow strip', () => {
+    // The attention state a reader must see survives the narrow width.
+    expect(
+      header([agent('a', { state: 'waiting' }), agent('b', { state: 'waiting' })], [], true)
+    ).toEqual({ segments: [{ text: '2 agents waiting', kind: 'agent' }], detail: 'needs approval' })
+    expect(header([agent('a'), agent('b', { state: 'waiting' })], [], true)).toEqual({
+      segments: [{ text: '2 agents', kind: 'agent' }],
+      detail: '1 working, 1 waiting'
+    })
     expect(header([agent('a')], [], true)).toEqual({
       segments: [{ text: '1 agent', kind: 'agent' }],
       detail: 'working'
