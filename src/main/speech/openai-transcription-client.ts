@@ -16,11 +16,12 @@ type OpenAiTranscriptionResponse = {
   }
 }
 
-export function sanitizeOpenAiTranscriptionErrorMessage(message: string): string {
+export function sanitizeOpenAiTranscriptionErrorMessage(label: string, message: string): string {
+  // Why: this phrasing echoes part of the key and is shared by OpenAI-compatible hosts such as Groq.
   if (/incorrect api key provided:/i.test(message)) {
-    return 'Incorrect OpenAI API key provided.'
+    return `Incorrect ${label} API key provided.`
   }
-  return redactCloudSpeechSecrets(message) || 'OpenAI transcription request failed'
+  return redactCloudSpeechSecrets(message) || `${label} transcription request failed`
 }
 
 function parseOpenAiTranscriptionResponse(
@@ -31,7 +32,7 @@ function parseOpenAiTranscriptionResponse(
     return data.text.trim()
   }
   if (typeof data.error?.message === 'string') {
-    throw new Error(sanitizeOpenAiTranscriptionErrorMessage(data.error.message))
+    throw new Error(sanitizeOpenAiTranscriptionErrorMessage(label, data.error.message))
   }
   throw new Error(`${label} transcription response did not include text`)
 }
@@ -62,6 +63,7 @@ export function createOpenAiCompatibleTranscribe(options: {
     })
     if (!response.ok) {
       const message = sanitizeOpenAiTranscriptionErrorMessage(
+        options.label,
         await readProviderErrorMessage(response)
       )
       throw new Error(`${options.label} transcription failed: ${message}`)
