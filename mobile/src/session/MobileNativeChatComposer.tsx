@@ -33,6 +33,7 @@ import { mobileNativeChatInputStyles } from './mobile-native-chat-input-styles'
 import { getMobileNativeChatCommands } from './mobile-native-chat-send-classification'
 import { MobileNativeChatMicButton } from './MobileNativeChatMicButton'
 import { MobileNativeChatDictationCaption } from './mobile-dictation-caption-context'
+import type { MobileDictationPhase } from './native-chat-dictation-toggle'
 
 const NO_FILE_PATHS: string[] = []
 const NO_ATTACHMENTS: PendingNativeChatImage[] = []
@@ -63,7 +64,7 @@ type Props = {
   onRemoveAttachment?: (id: string) => void
   isAttaching?: boolean
   onMicPress?: () => void
-  micActive?: boolean
+  dictationPhase?: MobileDictationPhase
   /** Dictation trigger style — 'hold' uses press-in/out, 'toggle' uses tap. */
   dictationMode?: string
   onMicPressIn?: () => void
@@ -92,7 +93,7 @@ export function MobileNativeChatComposer({
   onRemoveAttachment,
   isAttaching = false,
   onMicPress,
-  micActive = false,
+  dictationPhase = 'idle',
   dictationMode = 'toggle',
   onMicPressIn,
   onMicPressOut,
@@ -302,8 +303,8 @@ export function MobileNativeChatComposer({
             <View style={styles.actionSpacer} />
             {onMicPress ? (
               <MobileNativeChatMicButton
-                {...{ micActive, dictationMode, onMicPress, onMicPressIn, onMicPressOut }}
-                disabled={disabled && !micActive}
+                {...{ dictationPhase, dictationMode, onMicPress, onMicPressIn, onMicPressOut }}
+                disabled={disabled && dictationPhase === 'idle'}
                 buttonStyle={styles.iconButton}
                 pressedStyle={styles.pressed}
               />

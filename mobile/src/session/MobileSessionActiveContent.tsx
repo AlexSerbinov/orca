@@ -9,6 +9,7 @@ import type { MobileSessionController } from './use-mobile-session-controller'
 import { FileReader } from './MobileSessionFileReader'
 import { MarkdownReader } from './MobileSessionMarkdownReader'
 import { MobileDictationCaptionContext } from './mobile-dictation-caption-context'
+import { nativeChatDictationPhase } from './native-chat-dictation-toggle'
 
 export function MobileSessionActiveContent({
   controller
@@ -231,7 +232,7 @@ export function MobileSessionActiveContent({
           onOpenFile={handleNativeChatFileTap}
           images={nativeChatImages}
           onMicPress={handleDictationToggle}
-          micActive={dictation.isRecording}
+          dictationPhase={nativeChatDictationPhase(dictation)}
           dictationMode={dictationMode}
           onMicPressIn={handleDictationPressIn}
           onMicPressOut={handleDictationPressOut}

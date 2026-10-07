@@ -155,7 +155,7 @@ describe('a dictation whose provider stream failed', () => {
   it('reports the failed stream finish while it is underway, so a tap does not discard it', async () => {
     await recordAndFailChunk('dictation_stream_failed: Soniox closed the stream (1000).', 'hold')
     expect(held.dictation?.status).toBe('processing')
-    expect(held.dictation?.isFinishingFailedStream()).toBe(true)
+    expect(held.dictation?.failedStreamFinish).toBe('grace')
   })
 
   it('still cancels on any other chunk failure', async () => {

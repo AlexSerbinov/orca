@@ -13,7 +13,7 @@ import {
 } from './mobile-dictation-session-state'
 import { startMobileDictationDesktopSession } from './mobile-dictation-desktop-start'
 import { useMobileDictationLiveCaption } from './mobile-dictation-live-caption'
-import { createMobileDictationStreamSalvage } from './mobile-dictation-stream-salvage'
+import { useMobileDictationStreamSalvage } from './use-mobile-dictation-stream-salvage'
 import {
   dictationSessionCancel,
   dictationSessionFinish
@@ -46,7 +46,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
   const pendingAudioBudgetRef = useRef(new MobileDictationPendingAudioBudget())
   const acceptingChunksRef = useRef(false)
   const generationRef = useRef(0)
-  const streamSalvageRef = useRef(createMobileDictationStreamSalvage())
+  const { salvage: streamSalvage, phase: failedStreamFinish } = useMobileDictationStreamSalvage()
   const stopRef = useRef<() => Promise<void>>(async () => {})
   const { captionStore, acceptCaption } = useMobileDictationLiveCaption(
     status,
@@ -101,7 +101,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
       }
       // Why: a provider stream that died mid-dictation still holds committed text; finish keeps it.
       const finish = statusRef.current === 'recording' ? stopRef.current : null
-      if (streamSalvageRef.current.claim(dictationId, err, finish)) {
+      if (streamSalvage.claim(dictationId, err, finish)) {
         return
       }
       activeIdRef.current = null
@@ -111,7 +111,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
       }
       reportError(err)
     },
-    [closeDictationAudio, reportError]
+    [closeDictationAudio, reportError, streamSalvage]
   )
 
   useEffect(() => {
@@ -150,7 +150,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
 
     const generation = generationRef.current + 1
     generationRef.current = generation
-    streamSalvageRef.current.reset()
+    streamSalvage.reset()
     setError(null)
     applyStatus('starting')
     let opened
@@ -213,7 +213,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
         void capture.end()
       }
     })
-  }, [applyStatus, capture, resetChunkQueue])
+  }, [applyStatus, capture, resetChunkQueue, streamSalvage])
 
   const stop = useCallback(async () => {
     const client = clientRef.current
@@ -257,7 +257,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
       if (!isCurrent()) {
         return
       }
-      const outcome = readDictationFinish(finished, streamSalvageRef.current.take(dictationId))
+      const outcome = readDictationFinish(finished, streamSalvage.take(dictationId))
       activeIdRef.current = null
       resetChunkQueue(false)
       applyStatus('idle')
@@ -265,7 +265,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
     } catch (err) {
       failActiveDictation(dictationId, err)
     }
-  }, [applyStatus, capture, failActiveDictation, resetChunkQueue])
+  }, [applyStatus, capture, failActiveDictation, resetChunkQueue, streamSalvage])
 
   useLayoutEffect(() => {
     stopRef.current = stop
@@ -304,7 +304,6 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
   )
 
   const cancel = useCallback(() => abandonDictation(null), [abandonDictation])
-  const isFinishingFailedStream = useCallback(() => streamSalvageRef.current.isPending(), [])
 
   useEffect(() => {
     const sub = capture.onInterruption(() => {
@@ -340,7 +339,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
     isStarting: status === 'starting',
     isRecording: status === 'recording',
     isProcessing: status === 'processing',
-    isFinishingFailedStream,
+    failedStreamFinish,
     error,
     captionStore,
     start,

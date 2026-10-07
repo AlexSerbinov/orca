@@ -6,6 +6,7 @@ import type { MobileNativeChatImageAttachments } from './use-mobile-native-chat-
 import type { MobileNativeChatController } from './use-mobile-native-chat-controller'
 import { useMobileNativeChatStreamingBubble } from './use-mobile-native-chat-streaming-bubble'
 import { useMobileNativeChatQueuedSlot } from './use-mobile-native-chat-queued-slot'
+import type { MobileDictationPhase } from './native-chat-dictation-toggle'
 
 type Props = {
   controller: MobileNativeChatController
@@ -16,7 +17,7 @@ type Props = {
    *  rides the pending images along with the message text (desktop parity). */
   images: MobileNativeChatImageAttachments
   onMicPress: () => void
-  micActive: boolean
+  dictationPhase: MobileDictationPhase
   dictationMode: string | undefined
   onMicPressIn: () => void
   onMicPressOut: () => void
@@ -41,7 +42,7 @@ export function MobileNativeChatOverlay({
   onOpenFile,
   images,
   onMicPress,
-  micActive,
+  dictationPhase,
   dictationMode,
   onMicPressIn,
   onMicPressOut,
@@ -126,7 +127,7 @@ export function MobileNativeChatOverlay({
         onRemoveAttachment={images.removeAttachment}
         isAttaching={images.isAttaching}
         onMicPress={onMicPress}
-        micActive={micActive}
+        dictationPhase={dictationPhase}
         dictationMode={dictationMode}
         onMicPressIn={onMicPressIn}
         onMicPressOut={onMicPressOut}
