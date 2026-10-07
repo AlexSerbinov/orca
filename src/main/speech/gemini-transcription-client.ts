@@ -72,6 +72,10 @@ export function readGeminiTranscript(data: GeminiResponse): string {
     }
     throw new Error(`Gemini returned no transcript${describeReason(candidate?.finishReason)}.`)
   }
+  // Why: MAX_TOKENS, SAFETY or RECITATION cut the answer short; partial text is not the transcript.
+  if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
+    throw new Error(`Gemini did not complete the transcription (${candidate.finishReason}).`)
+  }
   const texts = parts.map(readPartText).filter((text) => text !== undefined)
   // Why: parts without any text field are a shape change, not silence.
   if (texts.length === 0) {

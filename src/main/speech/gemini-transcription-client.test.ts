@@ -65,6 +65,23 @@ describe('readGeminiTranscript', () => {
     ).toThrow('Gemini returned no transcript (RECITATION).')
     expect(() => readGeminiTranscript({})).toThrow('Gemini returned no transcript.')
   })
+
+  it.each(['MAX_TOKENS', 'SAFETY', 'RECITATION'])(
+    'rejects partial text cut short by %s instead of returning it as the transcript',
+    (finishReason) => {
+      expect(() =>
+        readGeminiTranscript({
+          candidates: [{ finishReason, content: { parts: [{ text: 'Hello, this is the fi' }] } }]
+        })
+      ).toThrow(`Gemini did not complete the transcription (${finishReason}).`)
+    }
+  )
+
+  it('keeps text whose candidate has no finish reason', () => {
+    expect(readGeminiTranscript({ candidates: [{ content: { parts: [{ text: 'Hi' }] } }] })).toBe(
+      'Hi'
+    )
+  })
 })
 
 describe('Gemini batch session', () => {
