@@ -45,8 +45,9 @@ export function useMobileNativeChatComposerTray({
         null,
         backgroundTasks
           ? // Keyed per conversation: one chat's open list or pending Stop never shows in another.
+            // Its own suffix, so it never shares the queued box's key beside it.
             createElement(MobileNativeChatBackgroundTasks, {
-              key: backgroundTasks.sessionKey,
+              key: `${backgroundTasks.sessionKey}:background-tasks`,
               tasks: backgroundTasks
             })
           : null,

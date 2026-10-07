@@ -178,4 +178,20 @@ describe('useMobileNativeChatComposerTray', () => {
     })
     expect(stripRows(mounted)).toHaveLength(0)
   })
+
+  it('gives the strip and the cards of one conversation their own keys', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const mounted = create(createElement('View'))
+    renderer = mounted
+    await act(async () => {
+      mounted.update(
+        createElement(Slot, { sessionKey: 's-a', backgroundTasks: tasks('s-a', RUNNING) })
+      )
+    })
+    const duplicateKeys = consoleError.mock.calls.filter((call) =>
+      String(call[0]).includes('same key')
+    )
+    consoleError.mockRestore()
+    expect(duplicateKeys).toEqual([])
+  })
 })
