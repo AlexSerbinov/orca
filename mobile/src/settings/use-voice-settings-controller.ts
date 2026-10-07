@@ -31,10 +31,7 @@ function mergeSetupIntoCabinet(
   }
 }
 
-/**
- * State for the Voice screen. A desktop that answers `speech.providers.list` gets the provider
- * cabinet (`cabinet`); an older one keeps the legacy model list (`setup`), loaded exactly as before.
- */
+/** Voice screen state: provider `cabinet` on newer desktops, legacy `setup` on older ones. */
 export function useVoiceSettingsController(
   operations: VoiceSettingsOperations | null,
   focused: boolean
@@ -50,8 +47,7 @@ export function useVoiceSettingsController(
   // Why: null = not probed yet; false sticks so polling an old desktop doesn't re-probe each tick.
   const cabinetSupported = useRef<boolean | null>(null)
 
-  // Why: re-probe on a new client (it may be an older desktop) but keep the last state on screen
-  // until that read lands, so returning from a provider screen doesn't flash a spinner.
+  // Why: a new client may be an older desktop; keep the old state shown until the re-probe lands.
   useEffect(() => {
     cabinetSupported.current = null
   }, [operations])

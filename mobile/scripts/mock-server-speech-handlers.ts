@@ -1,6 +1,9 @@
 import type { RpcRequest, RpcResponse } from './mock-server-rpc-handlers'
 import { CLOUD_SPEECH_PROVIDERS } from '../../src/shared/cloud-speech-providers'
-import { getModelTranscriptionLanguages } from '../../src/shared/speech-transcription-languages'
+import {
+  getModelTranscriptionLanguages,
+  VOXTRAL_TRANSCRIPTION_LANGUAGES
+} from '../../src/shared/speech-transcription-languages'
 import type {
   RuntimeSpeechProviderModel,
   RuntimeSpeechProviderSummary,
@@ -14,22 +17,6 @@ type ErrorResponse = (id: string, code: string, message: string) => RpcResponse
 type MockModel = Omit<RuntimeSpeechProviderModel, 'status' | 'progress'> & { providerId: string }
 
 const ALL_LANGUAGES = getModelTranscriptionLanguages('any') ?? []
-const VOXTRAL_LANGUAGES = [
-  'en',
-  'zh',
-  'hi',
-  'es',
-  'ar',
-  'fr',
-  'pt',
-  'ru',
-  'de',
-  'ja',
-  'ko',
-  'it',
-  'nl'
-]
-
 // Why: mirrors the desktop catalog ids so simulator screenshots match what a real host lists.
 const MOCK_MODELS: MockModel[] = [
   local('parakeet-tdt-0.6b-v3-int8', 'Parakeet TDT v3', 670_000_000, true),
@@ -45,7 +32,9 @@ const MOCK_MODELS: MockModel[] = [
   cloud('openai', 'openai-gpt-4o-transcribe', 'GPT-4o Transcribe', false),
   cloud('groq', 'groq-whisper-large-v3-turbo', 'Whisper Large v3 Turbo', false),
   cloud('groq', 'groq-whisper-large-v3', 'Whisper Large v3', false),
-  cloud('mistral', 'mistral-voxtral-mini', 'Voxtral Mini', false, VOXTRAL_LANGUAGES)
+  cloud('mistral', 'mistral-voxtral-mini', 'Voxtral Mini', false, [
+    ...VOXTRAL_TRANSCRIPTION_LANGUAGES
+  ])
 ]
 
 const MOCK_TRANSCRIPT =

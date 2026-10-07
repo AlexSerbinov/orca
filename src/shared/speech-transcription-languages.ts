@@ -28,6 +28,23 @@ export const SPEECH_TRANSCRIPTION_LANGUAGES: readonly SpeechTranscriptionLanguag
   { code: 'id', label: 'Indonesian' }
 ]
 
+// Why: Mistral Voxtral transcribes these 13 languages; any other hint would be rejected or mis-decoded.
+export const VOXTRAL_TRANSCRIPTION_LANGUAGES: readonly string[] = [
+  'en',
+  'zh',
+  'hi',
+  'es',
+  'ar',
+  'fr',
+  'pt',
+  'ru',
+  'de',
+  'ja',
+  'ko',
+  'it',
+  'nl'
+]
+
 /** Returns the language to send to a provider, or undefined to let it auto-detect. */
 export function resolveTranscriptionLanguageHint(value: string | undefined): string | undefined {
   if (!value || value === AUTO_TRANSCRIPTION_LANGUAGE) {

@@ -1,4 +1,5 @@
 import type { SpeechModelManifest } from '../../shared/speech-types'
+import { VOXTRAL_TRANSCRIPTION_LANGUAGES } from '../../shared/speech-transcription-languages'
 
 type CloudSpeechCatalogEntry = {
   manifest: SpeechModelManifest
@@ -25,22 +26,6 @@ function cloudEntry(
     }
   }
 }
-
-const VOXTRAL_LANGUAGES = [
-  'en',
-  'zh',
-  'hi',
-  'es',
-  'ar',
-  'fr',
-  'pt',
-  'ru',
-  'de',
-  'ja',
-  'ko',
-  'it',
-  'nl'
-]
 
 // Why: OpenAI rows keep type 'openai' because shipped desktop and mobile builds pin that shape.
 const OPENAI_ENTRIES: CloudSpeechCatalogEntry[] = [
@@ -185,8 +170,7 @@ const CLOUD_ENTRIES: CloudSpeechCatalogEntry[] = [
     description: 'Mistral Voxtral transcription of the whole recording.',
     provider: 'mistral',
     apiModel: 'voxtral-mini-latest',
-    // Why: Voxtral transcribes 13 languages; any other hint would be rejected or mis-decoded.
-    transcriptionLanguages: VOXTRAL_LANGUAGES
+    transcriptionLanguages: VOXTRAL_TRANSCRIPTION_LANGUAGES
   })
 ]
 
