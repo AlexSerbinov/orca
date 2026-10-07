@@ -80,7 +80,7 @@ vi.mock('./WorkspaceKanbanDrawer', () => ({
 
 vi.mock('./useSidebarProjectDrop', () => ({
   useSidebarProjectDrop: () => ({
-    nativeDropTarget: undefined,
+    dropOwnerRef: () => undefined,
     dropHandlers: {},
     affordance: { visible: false }
   })

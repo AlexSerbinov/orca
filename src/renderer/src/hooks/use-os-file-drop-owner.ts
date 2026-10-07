@@ -27,7 +27,7 @@ type OsFileDropContext<Destination> = {
 type OsFileDropOwnerOptions<Destination> = {
   consumer: DroppedPathConsumer
   sequence: OsFileDropSequence
-  canAccept?: boolean | (() => boolean)
+  canAccept?: boolean | ((event: DragEvent) => boolean)
   captureDestination?: (event: DragEvent) => Destination
   onDrop: (
     prepared: PreparedDroppedPaths,
@@ -76,9 +76,9 @@ export function useOsFileDropOwner<Destination = undefined>(
       }
 
       let attached = true
-      const canAccept = (): boolean => {
+      const canAccept = (event: DragEvent): boolean => {
         const availability = optionsRef.current.canAccept
-        return typeof availability === 'function' ? availability() : availability !== false
+        return typeof availability === 'function' ? availability(event) : availability !== false
       }
 
       const onDragOver = (event: DragEvent): void => {
@@ -88,7 +88,7 @@ export function useOsFileDropOwner<Destination = undefined>(
         event.preventDefault()
         event.stopPropagation()
         if (event.dataTransfer) {
-          event.dataTransfer.dropEffect = canAccept() ? 'copy' : 'none'
+          event.dataTransfer.dropEffect = canAccept(event) ? 'copy' : 'none'
         }
       }
 
@@ -101,7 +101,7 @@ export function useOsFileDropOwner<Destination = undefined>(
         if (!event.isTrusted) {
           return
         }
-        if (!canAccept()) {
+        if (!canAccept(event)) {
           return
         }
 
