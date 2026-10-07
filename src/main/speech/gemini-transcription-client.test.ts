@@ -19,6 +19,38 @@ describe('readGeminiTranscript', () => {
       ''
     )
     expect(readGeminiTranscript({ candidates: [{ finishReason: 'STOP' }] })).toBe('')
+    expect(
+      readGeminiTranscript({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] })
+    ).toBe('')
+    expect(readGeminiTranscript({ candidates: [{ content: { parts: [{ text: '' }] } }] })).toBe('')
+  })
+
+  it('rejects parts that carry no text field instead of reading them as silence', () => {
+    for (const parts of [[{}], [{ audioTranscription: {} }], [{}, { audioTranscription: {} }]]) {
+      expect(() =>
+        readGeminiTranscript({ candidates: [{ finishReason: 'STOP', content: { parts } }] })
+      ).toThrow('Gemini returned an invalid transcription response')
+    }
+  })
+
+  it('ignores thought parts', () => {
+    expect(
+      readGeminiTranscript({
+        candidates: [
+          {
+            finishReason: 'STOP',
+            content: { parts: [{ text: 'Thinking about audio', thought: true }, { text: 'Hi.' }] }
+          }
+        ]
+      })
+    ).toBe('Hi.')
+    expect(
+      readGeminiTranscript({
+        candidates: [
+          { finishReason: 'STOP', content: { parts: [{ text: 'Plan', thought: true }] } }
+        ]
+      })
+    ).toBe('')
   })
 
   it('reports a blocked prompt instead of silence', () => {

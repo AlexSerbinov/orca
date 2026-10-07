@@ -2,7 +2,10 @@ import { z } from 'zod'
 import type { BatchTranscribe } from './batch-cloud-speech-session'
 import type { BatchAudioLimit } from './cloud-speech-audio-encoding'
 import { assertProviderResponseOk } from './cloud-speech-provider-errors'
-import { readTranscriptionJson } from './cloud-speech-transcription-response'
+import {
+  invalidTranscriptionResponse,
+  readTranscriptionJson
+} from './cloud-speech-transcription-response'
 import { SPEECH_TRANSCRIPTION_LANGUAGES } from '../../shared/speech-transcription-languages'
 
 export const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com'
@@ -26,6 +29,7 @@ function buildPrompt(language: string | undefined): string {
 
 const GEMINI_PART = z.object({
   text: z.string().optional(),
+  thought: z.boolean().optional(),
   audioTranscription: z.object({ text: z.string().optional() }).optional()
 })
 
@@ -45,8 +49,8 @@ type GeminiPart = z.infer<typeof GEMINI_PART>
 type GeminiResponse = z.infer<typeof GEMINI_RESPONSE>
 
 // Why: Gemini Transcribe models answer in audioTranscription.text; chat models answer in text.
-function readPartText(part: GeminiPart): string {
-  return part.text ?? part.audioTranscription?.text ?? ''
+function readPartText(part: GeminiPart): string | undefined {
+  return part.text ?? part.audioTranscription?.text
 }
 
 function describeReason(reason: string | undefined): string {
@@ -59,7 +63,8 @@ export function readGeminiTranscript(data: GeminiResponse): string {
     throw new Error(`Gemini blocked the request${describeReason(data.promptFeedback.blockReason)}.`)
   }
   const candidate = data.candidates?.[0]
-  const parts = candidate?.content?.parts
+  // Why: thought summaries are model reasoning, not the transcript.
+  const parts = candidate?.content?.parts?.filter((part) => part.thought !== true)
   if (!parts || parts.length === 0) {
     // Why: Gemini answers silence with STOP and no parts (verified live).
     if (candidate?.finishReason === 'STOP') {
@@ -67,7 +72,12 @@ export function readGeminiTranscript(data: GeminiResponse): string {
     }
     throw new Error(`Gemini returned no transcript${describeReason(candidate?.finishReason)}.`)
   }
-  const text = parts.map(readPartText).join('').trim()
+  const texts = parts.map(readPartText).filter((text) => text !== undefined)
+  // Why: parts without any text field are a shape change, not silence.
+  if (texts.length === 0) {
+    throw invalidTranscriptionResponse('Gemini')
+  }
+  const text = texts.join('').trim()
   // Why: the prompt asks for an empty string on silence and the model sometimes quotes it literally.
   return text === '""' ? '' : text
 }
