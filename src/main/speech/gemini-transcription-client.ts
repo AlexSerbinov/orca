@@ -15,16 +15,24 @@ function buildPrompt(language: string | undefined): string {
     : TRANSCRIBE_PROMPT
 }
 
+type GeminiPart = { text?: unknown; audioTranscription?: { text?: unknown } }
+
 type GeminiResponse = {
-  candidates?: { content?: { parts?: { text?: unknown }[] } }[]
+  candidates?: { content?: { parts?: GeminiPart[] } }[]
+}
+
+// Why: Gemini Transcribe models answer in audioTranscription.text; chat models answer in text.
+function readPartText(part: GeminiPart): string {
+  if (typeof part.text === 'string') {
+    return part.text
+  }
+  const transcription = part.audioTranscription?.text
+  return typeof transcription === 'string' ? transcription : ''
 }
 
 function readCandidateText(data: GeminiResponse): string {
   const parts = data.candidates?.[0]?.content?.parts ?? []
-  const text = parts
-    .map((part) => (typeof part.text === 'string' ? part.text : ''))
-    .join('')
-    .trim()
+  const text = parts.map(readPartText).join('').trim()
   // Why: the prompt asks for an empty string on silence and the model sometimes quotes it literally.
   return text === '""' ? '' : text
 }

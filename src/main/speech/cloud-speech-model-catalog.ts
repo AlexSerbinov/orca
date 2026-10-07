@@ -109,6 +109,20 @@ const CLOUD_ENTRIES: CloudSpeechCatalogEntry[] = [
     realtime: true
   }),
   cloudEntry({
+    id: 'gemini-3.5-transcribe',
+    label: 'Gemini 3.5 Transcribe',
+    description: "Google's dedicated speech-to-text model, 85+ languages.",
+    provider: 'gemini',
+    apiModel: 'gemini-3.5-transcribe'
+  }),
+  cloudEntry({
+    id: 'gemini-3.8-flash',
+    label: 'Gemini 3.8 Flash',
+    description: 'Newest Gemini Flash model; transcribes the whole recording at once.',
+    provider: 'gemini',
+    apiModel: 'gemini-3.8-flash'
+  }),
+  cloudEntry({
     id: 'gemini-flash-latest',
     label: 'Gemini Flash (latest)',
     description: "Google's newest Flash model transcribes the whole recording at once.",
@@ -121,6 +135,20 @@ const CLOUD_ENTRIES: CloudSpeechCatalogEntry[] = [
     description: 'Stable Gemini Flash model for whole-recording transcription.',
     provider: 'gemini',
     apiModel: 'gemini-2.5-flash'
+  }),
+  cloudEntry({
+    id: 'gemini-flash-lite-latest',
+    label: 'Gemini Flash-Lite (latest)',
+    description: 'Fastest, lowest-cost Gemini model for whole-recording transcription.',
+    provider: 'gemini',
+    apiModel: 'gemini-flash-lite-latest'
+  }),
+  cloudEntry({
+    id: 'gemini-pro-latest',
+    label: 'Gemini Pro (latest)',
+    description: 'Most capable Gemini model; slower, for difficult audio.',
+    provider: 'gemini',
+    apiModel: 'gemini-pro-latest'
   }),
   cloudEntry({
     id: 'groq-whisper-large-v3-turbo',

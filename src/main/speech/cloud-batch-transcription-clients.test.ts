@@ -95,6 +95,14 @@ describe('batch cloud transcription clients', () => {
     expect(body.contents[0].parts[1].inlineData.mimeType).toBe('audio/wav')
   })
 
+  it('reads Gemini Transcribe output from audioTranscription parts', async () => {
+    stubFetch({
+      candidates: [{ content: { parts: [{ audioTranscription: { text: 'Привіт, Орка' } }] } }]
+    })
+
+    await expect(transcribe('gemini-3.5-transcribe', 'uk')).resolves.toBe('Привіт, Орка')
+  })
+
   it('sends Mistral Voxtral the latest mini model', async () => {
     const requests = stubFetch({ text: 'voxtral text' })
 
