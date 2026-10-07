@@ -113,7 +113,7 @@ export function VoiceSpeechModelSection({
 
   return (
     <div className="flex items-center justify-between gap-4 py-2">
-      <div className="space-y-0.5">
+      <div className="min-w-0 flex-1 space-y-0.5">
         <Label>{translate('auto.components.settings.VoicePane.43fd4f454b', 'Speech Model')}</Label>
         <p className="text-xs text-muted-foreground">
           {selectedModel && selectedIsReady
@@ -130,11 +130,13 @@ export function VoiceSpeechModelSection({
             variant="outline"
             size="sm"
             disabled={!voiceSettings.enabled}
-            className="shrink-0 gap-1.5"
+            className="max-w-56 shrink-0"
           >
-            {selectedModel && selectedIsReady
-              ? selectedModel.label
-              : translate('auto.components.settings.VoicePane.fbe5990716', 'Select Model')}
+            <span className="truncate">
+              {selectedModel && selectedIsReady
+                ? selectedModel.label
+                : translate('auto.components.settings.VoicePane.fbe5990716', 'Select Model')}
+            </span>
             <ChevronDown className="size-3 opacity-50" />
           </Button>
         </DropdownMenuTrigger>

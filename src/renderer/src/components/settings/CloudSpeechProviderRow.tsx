@@ -66,8 +66,9 @@ export function CloudSpeechProviderRow({
 
   return (
     <div className="space-y-2 py-3">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 space-y-0.5">
+      {/* Why: wraps the actions under the text instead of squeezing it on narrow windows. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="min-w-48 flex-1 space-y-0.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">{provider.label}</span>
             {configured ? (
