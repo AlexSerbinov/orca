@@ -60,6 +60,23 @@ describe('verifyCloudSpeechApiKey', () => {
     })
   })
 
+  it('accepts an ElevenLabs key that is valid but lacks the models_read scope', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      respond(401, {
+        detail: {
+          status: 'missing_permissions',
+          message:
+            'The API key you used is missing the permission models_read to execute this operation.'
+        }
+      })
+    )
+
+    await expect(verifyCloudSpeechApiKey('elevenlabs', 'sk_scoped', fetchMock)).resolves.toEqual({
+      ok: true,
+      message: null
+    })
+  })
+
   it('reports network failures without throwing', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error('getaddrinfo ENOTFOUND'))
 

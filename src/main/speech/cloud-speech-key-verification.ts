@@ -83,6 +83,11 @@ export async function verifyCloudSpeechApiKey(
     return { ok: true, message: null }
   }
   const detail = await readProviderErrorMessage(response)
+  // Why: ElevenLabs authenticates the key before checking scopes, so a speech-to-text-only key
+  // that lacks models_read is valid for dictation; only a missing-permission reply proves that.
+  if (providerId === 'elevenlabs' && /missing the permission|missing_permissions/i.test(detail)) {
+    return { ok: true, message: null }
+  }
   if (isRejectedKeyStatus(providerId, response.status)) {
     // Why: 403 often means billing or permissions on a valid key, so it is worded apart from 401.
     const verdict = response.status === 403 ? 'denied access for' : 'rejected'
