@@ -1485,7 +1485,6 @@
           "9abb9be3bc": "Set Up",
           "dd72ed437a": "Choose which task providers appear in the Tasks page and sidebar.",
           "e1578cd4bc": "Workflows",
-          "eb1176a14e": "Local speech-to-text dictation with on-device models.",
           "mobile_group": "Mobile"
         },
         "SettingsFormControls": {
@@ -2669,8 +2668,7 @@
         "f6300deb8b": "New Browser Tab"
       },
       "useSettingsNavigationMetadata": {
-        "5235c215ca": "Choose which task providers appear in the Tasks page and sidebar.",
-        "8ac3de82f5": "Local speech-to-text dictation with on-device models."
+        "5235c215ca": "Choose which task providers appear in the Tasks page and sidebar."
       }
     },
     "lib": {
