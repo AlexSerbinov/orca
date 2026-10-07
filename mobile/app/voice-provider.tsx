@@ -5,13 +5,14 @@ import { useVoiceSettingsOperations } from '../src/settings/use-voice-settings-o
 export default function NativeVoiceProviderRoute() {
   const router = useRouter()
   const { providerId, hostId } = useLocalSearchParams<{ providerId?: string; hostId?: string }>()
-  const { operations, focused } = useVoiceSettingsOperations(
+  const { operations, focused, unpaired } = useVoiceSettingsOperations(
     typeof hostId === 'string' ? hostId : undefined
   )
   return (
     <VoiceProviderScreen
       operations={operations}
       focused={focused}
+      unpaired={unpaired}
       providerId={typeof providerId === 'string' ? providerId : ''}
       onBack={() => router.back()}
     />

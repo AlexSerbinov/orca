@@ -9,6 +9,7 @@ import { voiceSettingsStyles as base } from './voice-settings-styles'
 import { voiceCabinetStyles as cabinet } from './voice-cabinet-styles'
 import { voiceProviderStyles as styles } from './voice-provider-styles'
 import type { VoiceSettingsOperations } from './voice-settings-operations'
+import { VOICE_HOST_UNPAIRED_MESSAGE } from './voice-settings-host-selection'
 import { useVoiceProviderController } from './use-voice-provider-controller'
 import { VoiceProviderKeySection } from './voice-provider-key-section'
 import { SpeechProviderKeyDrawer } from './speech-provider-key-drawer'
@@ -21,11 +22,19 @@ import {
 type Props = {
   operations: VoiceSettingsOperations | null
   focused: boolean
+  /** The session's desktop was unpaired; show that instead of another desktop's providers. */
+  unpaired?: boolean
   providerId: string
   onBack: () => void
 }
 
-export default function VoiceProviderScreen({ operations, focused, providerId, onBack }: Props) {
+export default function VoiceProviderScreen({
+  operations,
+  focused,
+  unpaired = false,
+  providerId,
+  onBack
+}: Props) {
   const insets = useSafeAreaInsets()
   const controller = useVoiceProviderController(operations, focused)
   const { state, loading, error, busyAction } = controller
@@ -47,9 +56,13 @@ export default function VoiceProviderScreen({ operations, focused, providerId, o
         <Text style={base.heading}>Voice</Text>
       </View>
 
-      {!state && !operations && focused ? (
+      {unpaired || (!state && !operations && focused) ? (
         <View style={[base.section, base.sectionTopGap]}>
-          <Text style={base.emptyText}>Connect to a desktop to manage speech providers.</Text>
+          <Text style={base.emptyText}>
+            {unpaired
+              ? VOICE_HOST_UNPAIRED_MESSAGE
+              : 'Connect to a desktop to manage speech providers.'}
+          </Text>
         </View>
       ) : !state && (loading || !operations || !error) ? (
         <View style={base.loading}>

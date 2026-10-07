@@ -6,6 +6,7 @@ import { colors, spacing } from '../theme/mobile-theme'
 import { voiceSettingsStyles as base } from './voice-settings-styles'
 import { voiceCabinetStyles as cabinet } from './voice-cabinet-styles'
 import type { VoiceSettingsOperations } from './voice-settings-operations'
+import { VOICE_HOST_UNPAIRED_MESSAGE } from './voice-settings-host-selection'
 import { useVoiceProviderController } from './use-voice-provider-controller'
 import { SpeechProviderRow } from './speech-provider-row'
 import {
@@ -16,6 +17,8 @@ import {
 type Props = {
   operations: VoiceSettingsOperations | null
   focused: boolean
+  /** The session's desktop was unpaired; show that instead of another desktop's providers. */
+  unpaired?: boolean
   onBack: () => void
   onOpenProvider: (providerId: string) => void
 }
@@ -24,6 +27,7 @@ type Props = {
 export default function VoiceCloudProvidersScreen({
   operations,
   focused,
+  unpaired = false,
   onBack,
   onOpenProvider
 }: Props) {
@@ -46,9 +50,13 @@ export default function VoiceCloudProvidersScreen({
         <Text style={base.heading}>Cloud providers</Text>
       </View>
 
-      {!state && !operations && focused ? (
+      {unpaired || (!state && !operations && focused) ? (
         <View style={[base.section, base.sectionTopGap]}>
-          <Text style={base.emptyText}>Connect to a desktop to manage speech providers.</Text>
+          <Text style={base.emptyText}>
+            {unpaired
+              ? VOICE_HOST_UNPAIRED_MESSAGE
+              : 'Connect to a desktop to manage speech providers.'}
+          </Text>
         </View>
       ) : !state && (loading || !operations || !error) ? (
         <View style={base.loading}>

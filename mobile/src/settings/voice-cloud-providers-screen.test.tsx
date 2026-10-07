@@ -60,4 +60,21 @@ describe('VoiceCloudProvidersScreen', () => {
     })
     expect(onOpenProvider).toHaveBeenCalledWith('deepgram')
   })
+
+  it('says the session desktop is no longer paired instead of loading another desktop', async () => {
+    await act(async () => {
+      renderer = create(
+        createElement(VoiceCloudProvidersScreen, {
+          operations: null,
+          focused: true,
+          unpaired: true,
+          onBack: vi.fn(),
+          onOpenProvider: vi.fn()
+        })
+      )
+    })
+    const json = JSON.stringify(renderer.toJSON())
+    expect(json).toContain('This desktop is no longer paired.')
+    expect(json).not.toContain('Connect to a desktop')
+  })
 })

@@ -6,11 +6,12 @@ export default function NativeVoiceSettingsRoute() {
   const router = useRouter()
   const params = useLocalSearchParams<{ hostId?: string }>()
   const hostId = typeof params.hostId === 'string' ? params.hostId : undefined
-  const { operations, focused } = useVoiceSettingsOperations(hostId)
+  const { operations, focused, unpaired } = useVoiceSettingsOperations(hostId)
   return (
     <VoiceSettingsScreen
       operations={operations}
       focused={focused}
+      unpaired={unpaired}
       onBack={() => router.back()}
       onOpenProvider={(providerId) =>
         router.push({

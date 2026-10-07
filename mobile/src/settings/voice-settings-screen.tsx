@@ -7,6 +7,7 @@ import { colors, spacing } from '../theme/mobile-theme'
 import { BottomDrawer } from '../components/BottomDrawer'
 import { VoiceModelList } from '../components/VoiceModelList'
 import { useVoiceSettingsController } from './use-voice-settings-controller'
+import { VOICE_HOST_UNPAIRED_MESSAGE } from './voice-settings-host-selection'
 import { VoiceDictationSection } from './voice-dictation-section'
 import { VoiceCabinetSections } from './voice-cabinet-sections'
 import { SpeechModelPickerDrawer } from './speech-model-picker-drawer'
@@ -21,12 +22,15 @@ import {
 export default function VoiceSettingsScreen({
   operations,
   focused,
+  unpaired = false,
   onBack,
   onOpenProvider,
   onOpenCloudProviders
 }: {
   operations: VoiceSettingsOperations | null
   focused: boolean
+  /** The session's desktop was unpaired; show that instead of another desktop's settings. */
+  unpaired?: boolean
   onBack: () => void
   /** Opens the provider screen; absent where there is no router (tests). */
   onOpenProvider?: (providerId: string) => void
@@ -60,9 +64,13 @@ export default function VoiceSettingsScreen({
         <Text style={styles.heading}>Voice</Text>
       </View>
 
-      {!hasState && !operations && focused ? (
+      {unpaired || (!hasState && !operations && focused) ? (
         <View style={[styles.section, styles.sectionTopGap]}>
-          <Text style={styles.emptyText}>Connect to a desktop to manage voice settings.</Text>
+          <Text style={styles.emptyText}>
+            {unpaired
+              ? VOICE_HOST_UNPAIRED_MESSAGE
+              : 'Connect to a desktop to manage voice settings.'}
+          </Text>
         </View>
       ) : !hasState && (loading || !operations || !error) ? (
         <View style={styles.loading}>
