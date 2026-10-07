@@ -210,6 +210,21 @@ it('leaves a machine whose resume is running out of Select all', async () => {
   expect(button('Resuming…').disabled).toBe(true)
 })
 
+// With every machine mid-resume there is nothing to choose; Select all shows the run instead.
+it('shows the run in Select all while every machine is resuming', async () => {
+  await stage(
+    { sessions: [] },
+    { studio: { sessions: SERVER_ROWS }, build: { sessions: [row('b1', 'own')] } }
+  )
+  await open(null)
+  await act(async () => button('Resume 2 chats').click())
+  await open(null)
+  const selectAll = namedBox('Select all chats')
+  expect(selectAll.hasAttribute('disabled')).toBe(true)
+  expect(selectAll.getAttribute('aria-checked')).toBe('mixed')
+  expect(selectAllCount()).toBe('2 of 4 selected')
+})
+
 // The machine row names the server; a chip saying the same on every workspace under it would only
 // repeat it, so a paired server's workspaces carry none.
 it('names a paired server once, on its machine row, not again on each workspace', async () => {

@@ -108,7 +108,9 @@ it.each([
   [
     'its own desktop window',
     { ...STRUCTURED_CLIENT, clientId: 'desktop-renderer', caller: DESKTOP_RPC_CALLER }
-  ]
+  ],
+  // The transport's caller identity decides, never the client id it declares.
+  ['its desktop window under any client id', { ...STRUCTURED_CLIENT, caller: DESKTOP_RPC_CALLER }]
 ])("counts the host's own user, as %s, as the owner of what the host made", async (_, client) => {
   const response = await call('agentSession.restartResumable', {}, client, RUNTIME)
   expect(origins(response)).toMatchObject({
@@ -119,11 +121,14 @@ it.each([
   })
 })
 
-it('leaves the origin out for a remote caller with no device identity', async () => {
+it.each([
+  ['a remote caller with no device identity', 'token-1'],
+  ['a caller that only declares the desktop window’s client id', 'desktop-renderer']
+])('leaves the origin out for %s', async (_, clientId) => {
   const response = await call(
     'agentSession.restartResumable',
     {},
-    { ...STRUCTURED_CLIENT, clientId: 'token-1' },
+    { ...STRUCTURED_CLIENT, clientId },
     RUNTIME
   )
   expect(origins(response)).toEqual({

@@ -177,6 +177,10 @@ it('disables Select all and the workspace checkbox while a resume runs', async (
   for (const box of boxes) {
     expect(box.hasAttribute('disabled')).toBe(true)
   }
+  // Select all shows the run, as the rows under it do.
+  const selectAll = namedBox('Select all chats')
+  expect(selectAll.getAttribute('aria-checked')).toBe('true')
+  expect(selectAll.closest('label')?.textContent).toContain('2 of 2 selected')
   await act(async () => continued.resolve({ sessions: [], failed: [], resumed: [], continued: [] }))
 })
 

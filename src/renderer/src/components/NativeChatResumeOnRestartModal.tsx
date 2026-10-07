@@ -162,16 +162,20 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
   )
   const dismissesNothing = dismissals.every((entry) => entry.ids.length === 0)
   const chosenCount = chosen.reduce((total, entry) => total + entry.ids.length, 0)
-  // One Select all across machines, over every chat a tick can name on a machine not mid-resume.
+  // One Select all across machines, over every chat a tick can name on a machine not mid-resume;
+  // with every machine mid-resume it shows the run, as the rows below do, and stays disabled.
   const allSelection = useMemo(() => {
-    const keys = chosen.flatMap(({ machine }) =>
+    const counted = allBusy
+      ? machines.map((machine) => ({ machine, ids: resuming.get(machine.machine) ?? [] }))
+      : chosen
+    const keys = counted.flatMap(({ machine }) =>
       selectableResumeRows(machine).map((sessionId) => resumeRowKey(machine.identity, sessionId))
     )
     const ticked = new Set(
-      chosen.flatMap(({ machine, ids }) => ids.map((id) => resumeRowKey(machine.identity, id)))
+      counted.flatMap(({ machine, ids }) => ids.map((id) => resumeRowKey(machine.identity, id)))
     )
     return { keys, state: resumeSelectionState(keys, ticked) }
-  }, [chosen])
+  }, [allBusy, chosen, machines, resuming])
 
   const toggle = useCallback((identity: string, sessionId: string, checked: boolean) => {
     setOverrides((current) => new Map(current).set(resumeRowKey(identity, sessionId), checked))
