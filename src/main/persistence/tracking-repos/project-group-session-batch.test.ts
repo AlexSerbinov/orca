@@ -37,12 +37,15 @@ function session(owners: string[]): WorkspaceSessionState {
   for (const id of owners) {
     const owner = folderWorkspaceKey(id)
     result.tabsByWorktree[owner] = [
-      createMinimalPersistedTerminalTab({
-        worktreeId: owner,
-        tabId: id,
-        ptyId: `pty-${id}`,
-        existingTabCount: 0
-      })
+      {
+        ...createMinimalPersistedTerminalTab({
+          worktreeId: owner,
+          tabId: id,
+          ptyId: `pty-${id}`,
+          existingTabCount: 0
+        }),
+        createdAt: 0
+      }
     ]
     result.terminalLayoutsByTabId[id] = {
       root: { type: 'leaf', leafId: `leaf-${id}` },
