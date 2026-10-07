@@ -82,12 +82,12 @@ export async function verifyCloudSpeechApiKey(
   if (response.ok) {
     return { ok: true, message: null }
   }
-  const detail = await readProviderErrorMessage(response)
   // Why: ElevenLabs authenticates the key before checking scopes, so a speech-to-text-only key
-  // that lacks models_read is valid for dictation; only a missing-permission reply proves that.
-  if (providerId === 'elevenlabs' && /missing the permission|missing_permissions/i.test(detail)) {
+  // that lacks only models_read is valid for dictation; any other missing scope is not.
+  if (providerId === 'elevenlabs' && (await isOnlyMissingModelsRead(response))) {
     return { ok: true, message: null }
   }
+  const detail = await readProviderErrorMessage(response)
   if (isRejectedKeyStatus(providerId, response.status)) {
     // Why: 403 often means billing or permissions on a valid key, so it is worded apart from 401.
     const verdict = response.status === 403 ? 'denied access for' : 'rejected'
@@ -100,4 +100,31 @@ export async function verifyCloudSpeechApiKey(
     ok: false,
     message: `${label} returned an error (${response.status}). ${detail}`.trim()
   }
+}
+
+async function isOnlyMissingModelsRead(response: Response): Promise<boolean> {
+  if (response.status !== 401 && response.status !== 403) {
+    return false
+  }
+  // Why: clone so the error detail can still be read from the original body.
+  const body: unknown = await response
+    .clone()
+    .json()
+    .catch(() => null)
+  const detail =
+    body &&
+    typeof body === 'object' &&
+    'detail' in body &&
+    body.detail &&
+    typeof body.detail === 'object'
+      ? body.detail
+      : null
+  if (!detail || !('status' in detail) || detail.status !== 'missing_permissions') {
+    return false
+  }
+  return (
+    'message' in detail &&
+    typeof detail.message === 'string' &&
+    /\bmodels_read\b/.test(detail.message)
+  )
 }
