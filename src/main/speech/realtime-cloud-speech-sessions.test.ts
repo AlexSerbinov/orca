@@ -235,6 +235,58 @@ describe('ElevenLabs realtime session', () => {
   )
 })
 
+describe('realtime transcript frame validation', () => {
+  it.each([
+    { message_type: 'committed_transcript', text: null },
+    { message_type: 'committed_transcript_with_timestamps' },
+    { message_type: 'partial_transcript', text: 42 }
+  ])('fails on a malformed ElevenLabs frame %o and keeps the partial', async (frame) => {
+    const { session, sink, socket } = start('elevenlabs-scribe-v2-realtime')
+    socket.open()
+    socket.receive({ message_type: 'session_started' })
+    session.feedAudio(SPEECH, 16_000)
+    socket.receive({ message_type: 'partial_transcript', text: 'still here' })
+
+    socket.receive(frame)
+
+    expect(sink).toHaveBeenLastCalledWith({
+      type: 'error',
+      error: 'ElevenLabs returned an invalid realtime response.'
+    })
+    await expect(session.finish()).resolves.toBe('still here')
+  })
+
+  it.each([
+    { type: 'Results', is_final: true, channel: {} },
+    { type: 'Results', is_final: true, channel: { alternatives: [] } },
+    { type: 'Results', is_final: true, channel: { alternatives: [{ transcript: null }] } },
+    { type: 'Results', is_final: 'yes', channel: { alternatives: [{ transcript: 'x' }] } }
+  ])('fails on a malformed Deepgram Results frame %o and keeps the interim', async (frame) => {
+    const { session, sink, socket } = start('deepgram-nova-3')
+    socket.open()
+    session.feedAudio(SPEECH, 16_000)
+    socket.receive(results('interim words', false))
+
+    socket.receive(frame)
+
+    expect(sink).toHaveBeenLastCalledWith({
+      type: 'error',
+      error: 'Deepgram returned an invalid realtime response.'
+    })
+    await expect(session.finish()).resolves.toBe('interim words')
+  })
+
+  it('ignores Deepgram metadata frames', () => {
+    const { sink, socket } = start('deepgram-nova-3')
+    socket.open()
+
+    socket.receive({ type: 'Metadata', request_id: 'r-1' })
+    socket.receive({ type: 'SpeechStarted' })
+
+    expect(sink).not.toHaveBeenCalled()
+  })
+})
+
 describe('Deepgram realtime session', () => {
   it('uses Token auth, multilingual by default, and flushes with CloseStream', async () => {
     const { session, sink, socket } = start('deepgram-nova-3')

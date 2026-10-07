@@ -1,4 +1,5 @@
 import type WebSocket from 'ws'
+import { z } from 'zod'
 import { RealtimeCloudSpeechSession } from './realtime-cloud-speech-session'
 import { openProviderWebSocket } from './cloud-speech-websocket'
 import {
@@ -24,6 +25,8 @@ const ERROR_MESSAGE_TYPES = new Set([
   'queue_overflow',
   'insufficient_audio_activity'
 ])
+
+const TranscriptFrameSchema = z.object({ text: z.string() })
 
 /** ElevenLabs Scribe realtime with manual commit: partials replace, commits append. */
 export class ElevenLabsRealtimeSession extends RealtimeCloudSpeechSession {
@@ -65,23 +68,33 @@ export class ElevenLabsRealtimeSession extends RealtimeCloudSpeechSession {
       )
       return
     }
-    const text = typeof message.text === 'string' ? message.text.trim() : ''
-    if (type === 'partial_transcript') {
+    const isPartial = type === 'partial_transcript'
+    const isCommitted =
+      type === 'committed_transcript' || type === 'committed_transcript_with_timestamps'
+    if (!isPartial && !isCommitted) {
+      return
+    }
+    // Why: a malformed commit would otherwise count as a flush and drop the in-progress text.
+    const frame = TranscriptFrameSchema.safeParse(message)
+    if (!frame.success) {
+      this.fail(`${this.label} returned an invalid realtime response.`)
+      return
+    }
+    const text = frame.data.text.trim()
+    if (isPartial) {
       this.partialText = text
       this.publishPartial()
       return
     }
-    if (type === 'committed_transcript' || type === 'committed_transcript_with_timestamps') {
-      if (type === 'committed_transcript_with_timestamps' && this.committedTextSeen(text)) {
-        return
-      }
-      if (text) {
-        this.committed.push(text)
-      }
-      this.partialText = ''
-      this.publishPartial()
-      this.markFinished()
+    if (type === 'committed_transcript_with_timestamps' && this.committedTextSeen(text)) {
+      return
     }
+    if (text) {
+      this.committed.push(text)
+    }
+    this.partialText = ''
+    this.publishPartial()
+    this.markFinished()
   }
 
   protected sendAudio(pcm: Buffer): void {

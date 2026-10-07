@@ -1,4 +1,5 @@
 import type WebSocket from 'ws'
+import { z } from 'zod'
 import { RealtimeCloudSpeechSession } from './realtime-cloud-speech-session'
 import { openProviderWebSocket } from './cloud-speech-websocket'
 import {
@@ -9,17 +10,12 @@ import {
 export const DEEPGRAM_REALTIME_URL = 'wss://api.deepgram.com/v1/listen'
 const KEEPALIVE_INTERVAL_MS = 5_000
 
-function readTranscript(message: Record<string, unknown>): string {
-  const channel = message.channel
-  if (!channel || typeof channel !== 'object' || !('alternatives' in channel)) {
-    return ''
-  }
-  const first: unknown = Array.isArray(channel.alternatives) ? channel.alternatives[0] : null
-  if (!first || typeof first !== 'object' || !('transcript' in first)) {
-    return ''
-  }
-  return typeof first.transcript === 'string' ? first.transcript.trim() : ''
-}
+const ResultsFrameSchema = z.object({
+  is_final: z.boolean(),
+  channel: z.object({
+    alternatives: z.array(z.object({ transcript: z.string() })).min(1)
+  })
+})
 
 // Why: live errors arrive as {type:'Error', description, code}; older ones as err_msg/error.
 function readError(message: Record<string, unknown>): string | null {
@@ -77,8 +73,14 @@ export class DeepgramRealtimeSession extends RealtimeCloudSpeechSession {
     if (message.type !== 'Results') {
       return
     }
-    const text = readTranscript(message)
-    if (message.is_final === true) {
+    // Why: a malformed Results frame would otherwise clear the interim text.
+    const frame = ResultsFrameSchema.safeParse(message)
+    if (!frame.success) {
+      this.fail(`${this.label} returned an invalid realtime response.`)
+      return
+    }
+    const text = frame.data.channel.alternatives[0].transcript.trim()
+    if (frame.data.is_final) {
       if (text) {
         this.committed.push(text)
       }
