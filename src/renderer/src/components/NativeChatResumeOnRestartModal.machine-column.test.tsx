@@ -8,6 +8,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useAppStore } from '../store'
 import { getDefaultSettings } from '../../../shared/constants'
 import { getHostContextLabel } from '../../../shared/worktree/host-context-labels'
+import { getHostDisplayLabelOverrides } from '../../../shared/host-setting-overrides'
+import { buildSidebarHostOptions } from './sidebar/sidebar-host-options'
 import { NativeChatResumeOnRestartModal } from './NativeChatResumeOnRestartModal'
 import { TooltipProvider } from './ui/tooltip'
 import type { ResumeCandidate, ResumeFailure } from './native-chat-resume-on-restart-grouping'
@@ -226,16 +228,34 @@ it('names each machine as the sidebar does, a rename included, and an SSH host o
     settings: {
       ...getDefaultSettings(''),
       experimentalStructuredNativeChat: false,
-      hostSettingOverrides: { 'runtime:studio': { displayLabel: 'Studio' } }
+      hostSettingOverrides: {
+        local: { displayLabel: 'Desk' },
+        'runtime:studio': { displayLabel: 'Studio' }
+      }
     },
     sshTargetLabels: new Map([['devbox-1', 'devbox']])
   })
   const onSsh = { ...row('l2', 'own'), executionHostId: 'ssh:devbox-1' as const }
   await stage({ sessions: [row('l1', 'own'), onSsh] }, { studio: { sessions: SERVER_ROWS } })
   await open('environment:studio')
+  // The labels the sidebar's own host sections are built from.
+  const state = useAppStore.getState()
+  const sidebar = new Map(
+    buildSidebarHostOptions({
+      repos: state.repos,
+      sshTargetLabels: state.sshTargetLabels,
+      sshConnectionStates: state.sshConnectionStates,
+      settings: state.settings,
+      runtimeEnvironments: state.runtimeEnvironments,
+      runtimeStatusByEnvironmentId: state.runtimeStatusByEnvironmentId,
+      hostLabelOverrides: getHostDisplayLabelOverrides(state.settings)
+    }).map((host) => [host.id, host.label])
+  )
+  expect([sidebar.get('local'), sidebar.get('runtime:studio')]).toEqual(['Desk', 'Studio'])
+  expect(machineToggle('Desk')).toBeTruthy()
   expect(machineToggle('Studio')).toBeTruthy()
-  await act(async () => machineRow(LOCAL).click())
+  await act(async () => machineRow('Desk').click())
   expect(rowOf(namedBox('Select all chats in workspace-l2')).textContent).toContain('devbox')
-  expect(rowOf(namedBox('Select all chats in workspace-l1')).textContent).not.toContain(LOCAL)
+  expect(rowOf(namedBox('Select all chats in workspace-l1')).textContent).not.toContain('Desk')
   expect(rowOf(namedBox('Select all chats in workspace-s1')).textContent).not.toContain('Studio')
 })
