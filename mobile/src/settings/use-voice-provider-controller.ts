@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { VoiceSettingsOperations } from './voice-settings-operations'
 import { useDictationSetupPoller } from '../dictation/use-dictation-setup-poller'
 import { hasSpeechModelInFlight } from '../dictation/speech-provider-presentation'
@@ -8,6 +8,7 @@ import type {
   MobileSpeechProvidersState
 } from '../dictation/speech-provider-reply-schema'
 import type { SpeechModelBusy } from './speech-model-picker-drawer'
+import { useVoiceRequestFence } from './use-voice-request-fence'
 
 const POLL_INTERVAL_MS = 1500
 
@@ -31,18 +32,21 @@ export function useVoiceProviderController(
   const [testResult, setTestResult] = useState<MobileSpeechProviderKeyTest | null>(null)
   const [keyDrawerOpen, setKeyDrawerOpen] = useState(false)
   const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false)
-  const requestEpoch = useRef(0)
   const providerOps = operations?.providers ?? null
+  const fence = useVoiceRequestFence(operations)
+  const endKeyAction = useCallback((action: ProviderKeyAction) => {
+    setKeyAction((prev) => (prev === action ? null : prev))
+  }, [])
 
   const refresh = useCallback(async (): Promise<boolean | undefined> => {
     if (!providerOps) {
       return false
     }
-    const epoch = requestEpoch.current
+    const ticket = fence.peek()
     setLoading(true)
     try {
       const next = await providerOps.list()
-      if (epoch !== requestEpoch.current) {
+      if (!fence.isLatest(ticket)) {
         return undefined
       }
       if (!next) {
@@ -53,12 +57,16 @@ export function useVoiceProviderController(
       setError(null)
       return hasSpeechModelInFlight(next)
     } catch (err) {
-      setError(errorText(err, 'Failed to load speech providers'))
+      if (fence.isLatest(ticket)) {
+        setError(errorText(err, 'Failed to load speech providers'))
+      }
       return undefined
     } finally {
-      setLoading(false)
+      if (fence.isSameHost(ticket)) {
+        setLoading(false)
+      }
     }
-  }, [providerOps])
+  }, [fence, providerOps])
 
   const refreshNow = useDictationSetupPoller({
     visible: focused && providerOps !== null,
@@ -72,21 +80,27 @@ export function useVoiceProviderController(
       if (!providerOps) {
         return
       }
-      requestEpoch.current += 1
+      const ticket = fence.begin()
       setKeyAction('saving')
       setKeyError(null)
       try {
-        setState(await providerOps.saveKey(providerId, apiKey))
+        const next = await providerOps.saveKey(providerId, apiKey)
+        if (!fence.isLatest(ticket)) {
+          return
+        }
+        setState(next)
         setKeyDrawerOpen(false)
         // Why: the host verified the key before saving, so the connection is known good.
         setTestResult({ ok: true, message: null })
       } catch (err) {
-        setKeyError(errorText(err, 'Could not save the API key'))
+        if (fence.isSameHost(ticket)) {
+          setKeyError(errorText(err, 'Could not save the API key'))
+        }
       } finally {
-        setKeyAction(null)
+        endKeyAction('saving')
       }
     },
-    [providerOps]
+    [endKeyAction, fence, providerOps]
   )
 
   const testKey = useCallback(
@@ -94,17 +108,23 @@ export function useVoiceProviderController(
       if (!providerOps) {
         return
       }
+      // Why: a save or remove after this test started makes its verdict about a key that is gone.
+      const ticket = fence.peek()
       setKeyAction('testing')
       setTestResult(null)
+      let result: MobileSpeechProviderKeyTest
       try {
-        setTestResult(await providerOps.testKey(providerId))
+        result = await providerOps.testKey(providerId)
       } catch (err) {
-        setTestResult({ ok: false, message: errorText(err, 'Could not test the API key') })
+        result = { ok: false, message: errorText(err, 'Could not test the API key') }
       } finally {
-        setKeyAction(null)
+        endKeyAction('testing')
+      }
+      if (fence.isLatest(ticket)) {
+        setTestResult(result)
       }
     },
-    [providerOps]
+    [endKeyAction, fence, providerOps]
   )
 
   const removeKey = useCallback(
@@ -112,36 +132,43 @@ export function useVoiceProviderController(
       if (!providerOps) {
         return
       }
-      requestEpoch.current += 1
+      const ticket = fence.begin()
       setKeyAction('removing')
       setError(null)
       setTestResult(null)
       try {
-        setState(await providerOps.clearKey(providerId))
+        const next = await providerOps.clearKey(providerId)
+        if (fence.isLatest(ticket)) {
+          setState(next)
+        }
       } catch (err) {
-        setError(errorText(err, 'Could not remove the API key'))
+        if (fence.isSameHost(ticket)) {
+          setError(errorText(err, 'Could not remove the API key'))
+        }
       } finally {
-        setKeyAction(null)
+        endKeyAction('removing')
       }
     },
-    [providerOps]
+    [endKeyAction, fence, providerOps]
   )
 
   const runModelAction = useCallback(
     async (busy: SpeechModelBusy, action: () => Promise<unknown>, fallback: string) => {
-      requestEpoch.current += 1
+      const ticket = fence.begin()
       setBusyAction(busy)
       setError(null)
       try {
         await action()
         await refreshNow()
       } catch (err) {
-        setError(errorText(err, fallback))
+        if (fence.isSameHost(ticket)) {
+          setError(errorText(err, fallback))
+        }
       } finally {
-        setBusyAction(null)
+        setBusyAction((prev) => (prev === busy ? null : prev))
       }
     },
-    [refreshNow]
+    [fence, refreshNow]
   )
 
   const selectModel = useCallback(

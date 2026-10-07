@@ -5,6 +5,7 @@ import { isModelInFlight, type MobileSpeechSetup } from '../dictation/mobile-dic
 import { hasSpeechModelInFlight } from '../dictation/speech-provider-presentation'
 import type { MobileSpeechProvidersState } from '../dictation/speech-provider-reply-schema'
 import type { SpeechModelBusy } from './speech-model-picker-drawer'
+import { useVoiceRequestFence } from './use-voice-request-fence'
 
 const POLL_INTERVAL_MS = 1500
 
@@ -45,7 +46,7 @@ export function useVoiceSettingsController(
   const [busyAction, setBusyAction] = useState<SpeechModelBusy | null>(null)
   const [modelDrawerOpen, setModelDrawerOpen] = useState(false)
   const [languageDrawerOpen, setLanguageDrawerOpen] = useState(false)
-  const requestEpoch = useRef(0)
+  const fence = useVoiceRequestFence(operations)
   // Why: null = not probed yet; false sticks so polling an old desktop doesn't re-probe each tick.
   const cabinetSupported = useRef<boolean | null>(null)
 
@@ -59,16 +60,14 @@ export function useVoiceSettingsController(
     if (!operations) {
       return false
     }
-    const epoch = requestEpoch.current
-    // Own the spinner from the read that clears it, so a retry after a failed load shows
-    // the spinner again instead of the stale error card. Reads are serialised by
-    // DictationSetupPollController, so no in-flight read can clear another's flag.
+    const ticket = fence.peek()
+    // Why: owning the spinner shows it again on retry; the poller serialises reads per desktop.
     setLoading(true)
     try {
       const providerOps = operations.providers
       if (providerOps && cabinetSupported.current !== false) {
         const next = await providerOps.list()
-        if (epoch !== requestEpoch.current) {
+        if (!fence.isLatest(ticket)) {
           return undefined
         }
         if (next) {
@@ -81,19 +80,23 @@ export function useVoiceSettingsController(
         setCabinet(null)
       }
       const next = await operations.load()
-      if (epoch !== requestEpoch.current) {
+      if (!fence.isLatest(ticket)) {
         return undefined
       }
       setSetup(next)
       setError(null)
       return next.models.some(isModelInFlight)
     } catch (err) {
-      setError(errorText(err, 'Failed to load voice settings'))
+      if (fence.isLatest(ticket)) {
+        setError(errorText(err, 'Failed to load voice settings'))
+      }
       return undefined
     } finally {
-      setLoading(false)
+      if (fence.isSameHost(ticket)) {
+        setLoading(false)
+      }
     }
-  }, [operations])
+  }, [fence, operations])
 
   const polling = cabinet
     ? hasSpeechModelInFlight(cabinet)
@@ -115,7 +118,7 @@ export function useVoiceSettingsController(
       if (!operations) {
         return
       }
-      requestEpoch.current += 1
+      const ticket = fence.begin()
       setError(null)
       // Optimistic flip so the control responds instantly; reconcile below.
       const { enabled, dictationMode } = params
@@ -126,13 +129,18 @@ export function useVoiceSettingsController(
       setSetup((prev) => (prev ? { ...prev, ...flip } : prev))
       setCabinet((prev) => (prev ? { ...prev, ...flip } : prev))
       try {
-        applySetup(await operations.configure(params))
+        const next = await operations.configure(params)
+        if (fence.isLatest(ticket)) {
+          applySetup(next)
+        }
       } catch (err) {
-        setError(errorText(err, 'Could not update'))
-        void refreshSetup()
+        if (fence.isSameHost(ticket)) {
+          setError(errorText(err, 'Could not update'))
+          void refreshSetup()
+        }
       }
     },
-    [applySetup, operations, refreshSetup]
+    [applySetup, fence, operations, refreshSetup]
   )
 
   const selectModel = useCallback(
@@ -140,19 +148,25 @@ export function useVoiceSettingsController(
       if (!operations) {
         return
       }
-      requestEpoch.current += 1
-      setBusyAction({ modelId, type: 'select' })
+      const ticket = fence.begin()
+      const busy: SpeechModelBusy = { modelId, type: 'select' }
+      setBusyAction(busy)
       setError(null)
       try {
-        applySetup(await operations.configure({ enabled: true, modelId }))
-        setModelDrawerOpen(false)
+        const next = await operations.configure({ enabled: true, modelId })
+        if (fence.isLatest(ticket)) {
+          applySetup(next)
+          setModelDrawerOpen(false)
+        }
       } catch (err) {
-        setError(errorText(err, 'Could not select model'))
+        if (fence.isSameHost(ticket)) {
+          setError(errorText(err, 'Could not select model'))
+        }
       } finally {
-        setBusyAction(null)
+        setBusyAction((prev) => (prev === busy ? null : prev))
       }
     },
-    [applySetup, operations]
+    [applySetup, fence, operations]
   )
 
   const downloadModel = useCallback(
@@ -160,19 +174,22 @@ export function useVoiceSettingsController(
       if (!operations) {
         return
       }
-      requestEpoch.current += 1
-      setBusyAction({ modelId, type: 'download' })
+      const ticket = fence.begin()
+      const busy: SpeechModelBusy = { modelId, type: 'download' }
+      setBusyAction(busy)
       setError(null)
       try {
         await operations.download(modelId)
         await refreshSetup()
       } catch (err) {
-        setError(errorText(err, 'Download failed'))
+        if (fence.isSameHost(ticket)) {
+          setError(errorText(err, 'Download failed'))
+        }
       } finally {
-        setBusyAction(null)
+        setBusyAction((prev) => (prev === busy ? null : prev))
       }
     },
-    [operations, refreshSetup]
+    [fence, operations, refreshSetup]
   )
 
   const deleteModel = useCallback(
@@ -180,22 +197,29 @@ export function useVoiceSettingsController(
       if (!operations) {
         return
       }
-      const deletedSelectedModel = setup?.selectedModelId === modelId
-      requestEpoch.current += 1
-      setBusyAction({ modelId, type: 'delete' })
+      // Why: the cabinet is authoritative on a newer desktop; the legacy setup on an older one.
+      const deletedSelectedModel = (cabinet?.selectedModelId ?? setup?.selectedModelId) === modelId
+      const ticket = fence.begin()
+      const busy: SpeechModelBusy = { modelId, type: 'delete' }
+      setBusyAction(busy)
       setError(null)
       try {
-        applySetup(await operations.delete(modelId))
-        if (deletedSelectedModel) {
-          setModelDrawerOpen(false)
+        const next = await operations.delete(modelId)
+        if (fence.isLatest(ticket)) {
+          applySetup(next)
+          if (deletedSelectedModel) {
+            setModelDrawerOpen(false)
+          }
         }
       } catch (err) {
-        setError(errorText(err, 'Delete failed'))
+        if (fence.isSameHost(ticket)) {
+          setError(errorText(err, 'Delete failed'))
+        }
       } finally {
-        setBusyAction(null)
+        setBusyAction((prev) => (prev === busy ? null : prev))
       }
     },
-    [applySetup, operations, setup?.selectedModelId]
+    [applySetup, cabinet?.selectedModelId, fence, operations, setup?.selectedModelId]
   )
 
   const setLanguage = useCallback(
@@ -204,18 +228,23 @@ export function useVoiceSettingsController(
       if (!providerOps) {
         return
       }
-      requestEpoch.current += 1
+      const ticket = fence.begin()
       setLanguageDrawerOpen(false)
       setError(null)
       setCabinet((prev) => (prev ? { ...prev, language } : prev))
       try {
-        setCabinet(await providerOps.setLanguage(language))
+        const next = await providerOps.setLanguage(language)
+        if (fence.isLatest(ticket)) {
+          setCabinet(next)
+        }
       } catch (err) {
-        setError(errorText(err, 'Could not change the language'))
-        void refreshSetup()
+        if (fence.isSameHost(ticket)) {
+          setError(errorText(err, 'Could not change the language'))
+          void refreshSetup()
+        }
       }
     },
-    [operations, refreshSetup]
+    [fence, operations, refreshSetup]
   )
 
   return {

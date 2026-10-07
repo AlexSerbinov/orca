@@ -18,6 +18,7 @@ import { fetchSpeechProviders } from '../dictation/mobile-speech-providers'
 import { hasSpeechModelInFlight } from '../dictation/speech-provider-presentation'
 import type { MobileSpeechProvidersState } from '../dictation/speech-provider-reply-schema'
 import { SpeechModelGroupedList } from '../settings/speech-model-grouped-list'
+import { useVoiceRequestFence } from '../settings/use-voice-request-fence'
 
 const POLL_INTERVAL_MS = 1500
 
@@ -50,18 +51,27 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
   const [cabinetClient, setCabinetClient] = useState(client)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  // Why: replies still in flight from the previous desktop must not repaint this one.
+  const fence = useVoiceRequestFence(client)
   if (client !== cabinetClient) {
     setCabinetClient(client)
     setCabinet(null)
+    setSetup(null)
+    setBusy(null)
+    setError(null)
   }
   const refresh = useCallback(async (): Promise<boolean | undefined> => {
     if (!client) {
       return false
     }
+    const ticket = fence.peek()
     try {
       if (cabinetSupport.current.get(client) !== false) {
         const providers = await fetchSpeechProviders(client)
         cabinetSupport.current.set(client, providers !== null)
+        if (!fence.isLatest(ticket)) {
+          return undefined
+        }
         if (providers) {
           setCabinet(providers)
           setError(null)
@@ -69,14 +79,19 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
         }
       }
       const next = await fetchDictationSetup(client)
+      if (!fence.isLatest(ticket)) {
+        return undefined
+      }
       setSetup(next)
       setError(null)
       return next.models.some(isModelInFlight)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load')
+      if (fence.isLatest(ticket)) {
+        setError(err instanceof Error ? err.message : 'Failed to load')
+      }
       return undefined
     }
-  }, [client])
+  }, [client, fence])
 
   const polling = cabinet
     ? hasSpeechModelInFlight(cabinet)
@@ -99,19 +114,24 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
       if (!client) {
         return
       }
+      const ticket = fence.begin()
       setBusy(model.id)
       setError(null)
       try {
         await downloadDictationModel(client, model.id)
         await refreshSetup()
       } catch (err) {
-        triggerError()
-        setError(err instanceof Error ? err.message : 'Download failed')
+        if (fence.isSameHost(ticket)) {
+          triggerError()
+          setError(err instanceof Error ? err.message : 'Download failed')
+        }
       } finally {
-        setBusy(null)
+        if (fence.isSameHost(ticket)) {
+          setBusy((prev) => (prev === model.id ? null : prev))
+        }
       }
     },
-    [client, refreshSetup]
+    [client, fence, refreshSetup]
   )
 
   const handleUseModel = useCallback(
@@ -119,22 +139,30 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
       if (!client) {
         return
       }
+      const ticket = fence.begin()
       setBusy(model.id)
       setError(null)
       try {
         const next = await setDictationConfig(client, { enabled: true, modelId: model.id })
+        if (!fence.isLatest(ticket)) {
+          return
+        }
         setSetup(next)
         setCabinet((prev) => (prev ? { ...prev, enabled: true, selectedModelId: model.id } : prev))
         triggerSuccess()
         onReady?.()
       } catch (err) {
-        triggerError()
-        setError(err instanceof Error ? err.message : 'Could not select model')
+        if (fence.isSameHost(ticket)) {
+          triggerError()
+          setError(err instanceof Error ? err.message : 'Could not select model')
+        }
       } finally {
-        setBusy(null)
+        if (fence.isSameHost(ticket)) {
+          setBusy((prev) => (prev === model.id ? null : prev))
+        }
       }
     },
-    [client, onReady]
+    [client, fence, onReady]
   )
 
   const handleToggleEnabled = useCallback(
@@ -142,15 +170,22 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
       if (!client) {
         return
       }
+      const ticket = fence.begin()
       setError(null)
       try {
-        setSetup(await setDictationConfig(client, { enabled }))
+        const next = await setDictationConfig(client, { enabled })
+        if (!fence.isLatest(ticket)) {
+          return
+        }
+        setSetup(next)
         setCabinet((prev) => (prev ? { ...prev, enabled } : prev))
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not update')
+        if (fence.isSameHost(ticket)) {
+          setError(err instanceof Error ? err.message : 'Could not update')
+        }
       }
     },
-    [client]
+    [client, fence]
   )
 
   return (
