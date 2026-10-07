@@ -188,6 +188,26 @@ describe('ElevenLabs realtime session', () => {
       error: 'ElevenLabs auth error: Invalid API key'
     })
   })
+
+  it.each(['invalid_request', 'queue_overflow', 'insufficient_audio_activity'])(
+    'fails on %s during finish and keeps committed text',
+    async (messageType) => {
+      const { session, sink, socket } = start('elevenlabs-scribe-v2-realtime')
+      socket.open()
+      socket.receive({ message_type: 'session_started' })
+      session.feedAudio(SPEECH, 16_000)
+      socket.receive({ message_type: 'committed_transcript', text: 'Kept.' })
+
+      const finished = session.finish()
+      socket.receive({ message_type: messageType, error: 'went wrong' })
+
+      await expect(finished).resolves.toBe('Kept.')
+      expect(sink).toHaveBeenCalledWith({
+        type: 'error',
+        error: `ElevenLabs ${messageType.replace(/_/g, ' ')}: went wrong`
+      })
+    }
+  )
 })
 
 describe('Deepgram realtime session', () => {
@@ -209,6 +229,32 @@ describe('Deepgram realtime session', () => {
     socket.emit('close', 1000, Buffer.from(''))
 
     await expect(finished).resolves.toBe('first part second part')
+  })
+
+  it('fails on a typed Error frame mid-stream', () => {
+    const { sink, socket } = start('deepgram-nova-3')
+    socket.open()
+
+    socket.receive({ type: 'Error', description: 'Bad audio', code: 'DATA-0000' })
+
+    expect(sink).toHaveBeenCalledWith({
+      type: 'error',
+      error: 'Deepgram error: Bad audio (DATA-0000)'
+    })
+    expect(socket.closedWith).toBe(1000)
+  })
+
+  it('reports a typed Error frame after finish began and keeps committed text', async () => {
+    const { session, sink, socket } = start('deepgram-nova-3')
+    socket.open()
+    session.feedAudio(SPEECH, 16_000)
+    socket.receive(results('kept words', true))
+
+    const finished = session.finish()
+    socket.receive({ type: 'Error', description: 'Flush failed' })
+
+    await expect(finished).resolves.toBe('kept words')
+    expect(sink).toHaveBeenCalledWith({ type: 'error', error: 'Deepgram error: Flush failed' })
   })
 
   it('maps a rejected handshake to a key error', () => {

@@ -19,7 +19,10 @@ const ERROR_MESSAGE_TYPES = new Set([
   'chunk_size_exceeded',
   'transcriber_error',
   'commit_throttled',
-  'unaccepted_terms'
+  'unaccepted_terms',
+  'invalid_request',
+  'queue_overflow',
+  'insufficient_audio_activity'
 ])
 
 /** ElevenLabs Scribe realtime with manual commit: partials replace, commits append. */

@@ -21,6 +21,20 @@ function readTranscript(message: Record<string, unknown>): string {
   return typeof first.transcript === 'string' ? first.transcript.trim() : ''
 }
 
+// Why: live errors arrive as {type:'Error', description, code}; older ones as err_msg/error.
+function readError(message: Record<string, unknown>): string | null {
+  const { err_msg: errMsg, error, type, description, message: text, code } = message
+  if (typeof errMsg === 'string' || typeof error === 'string') {
+    return String(errMsg ?? error)
+  }
+  if (type !== 'Error') {
+    return null
+  }
+  const detail = [description, text].find((value) => typeof value === 'string' && value)
+  const codeLabel = typeof code === 'string' && code ? ` (${code})` : ''
+  return `${typeof detail === 'string' ? detail : 'stream failed'}${codeLabel}`
+}
+
 /** Deepgram live: interim results replace, is_final results append; CloseStream flushes. */
 export class DeepgramRealtimeSession extends RealtimeCloudSpeechSession {
   private readonly committed: string[] = []
@@ -55,8 +69,9 @@ export class DeepgramRealtimeSession extends RealtimeCloudSpeechSession {
   }
 
   protected handleMessage(message: Record<string, unknown>): void {
-    if (typeof message.err_msg === 'string' || typeof message.error === 'string') {
-      this.fail(`Deepgram error: ${String(message.err_msg ?? message.error)}`)
+    const error = readError(message)
+    if (error !== null) {
+      this.fail(`Deepgram error: ${error}`)
       return
     }
     if (message.type !== 'Results') {
