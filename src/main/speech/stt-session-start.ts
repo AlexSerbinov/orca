@@ -1,8 +1,8 @@
 import { Worker } from 'node:worker_threads'
 import { getCatalogModel } from './model-catalog'
-import { OpenAiTranscriptionSession } from './openai-transcription-client'
-import { readOpenAiSpeechApiKey } from './openai-api-key-store'
-import type { SttEventSink } from './stt-service'
+import { createCloudSpeechSession } from './cloud-speech-session-factory'
+import { readCloudSpeechApiKey } from './cloud-speech-key-store'
+import type { SttEventSink, SttStartOptions } from './stt-service'
 import type { SttSessionState } from './stt-session-state'
 import {
   clearSttIdleTeardownTimer,
@@ -24,7 +24,8 @@ export async function startSttDictation(
   modelId: string,
   sink: SttEventSink,
   hotwordsFilePath?: string,
-  owner = 'desktop'
+  owner = 'desktop',
+  options: SttStartOptions = {}
 ): Promise<void> {
   if (state.starting) {
     if (state.startingOwner !== owner) {
@@ -32,7 +33,13 @@ export async function startSttDictation(
     }
     return
   }
-  if ((state.worker || state.cloudSession) && state.activeOwner && state.activeOwner !== owner) {
+  // Why: a cloud stop clears cloudSession before its upload settles; `stopping` keeps that finish
+  // from delivering its final text into another owner's session.
+  if (
+    (state.worker || state.cloudSession || state.stopping) &&
+    state.activeOwner &&
+    state.activeOwner !== owner
+  ) {
     throw new Error('dictation_already_active')
   }
   state.starting = true
@@ -41,7 +48,7 @@ export async function startSttDictation(
   clearSttIdleTeardownTimer(state)
 
   try {
-    await startSttSession(state, modelId, sink, hotwordsFilePath, owner)
+    await startSttSession(state, modelId, sink, hotwordsFilePath, owner, options)
     if (state.canceledOwners.delete(owner)) {
       await stopSttDictation(state, owner, { cancelStarting: false })
       throw new Error('dictation_canceled')
@@ -60,14 +67,16 @@ async function startSttSession(
   modelId: string,
   sink: SttEventSink,
   hotwordsFilePath: string | undefined,
-  owner: string
+  owner: string,
+  options: SttStartOptions
 ): Promise<void> {
   const manifest = getCatalogModel(modelId)
   if (!manifest) {
     throw new Error(`Unknown model: ${modelId}`)
   }
 
-  if (manifest.provider === 'openai') {
+  const provider = manifest.provider
+  if (provider !== 'local') {
     if (state.worker) {
       const existingWorker = state.worker
       await stopSttDictation(state, owner, { cancelStarting: false })
@@ -77,10 +86,23 @@ async function startSttSession(
     if (modelState.status !== 'ready') {
       throw new Error(`Model not ready: ${modelState.status}`)
     }
-    state.cloudSession = new OpenAiTranscriptionSession(modelId, readOpenAiSpeechApiKey)
+    // Why: a same-owner restart replaces the session; close any open provider socket first.
+    state.cloudSession?.cancel()
+    state.cloudSession = null
+    // Why: realtime sessions can report a key/socket failure synchronously while being created.
+    state.eventSink = sink
+    state.cloudSession = createCloudSpeechSession(manifest, {
+      readApiKey: () => readCloudSpeechApiKey(provider),
+      language: options.language,
+      // Why: late provider events after stop must not reach the next dictation's sink.
+      sink: (event) => {
+        if (state.eventSink === sink) {
+          sink(event)
+        }
+      }
+    })
     state.activeModelId = modelId
     state.activeHotwordsFilePath = undefined
-    state.eventSink = sink
     sink({ type: 'ready' })
     return
   }

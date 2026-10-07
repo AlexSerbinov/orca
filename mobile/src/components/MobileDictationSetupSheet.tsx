@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
-import { Check, Download } from 'lucide-react-native'
+import { useRouter } from 'expo-router'
+import { Check, ChevronRight, Download } from 'lucide-react-native'
 import { BottomDrawer } from './BottomDrawer'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import type { RpcClient } from '../transport/rpc-client'
@@ -11,15 +12,20 @@ import {
   fetchDictationSetup,
   isModelInFlight,
   setDictationConfig,
-  type MobileSpeechModel,
   type MobileSpeechSetup
 } from '../dictation/mobile-dictation-setup'
+import { fetchSpeechProviders } from '../dictation/mobile-speech-providers'
+import { hasSpeechModelInFlight } from '../dictation/speech-provider-presentation'
+import type { MobileSpeechProvidersState } from '../dictation/speech-provider-reply-schema'
+import { SpeechModelGroupedList } from '../settings/speech-model-grouped-list'
 
 const POLL_INTERVAL_MS = 1500
 
 type Props = {
   visible: boolean
   client: RpcClient | null
+  // Why: provider/settings routes must configure this session's desktop, not the first connected one.
+  hostId?: string
   onClose: () => void
   // Called after the user reaches a ready+enabled state, so the caller can retry.
   onReady?: () => void
@@ -34,15 +40,34 @@ function formatSize(bytes: number | null | undefined): string {
 
 // Lets the user enable dictation and download a speech model on the paired
 // desktop, from the phone. Polls while a download is in flight.
-export function MobileDictationSetupSheet({ visible, client, onClose, onReady }: Props) {
+export function MobileDictationSetupSheet({ visible, client, hostId, onClose, onReady }: Props) {
+  const router = useRouter()
   const [setup, setSetup] = useState<MobileSpeechSetup | null>(null)
+  // Why: desktops with the provider cabinet list every cloud model; older ones keep the legacy rows.
+  const [cabinet, setCabinet] = useState<MobileSpeechProvidersState | null>(null)
+  // Why: keyed by client so a re-pair probes the new desktop instead of trusting the old answer.
+  const cabinetSupport = useRef(new WeakMap<object, boolean>())
+  const [cabinetClient, setCabinetClient] = useState(client)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  if (client !== cabinetClient) {
+    setCabinetClient(client)
+    setCabinet(null)
+  }
   const refresh = useCallback(async (): Promise<boolean | undefined> => {
     if (!client) {
       return false
     }
     try {
+      if (cabinetSupport.current.get(client) !== false) {
+        const providers = await fetchSpeechProviders(client)
+        cabinetSupport.current.set(client, providers !== null)
+        if (providers) {
+          setCabinet(providers)
+          setError(null)
+          return hasSpeechModelInFlight(providers)
+        }
+      }
       const next = await fetchDictationSetup(client)
       setSetup(next)
       setError(null)
@@ -53,7 +78,9 @@ export function MobileDictationSetupSheet({ visible, client, onClose, onReady }:
     }
   }, [client])
 
-  const polling = setup?.models.some(isModelInFlight) ?? false
+  const polling = cabinet
+    ? hasSpeechModelInFlight(cabinet)
+    : (setup?.models.some(isModelInFlight) ?? false)
   const refreshSetup = useDictationSetupPoller({
     visible: visible && client !== null,
     polling,
@@ -68,7 +95,7 @@ export function MobileDictationSetupSheet({ visible, client, onClose, onReady }:
   }, [visible])
 
   const handleDownload = useCallback(
-    async (model: MobileSpeechModel) => {
+    async (model: { id: string }) => {
       if (!client) {
         return
       }
@@ -88,7 +115,7 @@ export function MobileDictationSetupSheet({ visible, client, onClose, onReady }:
   )
 
   const handleUseModel = useCallback(
-    async (model: MobileSpeechModel) => {
+    async (model: { id: string }) => {
       if (!client) {
         return
       }
@@ -97,6 +124,7 @@ export function MobileDictationSetupSheet({ visible, client, onClose, onReady }:
       try {
         const next = await setDictationConfig(client, { enabled: true, modelId: model.id })
         setSetup(next)
+        setCabinet((prev) => (prev ? { ...prev, enabled: true, selectedModelId: model.id } : prev))
         triggerSuccess()
         onReady?.()
       } catch (err) {
@@ -117,6 +145,7 @@ export function MobileDictationSetupSheet({ visible, client, onClose, onReady }:
       setError(null)
       try {
         setSetup(await setDictationConfig(client, { enabled }))
+        setCabinet((prev) => (prev ? { ...prev, enabled } : prev))
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not update')
       }
@@ -131,10 +160,46 @@ export function MobileDictationSetupSheet({ visible, client, onClose, onReady }:
       <View>
         <Text style={styles.heading}>Set up voice dictation</Text>
         <Text style={styles.subtitle}>
-          Download a model and enable dictation on your desktop — all from here.
+          {cabinet
+            ? 'Pick an on-device model or connect a cloud provider — all from here.'
+            : 'Download a model and enable dictation on your desktop — all from here.'}
         </Text>
 
-        {setup === null ? (
+        {cabinet ? (
+          <>
+            <View style={styles.enableRow}>
+              <Text style={styles.enableLabel}>Dictation enabled</Text>
+              <Switch
+                value={cabinet.enabled === true}
+                onValueChange={(v) => void handleToggleEnabled(v)}
+              />
+            </View>
+            <SpeechModelGroupedList
+              state={cabinet}
+              busy={busy ? { modelId: busy, type: 'select' } : null}
+              onSelect={(model) => void handleUseModel(model)}
+              onDownload={(model) => void handleDownload(model)}
+              onOpenProvider={(provider) => {
+                onClose()
+                router.push({
+                  pathname: '/voice-provider',
+                  params: hostId ? { providerId: provider.id, hostId } : { providerId: provider.id }
+                })
+              }}
+            />
+            <Pressable
+              style={({ pressed }) => [styles.manageLink, pressed && styles.actionPressed]}
+              accessibilityRole="button"
+              onPress={() => {
+                onClose()
+                router.push({ pathname: '/voice-settings', params: hostId ? { hostId } : {} })
+              }}
+            >
+              <Text style={styles.manageLinkText}>Manage providers and API keys</Text>
+              <ChevronRight size={16} color={colors.textMuted} />
+            </Pressable>
+          </>
+        ) : setup === null ? (
           <View style={styles.loading}>
             <ActivityIndicator color={colors.textSecondary} />
           </View>
@@ -274,5 +339,13 @@ const styles = StyleSheet.create({
   actionText: { color: colors.textSecondary, fontSize: typography.metaSize, fontWeight: '600' },
   selectedTag: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   selectedText: { color: colors.statusGreen, fontSize: typography.metaSize, fontWeight: '600' },
-  error: { color: colors.statusRed, fontSize: typography.metaSize, marginTop: spacing.md }
+  error: { color: colors.statusRed, fontSize: typography.metaSize, marginTop: spacing.md },
+  manageLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm
+  },
+  manageLinkText: { color: colors.textSecondary, fontSize: typography.bodySize, fontWeight: '500' }
 })

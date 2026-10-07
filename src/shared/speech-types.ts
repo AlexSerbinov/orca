@@ -1,3 +1,5 @@
+import type { CloudSpeechProviderId } from './cloud-speech-providers'
+
 export type SpeechModelType =
   | 'transducer'
   | 'paraformer'
@@ -5,7 +7,8 @@ export type SpeechModelType =
   | 'senseVoice'
   | 'nemo-ctc'
   | 'openai'
-export type SpeechModelProvider = 'local' | 'openai'
+  | 'cloud'
+export type SpeechModelProvider = 'local' | CloudSpeechProviderId
 
 export type ModelingUnit = 'bpe' | 'cjkchar' | 'cjkchar+bpe'
 
@@ -28,6 +31,8 @@ export type SpeechModelManifest = {
   files?: string[]
   sampleRate: number
   streaming: boolean
+  /** Cloud model that transcribes while audio streams in and emits live partials. */
+  realtime?: boolean
   modelingUnit?: ModelingUnit
   recommended?: boolean
 }
@@ -75,6 +80,8 @@ export type VoiceSettings = {
   terminalConfirmBeforeInsert: boolean
   userModels: UserModelConfig[]
   openAiApiKeyConfigured: boolean
+  /** Spoken-language hint for cloud models: 'auto' or an ISO 639-1 code. */
+  transcriptionLanguage: string
   /** null = system default input device */
   microphoneDeviceId: string | null
   /** Cached label for display when the preferred device is unplugged */

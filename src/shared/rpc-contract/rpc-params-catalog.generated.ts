@@ -477,7 +477,10 @@ import {
   DictationHandle,
   DictationSetup,
   DictationStart,
-  SpeechModelAction
+  SpeechModelAction,
+  SpeechProviderAction,
+  SpeechProviderConfigure,
+  SpeechProviderKeySave
 } from './speech-params'
 import { SshTarget } from './ssh-params'
 import {
@@ -1163,6 +1166,11 @@ export const RPC_PARAMS_BY_METHOD = {
   'speech.models.delete': SpeechModelAction,
   'speech.models.download': SpeechModelAction,
   'speech.models.list': null,
+  'speech.providers.clearKey': SpeechProviderAction,
+  'speech.providers.configure': SpeechProviderConfigure,
+  'speech.providers.list': null,
+  'speech.providers.saveKey': SpeechProviderKeySave,
+  'speech.providers.testKey': SpeechProviderAction,
   'ssh.connect': SshTarget,
   'ssh.getState': SshTarget,
   'ssh.listRemovedTargetLabels': null,

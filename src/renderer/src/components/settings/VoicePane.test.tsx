@@ -7,6 +7,8 @@ import type { DeveloperPermissionRequestResult } from '../../../../shared/develo
 import type { SpeechModelManifest } from '../../../../shared/speech-types'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { getDefaultVoiceSettings } from '../../../../shared/constants'
+import type { CloudSpeechKeyStatus } from '../../../../shared/cloud-speech-providers'
+import { TooltipProvider } from '../ui/tooltip'
 import { handleVoiceDictationToggle, VoicePane } from './VoicePane'
 
 const { useAppStoreMock, useShortcutLabelMock } = vi.hoisted(() => ({
@@ -20,11 +22,13 @@ vi.mock('@/hooks/useShortcutLabel', () => ({
   useShortcutLabel: useShortcutLabelMock
 }))
 
+const { toastSuccessMock } = vi.hoisted(() => ({ toastSuccessMock: vi.fn() }))
+
 vi.mock('sonner', () => ({
   toast: {
     error: vi.fn(),
     message: vi.fn(),
-    success: vi.fn()
+    success: toastSuccessMock
   }
 }))
 
@@ -34,6 +38,18 @@ const deniedMicrophoneResult: DeveloperPermissionRequestResult = {
   openedSystemSettings: false
 }
 const EMPTY_SPEECH_CATALOG: SpeechModelManifest[] = []
+
+function keyStatus(
+  providerId: CloudSpeechKeyStatus['providerId'],
+  configured: boolean
+): CloudSpeechKeyStatus {
+  return {
+    providerId,
+    configured,
+    hint: configured ? '…a1b2' : null,
+    protection: configured ? 'sealed' : null
+  }
+}
 
 function makeSettings(voiceEnabled?: boolean): GlobalSettings {
   if (voiceEnabled === undefined) {
@@ -55,11 +71,19 @@ function installWindowApi(
       developerPermissions: {
         request: vi.fn(requestMicrophonePermission)
       },
+      shell: {
+        openUrl: vi.fn()
+      },
       speech: {
         getCatalog: vi.fn(async () => EMPTY_SPEECH_CATALOG),
-        getOpenAiApiKeyStatus: vi.fn(async () => ({ configured: false })),
-        saveOpenAiApiKey: vi.fn(async () => ({ configured: true })),
-        clearOpenAiApiKey: vi.fn(async () => ({ configured: false })),
+        getCloudKeyStatuses: vi.fn(async (): Promise<CloudSpeechKeyStatus[]> => []),
+        saveCloudKey: vi.fn(async (providerId: CloudSpeechKeyStatus['providerId']) =>
+          keyStatus(providerId, true)
+        ),
+        clearCloudKey: vi.fn(async (providerId: CloudSpeechKeyStatus['providerId']) =>
+          keyStatus(providerId, false)
+        ),
+        testCloudKey: vi.fn(async () => ({ ok: true, message: null })),
         onDownloadProgress: vi.fn(() => () => {}),
         downloadModel: vi.fn()
       }
@@ -96,7 +120,12 @@ async function renderVoicePane(args: {
   const root = createRoot(container)
   await act(async () => {
     root.render(
-      <VoicePane settings={makeSettings(args.voiceEnabled)} updateSettings={args.updateSettings} />
+      <TooltipProvider>
+        <VoicePane
+          settings={makeSettings(args.voiceEnabled)}
+          updateSettings={args.updateSettings}
+        />
+      </TooltipProvider>
     )
   })
 
@@ -137,13 +166,44 @@ describe('VoicePane', () => {
 
     for (let i = 0; i < 4; i++) {
       await act(async () => {
-        root.render(<VoicePane settings={{} as GlobalSettings} updateSettings={updateSettings} />)
+        root.render(
+          <TooltipProvider>
+            <VoicePane settings={makeSettings()} updateSettings={updateSettings} />
+          </TooltipProvider>
+        )
       })
     }
     act(() => root.unmount())
 
     expect(window.api.speech.getCatalog).toHaveBeenCalledTimes(1)
+    expect(window.api.speech.getCloudKeyStatuses).toHaveBeenCalledTimes(1)
     expect(refreshModelStates).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-reads key and model state when main re-publishes voice settings', async () => {
+    const updateSettings = vi.fn()
+    const { root, refreshModelStates } = await renderVoicePane({
+      voiceEnabled: true,
+      markFeatureTipsSeen: vi.fn(),
+      updateSettings
+    })
+    const rerender = async (settings: GlobalSettings): Promise<void> => {
+      await act(async () => {
+        root.render(
+          <TooltipProvider>
+            <VoicePane settings={settings} updateSettings={updateSettings} />
+          </TooltipProvider>
+        )
+      })
+    }
+    const published = makeSettings(true)
+    // A phone saving a key arrives as a new `voice` object from main.
+    await rerender(published)
+    await rerender(published)
+    act(() => root.unmount())
+
+    expect(window.api.speech.getCloudKeyStatuses).toHaveBeenCalledTimes(2)
+    expect(refreshModelStates).toHaveBeenCalledTimes(2)
   })
 
   it('clicking the switch marks the voice tip seen before disabling voice settings', async () => {
@@ -257,8 +317,8 @@ describe('VoicePane', () => {
   it('merges an in-flight voice write onto the newest settings, not the render-time snapshot', async () => {
     const updateSettings = vi.fn()
     let resolveClear: () => void = () => {}
-    const clearing = new Promise<{ configured: boolean }>((resolve) => {
-      resolveClear = () => resolve({ configured: false })
+    const clearing = new Promise<CloudSpeechKeyStatus>((resolve) => {
+      resolveClear = () => resolve(keyStatus('openai', false))
     })
     useAppStoreMock.mockImplementation((selector: (state: Record<string, unknown>) => unknown) =>
       selector({
@@ -270,11 +330,8 @@ describe('VoicePane', () => {
     )
     useShortcutLabelMock.mockReturnValue('Ctrl+Shift+Y')
     installWindowApi(vi.fn(async () => deniedMicrophoneResult))
-    window.api.speech.getOpenAiApiKeyStatus = vi.fn(async () => ({
-      configured: true,
-      protection: 'sealed' as const
-    }))
-    window.api.speech.clearOpenAiApiKey = vi.fn(() => clearing)
+    window.api.speech.getCloudKeyStatuses = vi.fn(async () => [keyStatus('openai', true)])
+    window.api.speech.clearCloudKey = vi.fn(() => clearing)
 
     const settingsWithKey = (enabled: boolean): GlobalSettings =>
       ({
@@ -291,14 +348,18 @@ describe('VoicePane', () => {
     document.body.appendChild(container)
     const root = createRoot(container)
     await act(async () => {
-      root.render(<VoicePane settings={settingsWithKey(true)} updateSettings={updateSettings} />)
+      root.render(
+        <TooltipProvider>
+          <VoicePane settings={settingsWithKey(true)} updateSettings={updateSettings} />
+        </TooltipProvider>
+      )
     })
 
     const disconnect = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Disconnect OpenAI API key"]'
+      'button[aria-label="Remove OpenAI API key"]'
     )
     if (!disconnect) {
-      throw new Error('Disconnect OpenAI API key button was not rendered')
+      throw new Error('Remove OpenAI API key button was not rendered')
     }
     await act(async () => {
       disconnect.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -306,7 +367,11 @@ describe('VoicePane', () => {
 
     // The user turns dictation off while the clear-key IPC is still in flight.
     await act(async () => {
-      root.render(<VoicePane settings={settingsWithKey(false)} updateSettings={updateSettings} />)
+      root.render(
+        <TooltipProvider>
+          <VoicePane settings={settingsWithKey(false)} updateSettings={updateSettings} />
+        </TooltipProvider>
+      )
     })
 
     await act(async () => {
@@ -326,4 +391,101 @@ describe('VoicePane', () => {
       }
     })
   })
+
+  it('verifies a new provider key before saving and offers an unverified save on rejection', async () => {
+    const updateSettings = vi.fn()
+    const { root } = await renderVoicePane({
+      voiceEnabled: true,
+      markFeatureTipsSeen: vi.fn(),
+      updateSettings
+    })
+    window.api.speech.saveCloudKey = vi.fn(async (providerId, _apiKey, verify) => {
+      if (verify) {
+        throw new Error(
+          "Error invoking remote method 'speech:saveCloudKey': Error: Soniox rejected this API key (401)."
+        )
+      }
+      return keyStatus(providerId, true)
+    })
+
+    await clickButton(findButton(document.body, 'Add API key'))
+    const input = document.querySelector<HTMLInputElement>('#cloud-speech-api-key')
+    if (!input) {
+      throw new Error('API key input was not rendered')
+    }
+    await typeInto(input, '  soniox-test-key  ')
+    await clickButton(findButton(document.body, 'Check and save'))
+
+    expect(window.api.speech.saveCloudKey).toHaveBeenCalledWith('soniox', 'soniox-test-key', true)
+    expect(document.body.textContent).toContain('Soniox rejected this API key (401).')
+    expect(document.querySelector('#cloud-speech-api-key')).not.toBeNull()
+
+    await clickButton(findButton(document.body, 'Save without checking'))
+
+    expect(window.api.speech.saveCloudKey).toHaveBeenLastCalledWith(
+      'soniox',
+      'soniox-test-key',
+      false
+    )
+    expect(document.querySelector('#cloud-speech-api-key')).toBeNull()
+    expect(toastSuccessMock).toHaveBeenCalledWith('Soniox API key saved')
+    expect(document.body.textContent).toContain('…a1b2')
+    root.unmount()
+  })
+
+  it('shows the provider verdict after testing a saved key', async () => {
+    useAppStoreMock.mockImplementation((selector: (state: Record<string, unknown>) => unknown) =>
+      selector({ modelStates: [], refreshModelStates: vi.fn(), markFeatureTipsSeen: vi.fn() })
+    )
+    useShortcutLabelMock.mockReturnValue('Ctrl+Shift+Y')
+    installWindowApi(vi.fn(async () => deniedMicrophoneResult))
+    window.api.speech.getCloudKeyStatuses = vi.fn(async () => [keyStatus('groq', true)])
+    window.api.speech.testCloudKey = vi.fn(async () => ({
+      ok: false,
+      message: 'Groq rejected this API key (401).'
+    }))
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(
+        <TooltipProvider>
+          <VoicePane settings={makeSettings(true)} updateSettings={vi.fn()} />
+        </TooltipProvider>
+      )
+    })
+
+    await clickButton(findButton(container, 'Test'))
+
+    expect(window.api.speech.testCloudKey).toHaveBeenCalledWith('groq')
+    expect(container.textContent).toContain('Groq rejected this API key (401).')
+    root.unmount()
+  })
 })
+
+function findButton(scope: ParentNode, label: string): HTMLButtonElement {
+  const button = [...scope.querySelectorAll<HTMLButtonElement>('button')].find(
+    (candidate) => candidate.textContent?.trim() === label
+  )
+  if (!button) {
+    throw new Error(`Button "${label}" was not rendered`)
+  }
+  return button
+}
+
+async function clickButton(button: HTMLButtonElement): Promise<void> {
+  await act(async () => {
+    button.click()
+  })
+  await act(async () => {
+    await Promise.resolve()
+  })
+}
+
+async function typeInto(input: HTMLInputElement, value: string): Promise<void> {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  await act(async () => {
+    setValue?.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}

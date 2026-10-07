@@ -5,6 +5,8 @@ type DictationStatus = {
   readonly isStarting: boolean
   readonly isRecording: boolean
   readonly isProcessing: boolean
+  /** Live transcript so far; head-ellipsized so the newest words stay visible. */
+  readonly caption?: string
 }
 
 type MobileTerminalLiveInputStatusProps = {
@@ -26,7 +28,7 @@ export function MobileTerminalLiveInputStatus({
         ? 'Starting mic'
         : 'Live input'
   const detail = dictation.isRecording
-    ? 'Tap mic to stop'
+    ? dictation.caption || 'Tap mic to stop'
     : dictation.isProcessing
       ? 'Transcribing on desktop'
       : dictation.isStarting

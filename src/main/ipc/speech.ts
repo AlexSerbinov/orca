@@ -12,6 +12,8 @@ import {
   saveOpenAiSpeechApiKey
 } from '../speech/openai-api-key-store'
 import type { Store } from '../persistence'
+import { resolveTranscriptionLanguageHint } from '../../shared/speech-transcription-languages'
+import { registerCloudSpeechKeyHandlers } from './speech-cloud-keys'
 
 export function registerSpeechHandlers(store: Store): void {
   ipcMain.handle('speech:getCatalog', () => {
@@ -21,6 +23,8 @@ export function registerSpeechHandlers(store: Store): void {
   ipcMain.handle('speech:getModelStates', async () => {
     return getSpeechModelManager(store).getModelStates()
   })
+
+  registerCloudSpeechKeyHandlers()
 
   ipcMain.handle('speech:getOpenAiApiKeyStatus', async () => {
     return { configured: hasOpenAiSpeechApiKey(), protection: getOpenAiSpeechApiKeyProtection() }
@@ -102,7 +106,7 @@ export function registerSpeechHandlers(store: Store): void {
       const cleanupOnWindowClosed = (): void => {
         windowClosed = true
         void getSpeechSttService(store)
-          .stopDictation(owner)
+          .stopDictation(owner, { discard: true })
           .finally(() => {
             if (resolvedHotwordsPath) {
               unlink(resolvedHotwordsPath).catch(() => {})
@@ -179,7 +183,12 @@ export function registerSpeechHandlers(store: Store): void {
             }
           },
           resolvedHotwordsPath,
-          owner
+          owner,
+          {
+            language: resolveTranscriptionLanguageHint(
+              store.getSettings().voice?.transcriptionLanguage
+            )
+          }
         )
         if (resolvedHotwordsPath) {
           unlink(resolvedHotwordsPath).catch(() => {})

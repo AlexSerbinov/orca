@@ -1,0 +1,91 @@
+import type { SpeechModelManifest } from '../../shared/speech-types'
+import { BatchCloudSpeechSession, type BatchTranscribe } from './batch-cloud-speech-session'
+import { getCloudSpeechApiModel } from './cloud-speech-model-catalog'
+import type { CloudSpeechSession, CloudSpeechSessionOptions } from './cloud-speech-session'
+import { DeepgramRealtimeSession } from './deepgram-realtime-session'
+import { ElevenLabsRealtimeSession } from './elevenlabs-realtime-session'
+import { createElevenLabsTranscribe } from './elevenlabs-transcription-client'
+import { createGeminiTranscribe } from './gemini-transcription-client'
+import { createMistralTranscribe } from './mistral-transcription-client'
+import {
+  GROQ_API_BASE_URL,
+  OpenAiTranscriptionSession,
+  createOpenAiCompatibleTranscribe
+} from './openai-transcription-client'
+import type { RealtimeCloudSpeechSession } from './realtime-cloud-speech-session'
+import { SonioxRealtimeSession } from './soniox-realtime-session'
+
+function createRealtimeSession(
+  manifest: SpeechModelManifest,
+  apiModel: string,
+  options: CloudSpeechSessionOptions
+): RealtimeCloudSpeechSession | null {
+  switch (manifest.provider) {
+    case 'soniox':
+      return new SonioxRealtimeSession(apiModel, options)
+    case 'elevenlabs':
+      return new ElevenLabsRealtimeSession(apiModel, options)
+    case 'deepgram':
+      return new DeepgramRealtimeSession(apiModel, options)
+    case 'gemini':
+    case 'groq':
+    case 'mistral':
+    case 'openai':
+    case 'local':
+      return null
+  }
+}
+
+function createBatchTranscribe(
+  manifest: SpeechModelManifest,
+  apiModel: string
+): BatchTranscribe | null {
+  switch (manifest.provider) {
+    case 'groq':
+      return createOpenAiCompatibleTranscribe({
+        label: 'Groq',
+        baseUrl: GROQ_API_BASE_URL,
+        apiModel
+      })
+    case 'elevenlabs':
+      return createElevenLabsTranscribe(apiModel)
+    case 'gemini':
+      return createGeminiTranscribe(apiModel)
+    case 'mistral':
+      return createMistralTranscribe(apiModel)
+    case 'soniox':
+    case 'deepgram':
+    case 'openai':
+    case 'local':
+      return null
+  }
+}
+
+/** Builds the provider session for a cloud catalog model; realtime sockets open immediately. */
+export function createCloudSpeechSession(
+  manifest: SpeechModelManifest,
+  options: CloudSpeechSessionOptions
+): CloudSpeechSession {
+  if (manifest.provider === 'openai') {
+    return new OpenAiTranscriptionSession(manifest.id, options.readApiKey, {
+      language: options.language
+    })
+  }
+  const apiModel = getCloudSpeechApiModel(manifest.id)
+  if (!apiModel || manifest.provider === 'local') {
+    throw new Error(`Unknown cloud speech model: ${manifest.id}`)
+  }
+  if (manifest.realtime) {
+    const session = createRealtimeSession(manifest, apiModel, options)
+    if (!session) {
+      throw new Error(`No real-time client for ${manifest.provider}`)
+    }
+    session.start()
+    return session
+  }
+  const transcribe = createBatchTranscribe(manifest, apiModel)
+  if (!transcribe) {
+    throw new Error(`No batch client for ${manifest.provider}`)
+  }
+  return new BatchCloudSpeechSession(transcribe, options.readApiKey, options.language)
+}

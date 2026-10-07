@@ -12,6 +12,7 @@ import {
   isCurrentMobileDictationFinish
 } from './mobile-dictation-session-state'
 import { startMobileDictationDesktopSession } from './mobile-dictation-desktop-start'
+import { useMobileDictationLiveCaption } from './mobile-dictation-live-caption'
 import {
   dictationSessionCancel,
   dictationSessionFinish
@@ -44,6 +45,10 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
   const pendingAudioBudgetRef = useRef(new MobileDictationPendingAudioBudget())
   const acceptingChunksRef = useRef(false)
   const generationRef = useRef(0)
+  const { caption, acceptCaption } = useMobileDictationLiveCaption(
+    status,
+    (id) => statusRef.current === 'recording' && activeIdRef.current === id
+  )
 
   useLayoutEffect(() => {
     // Native audio events can arrive before passive Effects flush, but refs
@@ -104,7 +109,8 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
       pendingChunks: pendingChunksRef.current,
       pendingAudioBudget: pendingAudioBudgetRef.current,
       shouldReleaseBudget: (id: string) => activeIdRef.current === id,
-      failActiveDictation
+      failActiveDictation,
+      onCaption: acceptCaption
     }
     const sub = capture.onChunk((chunk) => {
       const client = clientRef.current
@@ -122,7 +128,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
       enqueueMobileDictationAudioChunk(client, dictationId, chunk, audioChunkQueue)
     })
     return () => sub.remove()
-  }, [capture, failActiveDictation, reportError])
+  }, [acceptCaption, capture, failActiveDictation, reportError])
 
   const start = useCallback(async () => {
     const client = clientRef.current
@@ -335,6 +341,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
     isRecording: status === 'recording',
     isProcessing: status === 'processing',
     error,
+    caption,
     start,
     stop,
     cancel

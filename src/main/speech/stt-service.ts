@@ -1,7 +1,11 @@
 import type { ModelManager } from './model-manager'
 import { startSttDictation } from './stt-session-start'
 import { createSttSessionState, type SttSessionState } from './stt-session-state'
-import { prepareSttModelForDeletion, stopSttDictation } from './stt-session-stop'
+import {
+  prepareSttModelForDeletion,
+  stopSttDictation,
+  type SttStopOptions
+} from './stt-session-stop'
 
 export { IDLE_WORKER_TEARDOWN_MS, START_DICTATION_TIMEOUT_MS } from './stt-session-timeouts'
 
@@ -14,6 +18,11 @@ export type SttEvent =
 
 export type SttEventSink = (event: SttEvent) => void
 
+export type SttStartOptions = {
+  /** Cloud-only spoken-language hint (ISO 639-1); undefined lets the provider detect. */
+  language?: string
+}
+
 export class SttService {
   private readonly state: SttSessionState
 
@@ -25,9 +34,10 @@ export class SttService {
     modelId: string,
     sink: SttEventSink,
     hotwordsFilePath?: string,
-    owner = 'desktop'
+    owner = 'desktop',
+    options: SttStartOptions = {}
   ): Promise<void> {
-    return startSttDictation(this.state, modelId, sink, hotwordsFilePath, owner)
+    return startSttDictation(this.state, modelId, sink, hotwordsFilePath, owner, options)
   }
 
   feedAudio(samples: Float32Array, sampleRate: number, owner = 'desktop'): void {
@@ -52,7 +62,7 @@ export class SttService {
 
   stopDictation(
     owner = 'desktop',
-    options: { cancelStarting?: boolean } = { cancelStarting: true }
+    options: SttStopOptions = { cancelStarting: true }
   ): Promise<void> {
     return stopSttDictation(this.state, owner, options)
   }

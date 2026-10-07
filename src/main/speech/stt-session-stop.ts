@@ -5,10 +5,16 @@ import { IDLE_WORKER_TEARDOWN_MS } from './stt-session-timeouts'
 
 const STOP_DICTATION_TIMEOUT_MS = 60_000
 
+export type SttStopOptions = {
+  cancelStarting?: boolean
+  /** Drop a cloud session without uploading or finalizing; local workers stop as usual. */
+  discard?: boolean
+}
+
 export async function stopSttDictation(
   state: SttSessionState,
   owner = 'desktop',
-  options: { cancelStarting?: boolean } = { cancelStarting: true }
+  options: SttStopOptions = { cancelStarting: true }
 ): Promise<void> {
   if (options.cancelStarting !== false && state.startingOwner === owner) {
     state.canceledOwners.add(owner)
@@ -27,6 +33,10 @@ export async function stopSttDictation(
       const session = state.cloudSession
       state.cloudSession = null
       try {
+        if (options.discard) {
+          session.cancel()
+          return
+        }
         const text = await session.finish()
         if (text) {
           state.eventSink?.({ type: 'final', text })

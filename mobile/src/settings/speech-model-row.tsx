@@ -1,0 +1,195 @@
+import { ActivityIndicator, Pressable, Text, View } from 'react-native'
+import { AudioLines, Check, Download, KeyRound, Trash2 } from 'lucide-react-native'
+import { colors } from '../theme/mobile-theme'
+import { voiceCabinetStyles as styles } from './voice-cabinet-styles'
+import {
+  formatSpeechModelSize,
+  isSpeechModelInFlight,
+  isSpeechModelUsable,
+  speechModelLabel,
+  speechModelProgressText
+} from '../dictation/speech-provider-presentation'
+import type { MobileSpeechProviderModel } from '../dictation/speech-provider-reply-schema'
+
+export type SpeechModelBusyAction = 'select' | 'download' | 'delete'
+
+type Props = {
+  model: MobileSpeechProviderModel
+  local: boolean
+  selected: boolean
+  busy: SpeechModelBusyAction | null
+  /** Another row's action is in flight; this row's buttons wait for it. */
+  locked: boolean
+  /** 'picker' selects on row tap and marks the choice; 'manage' shows Use / In use and Delete. */
+  variant: 'picker' | 'manage'
+  onSelect: () => void
+  onDownload: () => void
+  onAddKey: () => void
+  onDelete?: () => void
+}
+
+export function SpeechModelLivePill() {
+  return (
+    <View style={styles.livePill} accessibilityLabel="Live captions">
+      <AudioLines size={10} color={colors.textSecondary} strokeWidth={2.4} />
+      <Text style={styles.livePillText}>LIVE</Text>
+    </View>
+  )
+}
+
+function modelMetaText(model: MobileSpeechProviderModel, local: boolean): string {
+  const progress = speechModelProgressText(model)
+  if (progress) {
+    return progress
+  }
+  if (model.status === 'error') {
+    return 'Download failed. Tap download to retry.'
+  }
+  const size = local ? formatSpeechModelSize(model.sizeBytes) : ''
+  return [size, model.description].filter(Boolean).join(' · ')
+}
+
+export function SpeechModelRow(props: Props) {
+  const { model, local, selected, locked, variant, onSelect } = props
+  const usable = isSpeechModelUsable(model)
+  const meta = modelMetaText(model, local)
+  const rowTappable = variant === 'picker' && usable && !selected && !locked
+  const content = (
+    <>
+      <View style={styles.modelInfo}>
+        <View style={styles.rowTitleLine}>
+          <Text style={styles.modelLabel} numberOfLines={1}>
+            {speechModelLabel(model)}
+          </Text>
+          {model.realtime ? <SpeechModelLivePill /> : null}
+          {model.recommended ? <Text style={styles.recommended}>Recommended</Text> : null}
+        </View>
+        {meta ? (
+          <Text
+            style={[styles.modelMeta, model.status === 'error' && styles.modelMetaError]}
+            numberOfLines={2}
+          >
+            {meta}
+          </Text>
+        ) : null}
+      </View>
+      <SpeechModelRowAction {...props} usable={usable} />
+    </>
+  )
+  // Why: an accessible Pressable merges its children, hiding nested Use/Delete/Add key from VoiceOver.
+  if (variant === 'manage') {
+    return (
+      <View style={styles.modelRow} testID={`speech-model-${model.id}`}>
+        {content}
+      </View>
+    )
+  }
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.modelRow,
+        !usable && styles.modelRowDimmed,
+        pressed && rowTappable && styles.actionPressed
+      ]}
+      disabled={!rowTappable}
+      onPress={onSelect}
+      // Why: unusable rows carry their own Add key / Download button, which must stay reachable.
+      accessible={usable}
+      accessibilityRole="radio"
+      aria-checked={selected}
+      testID={`speech-model-${model.id}`}
+    >
+      {content}
+    </Pressable>
+  )
+}
+
+function SpeechModelRowAction({
+  model,
+  local,
+  selected,
+  busy,
+  locked,
+  variant,
+  usable,
+  onSelect,
+  onDownload,
+  onAddKey,
+  onDelete
+}: Props & { usable: boolean }) {
+  if (busy === 'select' && variant === 'picker') {
+    return <ActivityIndicator size="small" color={colors.textSecondary} />
+  }
+  if (usable) {
+    if (variant === 'picker') {
+      return selected ? <Check size={18} color={colors.statusGreen} strokeWidth={2.4} /> : null
+    }
+    return (
+      <View style={styles.rowActions}>
+        {selected ? (
+          <View style={styles.selectedTag}>
+            <Check size={14} color={colors.statusGreen} strokeWidth={2.4} />
+            <Text style={styles.selectedText}>In use</Text>
+          </View>
+        ) : (
+          <Pressable
+            style={({ pressed }) => [styles.actionButton, pressed && styles.actionPressed]}
+            disabled={locked}
+            onPress={onSelect}
+            accessibilityLabel={'Use ' + speechModelLabel(model)}
+          >
+            {busy === 'select' ? (
+              <ActivityIndicator size="small" color={colors.textSecondary} />
+            ) : (
+              <Text style={styles.actionText}>Use</Text>
+            )}
+          </Pressable>
+        )}
+        {local && onDelete ? (
+          <Pressable
+            style={({ pressed }) => [styles.iconButton, pressed && styles.actionPressed]}
+            disabled={locked}
+            onPress={onDelete}
+            accessibilityLabel={'Delete ' + speechModelLabel(model)}
+          >
+            {busy === 'delete' ? (
+              <ActivityIndicator size="small" color={colors.statusRed} />
+            ) : (
+              <Trash2 size={17} color={colors.statusRed} strokeWidth={2.2} />
+            )}
+          </Pressable>
+        ) : null}
+      </View>
+    )
+  }
+  if (!local) {
+    return (
+      <Pressable
+        style={({ pressed }) => [styles.actionButton, pressed && styles.actionPressed]}
+        disabled={locked}
+        onPress={onAddKey}
+        accessibilityLabel={'Add API key for ' + speechModelLabel(model)}
+      >
+        <KeyRound size={13} color={colors.textSecondary} strokeWidth={2.2} />
+        <Text style={styles.actionText}>Add key</Text>
+      </Pressable>
+    )
+  }
+  if (isSpeechModelInFlight(model)) {
+    return <ActivityIndicator size="small" color={colors.textSecondary} />
+  }
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.iconButton, pressed && styles.actionPressed]}
+      disabled={locked}
+      onPress={onDownload}
+      accessibilityLabel={'Download ' + speechModelLabel(model)}
+    >
+      {busy === 'download' ? (
+        <ActivityIndicator size="small" color={colors.textSecondary} />
+      ) : (
+        <Download size={17} color={colors.textSecondary} strokeWidth={2.2} />
+      )}
+    </Pressable>
+  )
+}

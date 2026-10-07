@@ -76,10 +76,30 @@ export type MobileSpeechSetupReply = z.output<typeof dictationSetupSchema>
 export type MobileSpeechModelReply = MobileSpeechSetupReply['models'][number]
 
 /**
- * The five dictation sends whose reply body no call site reads.
+ * The chunk acknowledgement, read only for its optional live caption (RuntimeDictationChunkReply).
+ *
+ * Old hosts answer `{ received: true }` or anything else without a caption; the `.catch` keeps an
+ * unreadable acknowledgement an acknowledgement, because failing it would abort a live recording
+ * over decoration. `text` is the whole transcript so far and `revision` orders late replies.
+ */
+export const dictationChunkReplySchema = z
+  .looseObject({
+    caption: salvagedOptional(
+      'caption',
+      z.looseObject({ text: z.string(), revision: z.number().finite() })
+    )
+  })
+  .catch(() => ({ caption: undefined }))
+
+export type MobileDictationCaptionReply = NonNullable<
+  z.output<typeof dictationChunkReplySchema>['caption']
+>
+
+/**
+ * The four dictation sends whose reply body no call site reads.
  *
  * `speech.models.download` answers `{ started: true }` and the sheet polls the list instead; the
- * start, chunk and cancel replies are interpreted for their acceptance verdict alone. Declaring a
+ * start and cancel replies are interpreted for their acceptance verdict alone. Declaring a
  * member on any of them would be a requirement with no reader behind it.
  *
  * `speech.dictation.finish` is here for a different reason, and it is the one site in this domain

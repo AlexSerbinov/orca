@@ -19,6 +19,8 @@ export type UseMobileDictationResult = {
   isRecording: boolean
   isProcessing: boolean
   error: string | null
+  /** Live transcript so far while recording (realtime cloud models); empty otherwise. */
+  caption: string
   start: () => Promise<void>
   stop: () => Promise<void>
   cancel: () => Promise<void>
