@@ -26,6 +26,7 @@ import { useNativeChatResumeDialogOpening } from './native-chat-resume-dialog-op
 import { actOnResumeRow } from './native-chat-resume-failure-action'
 import { AutomaticPromptDialogScope } from '@/lib/dialog-presence'
 import { resumeOwnershipLabel } from './native-chat-resume-ownership'
+import { resumeSelectionState } from './native-chat-resume-on-restart-grouping'
 import {
   chosenResumeRows,
   dismissedRows,
@@ -42,9 +43,11 @@ import {
  * anywhere. Every string here has to say that a message is sent and that the user's own prompt is
  * not re-sent.
  *
- * Each machine is a row with a select-all box, opening onto its workspaces and chats. The user's
- * own chats start ticked; chats another device, an automation or the server itself started are
- * listed unticked with where they came from. Only this computer, alone, keeps the flat list.
+ * Each machine is a row with a select-all box, opening onto its workspaces and chats; every box,
+ * from Select all down to each chat, sits in one left column. The user's own chats start ticked;
+ * chats another device, an automation or the server itself started are listed unticked with where
+ * they came from, and Select all counts and ticks them like any other. Only this computer, alone,
+ * keeps the flat list.
  *
  * The "don't ask again" box removes the PROMPT, never a safety check — an opted-in launch or
  * reconnect calls the same RPC, which re-derives the same predicate and staggers the same way.
@@ -91,6 +94,23 @@ function resumeButtonLabel(chosenCount: number, running: boolean): string {
         'Resume {{value0}} chats',
         { value0: chosenCount }
       )
+}
+
+/** Up/Down step between the list's checkboxes; Space toggles the focused one natively. */
+function moveCheckboxFocus(event: React.KeyboardEvent<HTMLElement>): void {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+    return
+  }
+  const target = event.target
+  if (!(target instanceof HTMLElement) || target.getAttribute('role') !== 'checkbox') {
+    return
+  }
+  const boxes = [
+    ...event.currentTarget.querySelectorAll<HTMLElement>('[role="checkbox"]:not(:disabled)')
+  ]
+  const next = boxes[boxes.indexOf(target) + (event.key === 'ArrowDown' ? 1 : -1)]
+  event.preventDefault()
+  next?.focus()
 }
 
 export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
@@ -142,9 +162,28 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
   )
   const dismissesNothing = dismissals.every((entry) => entry.ids.length === 0)
   const chosenCount = chosen.reduce((total, entry) => total + entry.ids.length, 0)
+  // One Select all across machines, over every chat a tick can name on a machine not mid-resume.
+  const allSelection = useMemo(() => {
+    const keys = chosen.flatMap(({ machine }) =>
+      selectableResumeRows(machine).map((sessionId) => resumeRowKey(machine.identity, sessionId))
+    )
+    const ticked = new Set(
+      chosen.flatMap(({ machine, ids }) => ids.map((id) => resumeRowKey(machine.identity, id)))
+    )
+    return { keys, state: resumeSelectionState(keys, ticked) }
+  }, [chosen])
 
   const toggle = useCallback((identity: string, sessionId: string, checked: boolean) => {
     setOverrides((current) => new Map(current).set(resumeRowKey(identity, sessionId), checked))
+  }, [])
+  const setTicks = useCallback((keys: readonly string[], checked: boolean) => {
+    setOverrides((current) => {
+      const next = new Map(current)
+      for (const key of keys) {
+        next.set(key, checked)
+      }
+      return next
+    })
   }, [])
 
   /** Applied on whichever action the user takes, so the box means the same thing every way out. */
@@ -203,7 +242,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
       >
         {/* Height is capped, never the data: the list scrolls inside the dialog so the header and
           the primary action stay put however many chats were interrupted. */}
-        {/* Wide enough for a sidebar card's chat row to keep its name, model and age on one line. */}
+        {/* Wide enough for a nested chat row to keep its name, model and age on one line. */}
         <DialogContent
           className="grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-3xl max-h-[85vh]"
           // Keep the scrollable list out of initial focus, including while Resume is disabled.
@@ -237,9 +276,45 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
               'auto.components.NativeChatResumeOnRestartModal.listLabel',
               'Chats that would be resumed'
             )}
-            // The sidebar's own surface, so its cards read here as they do there.
+            // The sidebar's own surface, so its workspaces read here as they do there.
             className="min-h-0 overflow-y-auto scrollbar-sleek rounded-md bg-worktree-sidebar p-1.5"
+            onKeyDown={moveCheckboxFocus}
           >
+            {/* Here, not in the groups or machine rows: one Select all for every machine listed. */}
+            <label className="grid h-7.5 cursor-pointer grid-cols-[1.75rem_minmax(0,1fr)] items-center hover:bg-worktree-sidebar-accent has-[:disabled]:cursor-default">
+              <span className="flex justify-center">
+                <Checkbox
+                  checked={allSelection.state.checked}
+                  disabled={allBusy || allSelection.state.total === 0}
+                  // Ticks everything unless all already are, as a workspace's box does.
+                  onCheckedChange={() =>
+                    setTicks(
+                      allSelection.keys,
+                      allSelection.state.selectedCount < allSelection.state.total
+                    )
+                  }
+                  aria-label={translate(
+                    'auto.components.NativeChatResumeOnRestartModal.selectAll',
+                    'Select all chats'
+                  )}
+                />
+              </span>
+              <span className="flex min-w-0 items-center gap-1.5 pr-2.5">
+                <span className="min-w-0 truncate text-xs font-semibold text-muted-foreground">
+                  {translate(
+                    'auto.components.NativeChatResumeOnRestartModal.selectAllLabel',
+                    'Select all'
+                  )}
+                </span>
+                <span className="ml-auto shrink-0 pl-2 text-[11px] tabular-nums text-muted-foreground">
+                  {translate(
+                    'auto.components.NativeChatResumeOnRestartModal.selectedCount',
+                    '{{value0}} of {{value1}} selected',
+                    { value0: allSelection.state.selectedCount, value1: allSelection.state.total }
+                  )}
+                </span>
+              </span>
+            </label>
             {flat ? (
               <ResumeOnRestartGroups
                 candidates={machines[0]!.rows}
@@ -254,7 +329,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
                 originLabelFor={originLabelFor(machines[0]!)}
               />
             ) : (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col">
                 {machines.map((machine) => {
                   const ticked = tickedFor(machine)
                   const selectable = selectableResumeRows(machine)
@@ -287,13 +362,10 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
                         toggle(machine.identity, sessionId, checked)
                       }
                       onToggleAll={(checked) =>
-                        setOverrides((current) => {
-                          const next = new Map(current)
-                          for (const sessionId of selectable) {
-                            next.set(resumeRowKey(machine.identity, sessionId), checked)
-                          }
-                          return next
-                        })
+                        setTicks(
+                          selectable.map((sessionId) => resumeRowKey(machine.identity, sessionId)),
+                          checked
+                        )
                       }
                       failureFor={machine.failureFor}
                       onFailureAction={(action, sessionId) =>

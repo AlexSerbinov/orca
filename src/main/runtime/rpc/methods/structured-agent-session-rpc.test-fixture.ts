@@ -17,6 +17,7 @@ import {
   STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
 } from '../../../../shared/protocol-version'
 import type { RpcRequest, RpcResponse } from '../core'
+import type { RpcCallerIdentity } from '../rpc-caller-identity'
 import { RpcDispatcher } from '../dispatcher'
 import { STRUCTURED_AGENT_SESSION_METHODS } from './structured-agent-session'
 import { createStructuredAgentSessionLogger } from '../../../native-chat/agent-session-wire/structured-agent-session-logger'
@@ -208,6 +209,7 @@ export function hostStub(): StructuredAgentSessionHost {
     subscribeStatus: vi.fn((subscriber: StructuredAgentSessionStatusSubscriber) =>
       statusFeed().subscribe(subscriber)
     ),
+    subscribeTurnCompletions: vi.fn(() => () => undefined),
     unsubscribe: vi.fn()
   })
   // Not a call: the logger the host hands a runtime caller that reports for it.
@@ -269,6 +271,7 @@ export async function call(
     clientKind?: 'mobile' | 'runtime'
     clientCapabilities?: string[]
     pairedDeviceId?: string
+    caller?: RpcCallerIdentity
     signal?: AbortSignal
   },
   runtimeOverrides: Record<string, unknown> = {}
@@ -284,6 +287,21 @@ export async function call(
     throw new Error(`no reply for ${method}`)
   }
   return first
+}
+
+/** For a stream that opens with nothing to say: every reply it sent, possibly none. */
+export async function openStream(
+  method: string,
+  params: unknown,
+  client: Parameters<typeof call>[2]
+): Promise<RpcResponse[]> {
+  const replies: RpcResponse[] = []
+  await dispatcher().dispatchStreaming(
+    request(method, params),
+    (raw) => replies.push(JSON.parse(raw) as RpcResponse),
+    client
+  )
+  return replies
 }
 
 export const STRUCTURED_CLIENT = {

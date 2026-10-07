@@ -12,7 +12,7 @@ import type { ClientHostedBrowserRowsEvent } from '../../shared/client-hosted-br
 import { TERMINAL_FIT_RESTORE_DEADLINE_MS } from '../../shared/terminal-fit-restore-deadline'
 import { DESKTOP_RENDERER_RUNTIME_CLIENT_CAPABILITIES } from './desktop-renderer-runtime-capabilities'
 import { RpcDispatcher } from '../runtime/rpc/dispatcher'
-import { DESKTOP_RENDERER_RPC_CLIENT_ID } from '../runtime/rpc/workspace-creator-context'
+import { DESKTOP_RPC_CALLER } from '../runtime/rpc/rpc-caller-identity'
 import { ALL_RPC_METHODS } from '../runtime/rpc/methods'
 import { DesktopRuntimeSenderLifecycle } from './desktop-runtime-sender-lifecycle'
 
@@ -78,7 +78,8 @@ export function registerRuntimeHandlers(runtime: OrcaRuntimeService): void {
           params: args.params
         },
         {
-          clientId: DESKTOP_RENDERER_RPC_CLIENT_ID,
+          clientId: 'desktop-renderer',
+          caller: DESKTOP_RPC_CALLER,
           clientKind: 'runtime',
           connectionId: desktopSenders.connectionIdFor(event.sender),
           clientCapabilities: DESKTOP_RENDERER_RUNTIME_CLIENT_CAPABILITIES
@@ -120,7 +121,8 @@ export function registerRuntimeHandlers(runtime: OrcaRuntimeService): void {
         },
         {
           signal: controller.signal,
-          clientId: DESKTOP_RENDERER_RPC_CLIENT_ID,
+          clientId: 'desktop-renderer',
+          caller: DESKTOP_RPC_CALLER,
           clientKind: 'runtime',
           connectionId,
           clientCapabilities: DESKTOP_RENDERER_RUNTIME_CLIENT_CAPABILITIES

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { RestartOfferWorkspaceProvenance } from '../../../../shared/restart-offer-origin'
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { RpcResponse } from '../core'
+import { DESKTOP_RPC_CALLER } from '../rpc-caller-identity'
 import {
   call,
   hostStub,
@@ -104,7 +105,10 @@ it('says whose each offer is for the paired desktop asking, by the sidebar rule'
 
 it.each([
   ['an in-process caller', undefined],
-  ['its own desktop window', { ...STRUCTURED_CLIENT, clientId: 'desktop-renderer' }]
+  [
+    'its own desktop window',
+    { ...STRUCTURED_CLIENT, clientId: 'desktop-renderer', caller: DESKTOP_RPC_CALLER }
+  ]
 ])("counts the host's own user, as %s, as the owner of what the host made", async (_, client) => {
   const response = await call('agentSession.restartResumable', {}, client, RUNTIME)
   expect(origins(response)).toMatchObject({

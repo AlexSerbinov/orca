@@ -4,10 +4,7 @@
 
 import { restartOfferOrigin } from '../../../../shared/restart-offer-origin'
 import type { RpcContext } from '../core'
-import {
-  DESKTOP_RENDERER_RPC_CLIENT_ID,
-  resolveRpcWorkspaceCreatorProvenance
-} from '../workspace-creator-context'
+import { resolveRpcWorkspaceCreatorProvenance } from '../workspace-creator-context'
 
 /** The asking device as workspace creator records name it: null is the host's own user (its desktop
  *  window, or an in-process caller), undefined an authenticated remote caller without a device
@@ -16,7 +13,7 @@ function viewerDeviceId(ctx: RpcContext): string | null | undefined {
   if (ctx.pairedDeviceId) {
     return ctx.pairedDeviceId
   }
-  if (ctx.clientId === DESKTOP_RENDERER_RPC_CLIENT_ID) {
+  if (ctx.caller?.kind === 'desktop') {
     return null
   }
   try {

@@ -6,7 +6,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import { useAppStore } from '../store'
 import { getDefaultSettings } from '../../../shared/constants'
-import type { RestartOfferOrigin } from '../../../shared/restart-offer-origin'
 import { NativeChatResumeOnRestartModal } from './NativeChatResumeOnRestartModal'
 import { TooltipProvider } from './ui/tooltip'
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog'
@@ -22,6 +21,11 @@ import { readNativeChatRestartMachine } from './native-chat-resume-on-restart-st
 import { _resetNativeChatRestartOffer } from './native-chat-restart-offer-triggers'
 import { pairedEnvironment } from './native-chat-restart-offer-test-support'
 import { lastToastShow } from './native-chat-resume-toast.test-support'
+import {
+  machineRow,
+  machineRowFixture,
+  machineToggle
+} from './native-chat-resume-machines.test-support'
 
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/structured-agent-session-client', () => ({
@@ -35,20 +39,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 let root: Root
 let container: HTMLDivElement
 
-/** Each host says whose a chat is for this desktop; the modal's cards fall back to plain headers. */
-function row(sessionId: string, origin: RestartOfferOrigin): ResumeCandidate {
-  return {
-    sessionId,
-    workspaceId: `workspace-${sessionId}`,
-    agent: 'codex',
-    trigger: 'update',
-    latestPrompt: `Prompt ${sessionId}`,
-    recordedAt: 1_800_000_000_000,
-    executionHostId: 'local',
-    workspaceKind: 'git-worktree',
-    origin
-  }
-}
+const row = machineRowFixture
 
 let localRows = [row('l1', 'own')]
 const SERVER_ROWS = [row('s1', 'own'), row('s2', 'other-device'), row('s3', 'automation')]
@@ -88,24 +79,6 @@ async function open(focus: string | null): Promise<void> {
     )
   )
   await act(async () => requestNativeChatResumeOnRestartDialog('user', focus))
-}
-
-function machineToggle(name: string): HTMLElement {
-  const found = document.querySelector<HTMLElement>(`[aria-label="Resume every chat on ${name}"]`)
-  if (!found) {
-    throw new Error(`Missing machine checkbox: ${name}`)
-  }
-  return found
-}
-
-function machineRow(name: string): HTMLButtonElement {
-  const found = [...document.querySelectorAll<HTMLButtonElement>('button[aria-expanded]')].find(
-    (entry) => entry.textContent?.startsWith(name)
-  )
-  if (!found) {
-    throw new Error(`Missing machine row: ${name}`)
-  }
-  return found
 }
 
 function button(text: string): HTMLButtonElement {
@@ -153,7 +126,7 @@ it('lists each machine with only the user’s own chats ticked, opening the one 
   await stage({ studio: SERVER_ROWS })
   await open('environment:studio')
   expect(machineRow('studio-mac').getAttribute('aria-expanded')).toBe('true')
-  expect(machineRow('studio-mac').textContent).toContain('1 of 3 chats selected')
+  expect(machineRow('studio-mac').textContent).toContain('1 of 3')
   // This computer's own chats all start ticked, and it stays closed but listed.
   expect(machineRow('Local').getAttribute('aria-expanded')).toBe('false')
   expect(machineToggle('studio-mac').getAttribute('data-state')).toBe('indeterminate')
@@ -354,8 +327,8 @@ it('keeps an open launch dialog when this computer’s chats run out while a ser
   expect(getNativeChatResumeOnRestartDialogRequest()).toMatchObject({ origin: 'launch' })
 })
 
-// The cards inside follow the sidebar and name no host when one machine is listed, so the machine
-// row is what says where the chats are, this computer's and a server's alike, even alone.
+// The workspace rows inside name no host their machine row already names, so the machine row is
+// what says where the chats are, this computer's and a server's alike, even alone.
 it('names the machine on its row whenever chats are grouped by machine, even a single server', async () => {
   localRows = []
   await stage({ studio: SERVER_ROWS })

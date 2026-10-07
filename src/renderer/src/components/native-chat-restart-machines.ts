@@ -1,4 +1,8 @@
-import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  toRuntimeExecutionHostId,
+  type ExecutionHostId
+} from '../../../shared/execution-host'
 import { structuredAgentSessionStatusFeedKey } from '@/runtime/structured-agent-session-status-feed'
 import type { RuntimeClientTarget } from '@/runtime/runtime-client-target'
 import type { ResumeCandidate } from './native-chat-resume-on-restart-grouping'
@@ -38,6 +42,13 @@ export function projectRestartMachineRows<Row extends ResumeCandidate>(
   if (target.kind === 'local') {
     return [...rows]
   }
-  const executionHostId = toRuntimeExecutionHostId(target.environmentId)
+  const executionHostId = restartMachineExecutionHostId(target)
   return rows.map((row) => ({ ...row, executionHostId }))
+}
+
+/** The host this desktop files a machine's workspaces under. */
+export function restartMachineExecutionHostId(target: RuntimeClientTarget): ExecutionHostId {
+  return target.kind === 'local'
+    ? LOCAL_EXECUTION_HOST_ID
+    : toRuntimeExecutionHostId(target.environmentId)
 }

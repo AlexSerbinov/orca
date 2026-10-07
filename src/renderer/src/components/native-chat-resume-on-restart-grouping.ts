@@ -4,6 +4,7 @@ import type { ExecutionHostId } from '../../../shared/execution-host'
 import { projectGroupIdFromRepoId } from '../../../shared/folder-workspace-worktree'
 import type { RepoIcon } from '../../../shared/repo-icon'
 import type { AgentSessionRestartActivity } from '../../../shared/agent-session-restart-activity'
+import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
 import type { RestartOfferOrigin } from '../../../shared/restart-offer-origin'
 
 /**
@@ -17,7 +18,9 @@ import type { RestartOfferOrigin } from '../../../shared/restart-offer-origin'
 export type ResumeCandidate = {
   sessionId: string
   workspaceId: string
-  agent: 'claude' | 'codex'
+  /** Any agent the host registered; a client without the registered-agents capability gets
+   *  only Claude's and Codex's offers. */
+  agent: StructuredAgentId
   trigger: 'quit' | 'update'
   latestPrompt: string
   recordedAt: number
@@ -166,6 +169,44 @@ export function nestResumeWorkspaces(
     }
   }
   return roots
+}
+
+/** A workspace's chats followed by those of every workspace nested under it, in list order. */
+export function resumeWorkspaceSessionIds(node: ResumeWorkspaceNode): string[] {
+  return [
+    ...node.group.candidates.map((candidate) => candidate.sessionId),
+    ...node.children.flatMap(resumeWorkspaceSessionIds)
+  ]
+}
+
+export type ResumeSelectionState = {
+  checked: boolean | 'indeterminate'
+  selectedCount: number
+  total: number
+}
+
+/** A group checkbox's state over the selectable chats it covers. */
+export function resumeSelectionState(
+  sessionIds: readonly string[],
+  selected: ReadonlySet<string>
+): ResumeSelectionState {
+  const selectedCount = sessionIds.filter((sessionId) => selected.has(sessionId)).length
+  const total = sessionIds.length
+  const checked =
+    total > 0 && selectedCount === total ? true : selectedCount > 0 ? 'indeterminate' : false
+  return { checked, selectedCount, total }
+}
+
+/** Ticks every chat a group covers unless all already are, then unticks them. */
+export function toggleResumeSelection(
+  sessionIds: readonly string[],
+  state: ResumeSelectionState,
+  onToggle: (sessionId: string, checked: boolean) => void
+): void {
+  const next = state.selectedCount < state.total
+  for (const sessionId of sessionIds) {
+    onToggle(sessionId, next)
+  }
 }
 
 export type ResumeGroupHeader =
