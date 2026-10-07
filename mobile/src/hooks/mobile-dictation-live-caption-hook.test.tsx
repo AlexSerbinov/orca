@@ -189,4 +189,22 @@ describe('live dictation captions', () => {
     expect(seen).toEqual(['one', 'one two'])
     expect(held.renders).toBe(rendersWhileRecording)
   })
+
+  it('clears the caption when a newer revision empties it', async () => {
+    const rpc = createFakeRpcClient()
+    mount(rpc)
+    await startRecording(rpc)
+    for (const [revision, text] of [
+      [1, 'maybe'],
+      [2, '']
+    ] as const) {
+      emitChunk()
+      await act(async () => {
+        answerAll(rpc, () => ({ caption: { text, revision } }))
+        await flush()
+      })
+    }
+    expect(caption()).toBe('')
+    expect(current().isRecording).toBe(true)
+  })
 })

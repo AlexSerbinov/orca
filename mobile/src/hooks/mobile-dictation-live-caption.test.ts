@@ -27,4 +27,10 @@ describe('MobileDictationLiveCaptionTracker', () => {
     tracker.accept('d1', { text: 'hello', revision: 1 })
     expect(tracker.accept('d2', { text: 'hello', revision: 1 })).toBe('hello')
   })
+
+  it('accepts an emptied caption on a newer revision so a cleared interim clears the phone', () => {
+    const tracker = new MobileDictationLiveCaptionTracker()
+    tracker.accept('d1', { text: 'maybe', revision: 1 })
+    expect(tracker.accept('d1', { text: '', revision: 2 })).toBe('')
+  })
 })

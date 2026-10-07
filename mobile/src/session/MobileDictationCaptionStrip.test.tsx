@@ -125,6 +125,33 @@ describe('MobileDictationCaptionStrip', () => {
     expect(json).toContain('Transcribing…')
     expect(json).not.toContain('stale words')
   })
+  it('repaints only from the caption store while recording', () => {
+    const store = new MobileDictationCaptionStore()
+    render(
+      createElement(MobileDictationCaptionStrip, {
+        dictation: { ...idle, isRecording: true, captionStore: store },
+        variant: 'dock'
+      })
+    )
+    expect(JSON.stringify(renderer.toJSON())).toContain('Listening…')
+    act(() => store.set('fresh words'))
+    expect(JSON.stringify(renderer.toJSON())).toContain('fresh words')
+  })
+
+  it('falls back to Listening… when the caption is emptied mid-recording', () => {
+    const store = captionStore('maybe')
+    render(
+      createElement(MobileDictationCaptionStrip, {
+        dictation: { ...idle, isRecording: true, captionStore: store },
+        variant: 'card'
+      })
+    )
+    expect(JSON.stringify(renderer.toJSON())).toContain('maybe')
+    act(() => store.set(''))
+    const json = JSON.stringify(renderer.toJSON())
+    expect(json).toContain('Listening…')
+    expect(json).not.toContain('maybe')
+  })
 })
 
 describe('MobileTerminalLiveInputStatus caption', () => {
@@ -146,18 +173,5 @@ describe('MobileTerminalLiveInputStatus caption', () => {
         })
       )
     ).toContain('Tap mic to stop')
-  })
-
-  it('repaints only from the caption store while recording', () => {
-    const store = new MobileDictationCaptionStore()
-    render(
-      createElement(MobileDictationCaptionStrip, {
-        dictation: { ...idle, isRecording: true, captionStore: store },
-        variant: 'dock'
-      })
-    )
-    expect(JSON.stringify(renderer.toJSON())).toContain('Listening…')
-    act(() => store.set('fresh words'))
-    expect(JSON.stringify(renderer.toJSON())).toContain('fresh words')
   })
 })

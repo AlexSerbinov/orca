@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import VoiceCloudProvidersScreen from './voice-cloud-providers-screen'
 import { voiceOperations } from './voice-cabinet.test-fixture'
+import { SPEECH_PROVIDERS_UNAVAILABLE_MESSAGE } from '../dictation/mobile-speech-providers'
 
 vi.mock('react-native', () => ({
   View: 'View',
@@ -76,5 +77,37 @@ describe('VoiceCloudProvidersScreen', () => {
     const json = JSON.stringify(renderer.toJSON())
     expect(json).toContain('This desktop is no longer paired.')
     expect(json).not.toContain('Connect to a desktop')
+  })
+
+  describe('fallback states', () => {
+    async function mountWith(operations: ReturnType<typeof voiceOperations>['operations'] | null) {
+      await act(async () => {
+        renderer = create(
+          createElement(VoiceCloudProvidersScreen, {
+            operations,
+            focused: true,
+            onBack: vi.fn(),
+            onOpenProvider: vi.fn()
+          })
+        )
+      })
+      return JSON.stringify(renderer.toJSON())
+    }
+
+    it('asks to connect a desktop when there is none', async () => {
+      expect(await mountWith(null)).toContain('Connect to a desktop to manage speech providers.')
+    })
+
+    it('shows the host error when the provider list fails', async () => {
+      const { operations } = voiceOperations({
+        list: vi.fn().mockRejectedValue(new Error('Desktop refused the request.'))
+      })
+      expect(await mountWith(operations)).toContain('Desktop refused the request.')
+    })
+
+    it('asks to update a desktop that predates speech providers', async () => {
+      const { operations } = voiceOperations({ list: vi.fn().mockResolvedValue(null) })
+      expect(await mountWith(operations)).toContain(SPEECH_PROVIDERS_UNAVAILABLE_MESSAGE)
+    })
   })
 })

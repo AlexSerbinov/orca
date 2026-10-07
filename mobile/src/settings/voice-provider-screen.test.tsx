@@ -170,4 +170,34 @@ describe('voice provider screen', () => {
     })
     expect(operations.configure).toHaveBeenCalledWith({ enabled: true, modelId: 'whisper-tiny' })
   })
+
+  describe('fallback states', () => {
+    it('asks to connect a desktop when there is none', async () => {
+      await act(async () => {
+        renderer = create(
+          createElement(VoiceProviderScreen, {
+            operations: null,
+            focused: true,
+            providerId: 'deepgram',
+            onBack: vi.fn()
+          })
+        )
+      })
+      expect(text()).toContain('Connect to a desktop to manage speech providers.')
+    })
+
+    it('says so when the desktop does not offer the provider', async () => {
+      const { operations } = voiceOperations({})
+      await mount(operations, 'no-such-provider')
+      expect(text()).toContain('This desktop does not offer that provider.')
+    })
+
+    it('shows the host error when the provider list fails', async () => {
+      const { operations } = voiceOperations({
+        list: vi.fn().mockRejectedValue(new Error('Desktop refused the request.'))
+      })
+      await mount(operations, 'deepgram')
+      expect(text()).toContain('Desktop refused the request.')
+    })
+  })
 })
