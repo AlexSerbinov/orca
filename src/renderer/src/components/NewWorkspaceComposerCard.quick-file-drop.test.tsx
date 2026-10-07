@@ -65,7 +65,9 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function gesture(target: Element, type: string, transfer: object) {
+type FileDragTransfer = { types: string[]; files: File[]; dropEffect: string }
+
+function gesture(target: Element, type: string, transfer: FileDragTransfer) {
   const event = new Event(type, { bubbles: true, cancelable: true, composed: true })
   Object.defineProperty(event, 'isTrusted', { value: true })
   Object.defineProperty(event, 'dataTransfer', { value: transfer })
