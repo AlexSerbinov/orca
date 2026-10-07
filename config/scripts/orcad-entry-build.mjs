@@ -4,6 +4,7 @@ import { join } from 'node:path'
 const root = join(import.meta.dirname, '..', '..')
 
 export const ORCAD_ENTRY_POINT = 'src/main/orcad/main.ts'
+export const ORCAD_LAUNCHER_ENTRY_POINT = 'src/main/orcad/launcher.ts'
 export const ORCAD_CHILD_ENTRY_POINTS = {
   watcher: 'src/main/ipc/parcel-watcher-process-entry.ts',
   daemon: 'src/main/daemon/daemon-entry.ts',
@@ -37,7 +38,7 @@ export function buildOrcadEntry(outfile) {
     entryPoints: [join(root, ORCAD_ENTRY_POINT)],
     bundle: true,
     platform: 'node',
-    target: 'node18',
+    target: 'node24',
     format: 'cjs',
     outfile,
     external: ORCAD_EXTERNAL_MODULES,
@@ -46,6 +47,21 @@ export function buildOrcadEntry(outfile) {
     minify: true,
     sourcemap: false,
     define: { 'process.env.NODE_ENV': '"production"' },
+    logLevel: 'error'
+  })
+}
+
+export function buildOrcadLauncher(outfile) {
+  return build({
+    entryPoints: [join(root, ORCAD_LAUNCHER_ENTRY_POINT)],
+    bundle: true,
+    platform: 'node',
+    target: 'node18',
+    format: 'cjs',
+    outfile,
+    metafile: true,
+    minify: true,
+    sourcemap: false,
     logLevel: 'error'
   })
 }

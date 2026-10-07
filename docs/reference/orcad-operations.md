@@ -4,6 +4,17 @@
 whatever supervises it: what it binds, what it owns on disk, who restarts what, and what its
 readiness payload actually proves.
 
+## Server runtime and launcher
+
+Packaged deployments start `orcad-server.js` directly with the bundled Node 24 runtime.
+The server and its child entries target Node 24; they do not require a host Node installation.
+Remote rollback also accepts older slots that contain only `orcad.js`.
+
+`orcad.js` is a small compatibility launcher for existing service commands. It resolves the
+bundled runtime before loading any server code, preserves arguments, and forwards shutdown
+signals. It can run on Node 18 only to hand off to the bundle. Without a bundled runtime,
+it requires host Node 24 or newer. A missing or invalid packaged runtime exits with code 78.
+
 ## Two long-lived processes, not one
 
 A deployment is **orcad** plus **the terminal daemon**.

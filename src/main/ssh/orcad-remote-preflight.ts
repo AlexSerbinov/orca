@@ -7,7 +7,7 @@ import {
   parseOrcadProfilePreflight
 } from '../../shared/orcad-profile-preflight'
 import { assertPosixOrcadHost } from './orcad-remote-host-support'
-import { orcadNodeSlotRuntimeCommand } from './orcad-remote-runtime'
+import { orcadNodeSlotRuntimeCommand, selectOrcadSlotEntryCommand } from './orcad-remote-runtime'
 import { execCommand } from './ssh-relay-deploy-helpers'
 import { shellEscape } from './ssh-connection-utils'
 import { joinRemotePath, type RemoteHostPlatform } from './ssh-remote-platform'
@@ -24,11 +24,11 @@ export function orcadProfilePreflightCommand(
   const launch = [
     'ORCA_BACKGROUND_LAUNCH=1',
     '"$orcad_runtime"',
-    shellEscape(joinRemotePath(host, directory, 'orcad.js')),
+    '"$orcad_entry"',
     ORCAD_PROFILE_PREFLIGHT_FLAG,
     shellEscape(nonce)
   ].join(' ')
-  return `[ -e ${marker} ] || exit 78; ${orcadNodeSlotRuntimeCommand(host, directory)}${launch}`
+  return `[ -e ${marker} ] || exit 78; ${orcadNodeSlotRuntimeCommand(host, directory)}${selectOrcadSlotEntryCommand(host, directory)}; ${launch}`
 }
 
 /** Failure leaves the incumbent and its data untouched, including an unconfirmed SSH exit. */

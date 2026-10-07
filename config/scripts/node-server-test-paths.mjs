@@ -25,6 +25,7 @@ export function nodeServerTestPaths({ artifact = false, crossRuntime = false } =
           'src/main/orcad/orcad-packaged-node-pty.integration.test.ts',
           'src/main/providers/agent-foreground-process-git-bash.win32.test.ts',
           'src/main/orcad/orcad-node-launcher.integration.test.ts',
+          'src/main/orcad/orcad-launcher-isolation.integration.test.ts',
           'config/scripts/zip-extractor-command.test.mjs'
         ]
       : []),

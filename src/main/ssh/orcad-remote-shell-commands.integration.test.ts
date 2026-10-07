@@ -86,14 +86,17 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true })
 })
 
-async function launchTestRuntime(legacyWrapper = false): Promise<{
+async function launchTestRuntime(
+  legacyWrapper = false,
+  splitEntry = false
+): Promise<{
   runtimePid: number
   recordedPid: number
   terminatedFile: string
 }> {
   const terminatedFile = join(versionDir, 'terminated')
   writeFileSync(
-    join(versionDir, 'orcad.js'),
+    join(versionDir, splitEntry ? 'orcad-server.js' : 'orcad.js'),
     [
       `process.on('SIGTERM', () => {`,
       `  require('node:fs').writeFileSync(${JSON.stringify(terminatedFile)}, 'terminated');`,
@@ -103,6 +106,9 @@ async function launchTestRuntime(legacyWrapper = false): Promise<{
       `setTimeout(() => process.exit(1), 10_000);`
     ].join('\n')
   )
+  if (splitEntry) {
+    writeFileSync(join(versionDir, 'orcad.js'), 'throw new Error("compatibility launcher ran")')
+  }
   let command = orcadLaunchCommand(host, {
     remoteInstallDir: versionDir,
     nodePath: process.execPath,
@@ -327,16 +333,19 @@ describe('state snapshot commands, run for real', () => {
 })
 
 describe('liveness and stop commands, run for real', () => {
-  it('records the runtime PID and waits for that runtime to exit when stopped', async () => {
-    const { runtimePid, recordedPid, terminatedFile } = await launchTestRuntime()
-    expect(recordedPid).toBe(runtimePid)
-    expect(stopTestRuntime()).toBe('stopped')
-    expect(readFileSync(terminatedFile, 'utf8')).toBe('terminated')
-    // An unreaped zombie has exited even though kill -0 still succeeds.
-    expect(sh(`ps -o stat= -p ${runtimePid} || true`).trim()).toMatch(/^(?:Z.*)?$/)
-    expect(existsSync(join(versionDir, ORCAD_PID_FILENAME))).toBe(true)
-    expect(stopTestRuntime()).toBe('already-exited')
-  })
+  it.each([false, true])(
+    'records and stops the runtime PID with split entry %s',
+    async (splitEntry) => {
+      const { runtimePid, recordedPid, terminatedFile } = await launchTestRuntime(false, splitEntry)
+      expect(recordedPid).toBe(runtimePid)
+      expect(stopTestRuntime()).toBe('stopped')
+      expect(readFileSync(terminatedFile, 'utf8')).toBe('terminated')
+      // An unreaped zombie has exited even though kill -0 still succeeds.
+      expect(sh(`ps -o stat= -p ${runtimePid} || true`).trim()).toMatch(/^(?:Z.*)?$/)
+      expect(existsSync(join(versionDir, ORCAD_PID_FILENAME))).toBe(true)
+      expect(stopTestRuntime()).toBe('already-exited')
+    }
+  )
 
   it('refuses a legacy wrapper PID both before and after its shell exits', async () => {
     const { runtimePid, recordedPid, terminatedFile } = await launchTestRuntime(true)

@@ -7,7 +7,7 @@ import {
   ORCAD_STARTUP_PREFLIGHT_FLAG
 } from '../../shared/orcad-profile-preflight'
 import { preflightBundledOrcadStartup, runOrcadProfilePreflight } from './orcad-profile-preflight'
-import { handoffToBundledOrcad } from './orcad-bundled-runtime'
+import { assertOrcadServerRuntime } from './orcad-bundled-runtime'
 
 // Why exit before the preflight: reaching this line means the whole module graph resolved
 // under plain Node, which is all the build guard needs to prove. Probing natives or
@@ -31,26 +31,25 @@ function failStartup(error: unknown): void {
 }
 
 try {
-  if (!handoffToBundledOrcad()) {
-    const flag = process.argv[2]
-    if (
-      (flag === ORCAD_PROFILE_PREFLIGHT_FLAG || flag === ORCAD_STARTUP_PREFLIGHT_FLAG) &&
-      process.argv.length === 4
-    ) {
-      void runOrcadProfilePreflight(process.argv[3], {
-        nativeFeatures: flag === ORCAD_PROFILE_PREFLIGHT_FLAG
+  assertOrcadServerRuntime()
+  const flag = process.argv[2]
+  if (
+    (flag === ORCAD_PROFILE_PREFLIGHT_FLAG || flag === ORCAD_STARTUP_PREFLIGHT_FLAG) &&
+    process.argv.length === 4
+  ) {
+    void runOrcadProfilePreflight(process.argv[3], {
+      nativeFeatures: flag === ORCAD_PROFILE_PREFLIGHT_FLAG
+    })
+      // Why exit: the owner reads to EOF, so a lingering native handle must not hold the probe open.
+      .then(() => process.stdout.write('', () => process.exit(0)))
+      .catch(failStartup)
+  } else {
+    void preflightBundledOrcadStartup()
+      .then(() => {
+        runOrcadNativePreflight()
+        return main()
       })
-        // Why exit: the owner reads to EOF, so a lingering native handle must not hold the probe open.
-        .then(() => process.stdout.write('', () => process.exit(0)))
-        .catch(failStartup)
-    } else {
-      void preflightBundledOrcadStartup()
-        .then(() => {
-          runOrcadNativePreflight()
-          return main()
-        })
-        .catch(failStartup)
-    }
+      .catch(failStartup)
   }
 } catch (error) {
   failStartup(error)
