@@ -17403,7 +17403,12 @@
         "originAutomation": "自动化",
         "originOtherDevice": "其他设备",
         "originServer": "在 {{value0}} 上创建",
-        "originUnknown": "来源未知"
+        "originUnknown": "来源未知",
+        "selectWorkspace": "选择 {{value0}} 中的全部聊天",
+        "workspaceSelectedCount": "{{value0}}/{{value1}}",
+        "selectAll": "选择全部聊天",
+        "selectAllLabel": "选择全部",
+        "selectedCount": "已选择 {{value0}}/{{value1}}"
       },
       "linear-issue-attribute-filter-coverage-notice": {
         "statusPartialTeamCoverage": "过滤 {{value1}} 团队状态中的 {{value0}} — 不包括其余团队的问题。",

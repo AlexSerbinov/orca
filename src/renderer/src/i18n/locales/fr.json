@@ -17519,7 +17519,12 @@
         "originAutomation": "Automatisation",
         "originOtherDevice": "Un autre appareil",
         "originServer": "Créé sur {{value0}}",
-        "originUnknown": "Origine inconnue"
+        "originUnknown": "Origine inconnue",
+        "selectWorkspace": "Sélectionner toutes les discussions dans {{value0}}",
+        "workspaceSelectedCount": "{{value0}} sur {{value1}}",
+        "selectAll": "Sélectionner toutes les discussions",
+        "selectAllLabel": "Tout sélectionner",
+        "selectedCount": "{{value0}} sur {{value1}} sélectionnées"
       },
       "linear-issue-attribute-filter-coverage-notice": {
         "statusPartialTeamCoverage": "Filtrage des statuts des équipes {{value0}} sur {{value1}} : les problèmes des équipes restantes ne sont pas inclus.",

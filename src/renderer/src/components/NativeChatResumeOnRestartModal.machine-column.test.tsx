@@ -19,10 +19,7 @@ import { readNativeChatRestartMachine } from './native-chat-resume-on-restart-st
 import { _resetNativeChatRestartOffer } from './native-chat-restart-offer-triggers'
 import { pairedEnvironment } from './native-chat-restart-offer-test-support'
 import { button, chatBox, namedBox } from './native-chat-resume-on-restart-modal.test-support'
-import {
-  machineRowFixture as row,
-  machineToggle
-} from './native-chat-resume-machines.test-support'
+import { machineRowFixture as row, machineToggle } from './native-chat-resume-machines.test-support'
 
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/structured-agent-session-client', () => ({
@@ -75,8 +72,7 @@ function rowOf(box: HTMLElement): HTMLElement {
 }
 
 function selectAllCount(): string | undefined {
-  return namedBox('Select all chats').closest('label')?.querySelector('.tabular-nums')
-    ?.textContent
+  return namedBox('Select all chats').closest('label')?.querySelector('.tabular-nums')?.textContent
 }
 
 beforeEach(() => {
@@ -119,9 +115,7 @@ it('puts each machine’s box in the list’s one checkbox column, indenting onl
   expect(workspace.querySelector<HTMLElement>(':scope > :nth-child(2)')?.style.paddingLeft).toBe(
     '20px'
   )
-  expect(
-    chatBox('s1').closest('ul')?.style.getPropertyValue('--resume-chat-indent')
-  ).toBe('40px')
+  expect(chatBox('s1').closest('ul')?.style.getPropertyValue('--resume-chat-indent')).toBe('40px')
 
   const order = [
     namedBox('Select all chats'),

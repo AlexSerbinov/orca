@@ -3,10 +3,7 @@ import { Checkbox } from './ui/checkbox'
 import { translate } from '@/i18n/i18n'
 import { formatShortTimeAgo } from '@/lib/short-time-ago'
 import { ResumeOnRestartGroups } from './NativeChatResumeOnRestartGroups'
-import {
-  resumeSelectionState,
-  type ResumeFailure
-} from './native-chat-resume-on-restart-grouping'
+import { resumeSelectionState, type ResumeFailure } from './native-chat-resume-on-restart-grouping'
 import type { ResumeFailureAction } from './native-chat-resume-failure-guidance'
 import type { NativeChatRestartMachineOffer } from './native-chat-resume-on-restart-store'
 import { restartMachineExecutionHostId } from './native-chat-restart-machines'

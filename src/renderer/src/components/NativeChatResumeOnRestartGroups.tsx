@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Folder, FolderTree, GitBranch } from 'lucide-react'
 import { RepoIconGlyph } from '@/components/repo/repo-icon'
 import { WorktreeHostContextBadge } from '@/components/sidebar/WorktreeHostContextBadge'
+import { useSidebarHostScopeOptions } from '@/components/sidebar/use-sidebar-host-scope-options'
 import {
   getCyclicProjectedWorktreeLineageIds,
   getSidebarLineageAncestors
@@ -149,7 +150,13 @@ function WorkspaceKindGlyph({ kind }: { kind: AgentSessionWorkspaceKind }): Reac
  * is the only thing that separates the two, and the sidebar likewise titles these with the project
  * group's name.
  */
-function RepoHeader({ repoId, depth }: { repoId: string | null; depth: number }): React.JSX.Element {
+function RepoHeader({
+  repoId,
+  depth
+}: {
+  repoId: string | null
+  depth: number
+}): React.JSX.Element {
   const repos = useAppStore((store) => store.repos)
   const projectGroups = useAppStore((store) => store.projectGroups)
   const header = resolveResumeGroupHeader(repoId, repos, projectGroups)
@@ -183,6 +190,8 @@ type RowProps = {
   onToggle: (sessionId: string, checked: boolean) => void
   /** Whether a group checkbox may tick this chat; a failure a retry cannot fix is left out. */
   selectable: (sessionId: string) => boolean
+  /** The sidebar's host names (SSH target labels, display overrides), so a chip never shows a raw id. */
+  hostLabelById: ReadonlyMap<ExecutionHostId, string>
   /** Where a chat that does not start ticked came from ("Automation", "Another device"). */
   originLabelFor?: (sessionId: string) => string | undefined
   /** The host a machine row above the list already names. */
@@ -201,13 +210,21 @@ function WorkspaceRows({
   const kind = first ? resumeWorkspaceKind(first) : 'git-worktree'
   const name = (worktree && resolveWorktreeDisplayName(worktree)) || group.workspaceId
   const branch = worktree && kind === 'git-worktree' ? resolveWorktreeBranchLabel(worktree) : ''
-  const { mixedHosts, listedAt, busy, selected, onToggle, selectable, machineHostId } = rowProps
+  const {
+    mixedHosts,
+    listedAt,
+    busy,
+    selected,
+    onToggle,
+    selectable,
+    hostLabelById,
+    machineHostId
+  } = rowProps
   const workspaceHostId = hostId ?? LOCAL_EXECUTION_HOST_ID
   // Why: a remote workspace is named by its machine even when it is the only one listed — unless
   // the machine row above it already does.
   const showHostLabel =
-    workspaceHostId !== machineHostId &&
-    (mixedHosts || workspaceHostId !== LOCAL_EXECUTION_HOST_ID)
+    workspaceHostId !== machineHostId && (mixedHosts || workspaceHostId !== LOCAL_EXECUTION_HOST_ID)
   const covered = resumeWorkspaceSessionIds(node).filter(selectable)
   const selection = resumeSelectionState(covered, selected)
   const chatIndent: React.CSSProperties & Record<'--resume-chat-indent', string> = {
@@ -241,7 +258,7 @@ function WorkspaceRows({
           )}
           {showHostLabel && (
             <WorktreeHostContextBadge
-              label={getHostContextLabel(workspaceHostId)}
+              label={getHostContextLabel(workspaceHostId, { hostLabelById })}
             />
           )}
           {selection.total > 0 && (
@@ -290,10 +307,15 @@ export function ResumeOnRestartGroups({
   machineHostId
 }: {
   candidates: readonly ResumeCandidate[]
-} & Omit<RowProps, 'mixedHosts' | 'selectable'>): React.JSX.Element {
+} & Omit<RowProps, 'mixedHosts' | 'selectable' | 'hostLabelById'>): React.JSX.Element {
   const workspaces = useMemo(() => groupResumeCandidates(candidates), [candidates])
   const repoIdFor = useRepoIdByWorkspace(workspaces)
   const ancestorsOf = useLineageAncestors(workspaces)
+  const { hostOptions } = useSidebarHostScopeOptions()
+  const hostLabelById = useMemo(
+    () => new Map(hostOptions.map((host) => [host.id, host.label])),
+    [hostOptions]
+  )
   const repoGroups = groupResumeWorkspacesByRepo(workspaces, repoIdFor)
   const mixedHosts =
     new Set(candidates.map((candidate) => candidate.executionHostId ?? LOCAL_EXECUTION_HOST_ID))
@@ -320,6 +342,7 @@ export function ResumeOnRestartGroups({
               selected={selected}
               onToggle={onToggle}
               selectable={selectable}
+              hostLabelById={hostLabelById}
               failureFor={failureFor}
               onFailureAction={onFailureAction}
               originLabelFor={originLabelFor}

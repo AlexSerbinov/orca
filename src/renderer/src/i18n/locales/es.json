@@ -17399,7 +17399,12 @@
         "originAutomation": "Automatización",
         "originOtherDevice": "Otro dispositivo",
         "originServer": "Creado en {{value0}}",
-        "originUnknown": "Origen desconocido"
+        "originUnknown": "Origen desconocido",
+        "selectWorkspace": "Seleccionar todos los chats en {{value0}}",
+        "workspaceSelectedCount": "{{value0}} de {{value1}}",
+        "selectAll": "Seleccionar todos los chats",
+        "selectAllLabel": "Seleccionar todo",
+        "selectedCount": "{{value0}} de {{value1}} seleccionados"
       },
       "NativeChatResumeOutcomeRow": {
         "openChat": "Abrir chat",
