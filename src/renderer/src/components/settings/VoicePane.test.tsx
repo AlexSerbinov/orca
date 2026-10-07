@@ -537,6 +537,48 @@ describe('VoicePane', () => {
     })
   })
 
+  it('reports a removed key as removed when the follow-up model refresh fails', async () => {
+    const { toast } = await import('sonner')
+    vi.mocked(toast.error).mockClear()
+    toastSuccessMock.mockClear()
+    useAppStoreMock.mockImplementation((selector: (state: Record<string, unknown>) => unknown) =>
+      selector({
+        modelStates: [],
+        refreshModelStates: vi.fn(() => Promise.reject(new Error('refresh failed'))),
+        markFeatureTipsSeen: vi.fn()
+      })
+    )
+    useShortcutLabelMock.mockReturnValue('Ctrl+Shift+Y')
+    installWindowApi(vi.fn(async () => deniedMicrophoneResult))
+    window.api.speech.getCloudKeyStatuses = vi.fn(async () => [keyStatus('groq', true)])
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(
+        <TooltipProvider>
+          <VoicePane settings={makeSettings(true)} updateSettings={vi.fn()} />
+        </TooltipProvider>
+      )
+    })
+
+    const remove = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Remove Groq API key"]'
+    )
+    if (!remove) {
+      throw new Error('Remove Groq API key button was not rendered')
+    }
+    await clickButton(remove)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    root.unmount()
+
+    expect(window.api.speech.clearCloudKey).toHaveBeenCalledWith('groq')
+    expect(toastSuccessMock).toHaveBeenCalledWith('Groq API key removed')
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it('shows the provider verdict after testing a saved key', async () => {
     useAppStoreMock.mockImplementation((selector: (state: Record<string, unknown>) => unknown) =>
       selector({ modelStates: [], refreshModelStates: vi.fn(), markFeatureTipsSeen: vi.fn() })

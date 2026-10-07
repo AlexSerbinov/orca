@@ -224,7 +224,8 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
         ...(providerId === 'openai' ? { openAiApiKeyConfigured: false } : {}),
         sttModel: selectedProvider === providerId ? '' : current.sttModel
       })
-      await refreshModelStates()
+      // Why: the key is already removed; a failed state refresh must not read as a removal error.
+      await Promise.resolve(refreshModelStates()).catch(() => {})
       toast.success(
         translate(
           'auto.components.settings.VoicePane.cloudKeyRemoved',
