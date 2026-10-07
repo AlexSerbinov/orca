@@ -120,6 +120,7 @@ async function renderChatPointer(mailbox: string): Promise<string> {
     resolveStructuredTarget: () => ({ sessionId: CHAT_SESSION, dispatchId: null }),
     // The runtime's wiring of the structured lane.
     getCliCommand: localOrchestrationCliCommand,
+    senderName: () => null,
     host: {
       readSessionFacts: async () => ({ submissions: [] }),
       currentFence: () => 1,
@@ -187,7 +188,6 @@ describe('the orchestration guide an agent loads', () => {
 })
 
 describe('agent-read text about an Orca session ID', () => {
-  // CLI help, specs and status text: src/cli/orca-session-id-wording.test.ts.
   const guideDir = join(process.cwd(), 'skill-guides')
   const guide = [
     join(guideDir, 'orchestration.md'),

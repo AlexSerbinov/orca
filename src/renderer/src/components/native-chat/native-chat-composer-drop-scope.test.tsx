@@ -83,7 +83,7 @@ function ComposerBody({
     setDraft: () => {},
     setNotice
   })
-  const { pickAttachment } = useNativeChatFileDrops({
+  const { pickAttachments } = useNativeChatFileDrops({
     paneKey: pane,
     draftScopeKey: draft,
     targetPtyId: null,
@@ -113,7 +113,7 @@ function ComposerBody({
         />
       ))}
       <output>{JSON.stringify(attachments.imageAttachments.map(({ path }) => path))}</output>
-      <button onClick={pickAttachment}>Attach to {pane}</button>
+      <button onClick={pickAttachments}>Attach to {pane}</button>
       <output data-notice={pane}>{notice}</output>
     </div>
   )
@@ -181,7 +181,7 @@ describe('native chat composer drop scoping', () => {
       configurable: true,
       value: {
         ui: { onFileDrop: subscribeNativeFileDrop },
-        shell: { pickAttachment: intake.pick },
+        shell: { pickAttachments: intake.pick },
         fs: {
           ...intake,
           getPathForFile: electron.getPathForFile,
@@ -215,7 +215,7 @@ describe('native chat composer drop scoping', () => {
   })
 
   it('keeps the paperclip picker attached to its own chat', async () => {
-    intake.pick.mockResolvedValue('/picked/image.png')
+    intake.pick.mockResolvedValue(['/picked/image.png'])
     const view = render(
       <>
         <ComposerProbe pane="chat-a" />
@@ -236,7 +236,7 @@ describe('native chat composer drop scoping', () => {
     expect(view.container.querySelector('[data-notice="chat-a"]')?.textContent).toBe('')
   })
   it('keeps a cancelled paperclip picker quiet', async () => {
-    intake.pick.mockResolvedValue(null)
+    intake.pick.mockResolvedValue([])
     render(<ComposerProbe pane="chat-a" />)
     await act(async () => screen.getByText('Attach to chat-a').click())
     expect(intake.stat).not.toHaveBeenCalled()
