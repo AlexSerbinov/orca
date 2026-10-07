@@ -110,6 +110,16 @@ export const voiceCabinetStyles = StyleSheet.create({
     color: colors.textMuted
   },
   drawerGroupStatus: { fontSize: 11, color: colors.textMuted },
+  groupKeyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.button,
+    backgroundColor: colors.bgRaised
+  },
+  groupKeyButtonText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
   languageRow: {
     flexDirection: 'row',
     alignItems: 'center',

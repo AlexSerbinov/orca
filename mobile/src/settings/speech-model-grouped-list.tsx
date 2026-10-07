@@ -1,5 +1,7 @@
 import { Fragment } from 'react'
-import { Text, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
+import { KeyRound } from 'lucide-react-native'
+import { colors } from '../theme/mobile-theme'
 import { SpeechProviderLogo } from '../components/SpeechProviderLogo'
 import { voiceSettingsStyles } from './voice-settings-styles'
 import { voiceCabinetStyles as styles } from './voice-cabinet-styles'
@@ -44,9 +46,23 @@ export function SpeechModelGroupedList({
             <Text style={styles.drawerGroupTitle} numberOfLines={1}>
               {speechProviderLabel(provider).toUpperCase()}
             </Text>
-            <Text style={styles.drawerGroupStatus} numberOfLines={1}>
-              {speechProviderStatusText(provider)}
-            </Text>
+            {!local && !provider.keyConfigured ? (
+              <Pressable
+                style={({ pressed }) => [styles.groupKeyButton, pressed && styles.actionPressed]}
+                disabled={busy !== null}
+                onPress={() => onOpenProvider(provider)}
+                accessibilityRole="button"
+                accessibilityLabel={'Add ' + speechProviderLabel(provider) + ' API key'}
+                testID={`speech-provider-add-key-${provider.id}`}
+              >
+                <KeyRound size={12} color={colors.textSecondary} strokeWidth={2.2} />
+                <Text style={styles.groupKeyButtonText}>Add key</Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.drawerGroupStatus} numberOfLines={1}>
+                {speechProviderStatusText(provider)}
+              </Text>
+            )}
           </View>
           <View style={voiceSettingsStyles.section}>
             {provider.models.map((model, index) => (
@@ -61,7 +77,6 @@ export function SpeechModelGroupedList({
                   variant="picker"
                   onSelect={() => onSelect(model)}
                   onDownload={() => onDownload(model)}
-                  onAddKey={() => onOpenProvider(provider)}
                 />
               </Fragment>
             ))}

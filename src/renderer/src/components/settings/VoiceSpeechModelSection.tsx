@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react'
 import { toast } from 'sonner'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, KeyRound } from 'lucide-react'
 import {
   getCloudSpeechProvider,
   isCloudSpeechProviderId,
@@ -142,7 +142,22 @@ export function VoiceSpeechModelSection({
           {groups.map((group, index) => (
             <Fragment key={group.provider}>
               {index > 0 ? <DropdownMenuSeparator /> : null}
-              <DropdownMenuLabel>{getProviderGroupLabel(group.provider)}</DropdownMenuLabel>
+              <DropdownMenuLabel>
+                <div className="flex items-center justify-between gap-2">
+                  <span>{getProviderGroupLabel(group.provider)}</span>
+                  {/* Why: one key unlocks every model of a provider, so the prompt lives on the group. */}
+                  {group.provider !== 'local' &&
+                  !group.models.some((m) => getModelState(m.id)?.status === 'ready') ? (
+                    <span className="flex items-center gap-1 text-[11px] font-normal text-muted-foreground">
+                      <KeyRound className="size-3" />
+                      {translate(
+                        'auto.components.settings.VoiceSpeechModelSection.apiKeyNeeded',
+                        'API key needed'
+                      )}
+                    </span>
+                  ) : null}
+                </div>
+              </DropdownMenuLabel>
               {group.models.map((manifest) => (
                 <VoiceSpeechModelMenuItem
                   key={manifest.id}

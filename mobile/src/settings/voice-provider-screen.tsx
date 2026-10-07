@@ -103,7 +103,6 @@ export default function VoiceProviderScreen({ operations, focused, providerId, o
                   variant="manage"
                   onSelect={() => void controller.selectModel(model.id)}
                   onDownload={() => void controller.downloadModel(model.id)}
-                  onAddKey={controller.openKeyDrawer}
                   onDelete={() => void controller.deleteModel(model.id)}
                 />
               </Fragment>
@@ -112,7 +111,9 @@ export default function VoiceProviderScreen({ operations, focused, providerId, o
           <Text style={cabinet.footnote}>
             {local
               ? 'On-device models run on your desktop. Audio never leaves it.'
-              : `Your desktop sends audio to ${label} only while you dictate with one of these models.`}
+              : provider.keyConfigured
+                ? `Your desktop sends audio to ${label} only while you dictate with one of these models.`
+                : `One ${label} API key unlocks all of these models. Add it above.`}
           </Text>
 
           {error ? <Text style={base.error}>{error}</Text> : null}

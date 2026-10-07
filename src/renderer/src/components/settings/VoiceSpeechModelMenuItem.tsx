@@ -1,4 +1,4 @@
-import { Check, Cloud, Download, KeyRound, Loader2, Trash2 } from 'lucide-react'
+import { Check, Cloud, Download, Loader2, Trash2 } from 'lucide-react'
 import type { SpeechModelManifest, SpeechModelState } from '../../../../shared/speech-types'
 import { Button } from '../ui/button'
 import { DropdownMenuItem } from '../ui/dropdown-menu'
@@ -82,7 +82,7 @@ export function VoiceSpeechModelMenuItem({
       <div
         className={cn(
           'flex w-full items-center gap-2.5 py-1',
-          !isCloud && !isReady && !isDownloading && 'opacity-50'
+          !isReady && !isDownloading && 'opacity-50'
         )}
       >
         <span className="flex size-4 shrink-0 items-center justify-center">
@@ -138,16 +138,9 @@ export function VoiceSpeechModelMenuItem({
               <Trash2 className="size-3" />
             )}
           </Button>
-        ) : !isReady && !isDownloading ? (
-          <span className="flex shrink-0 items-center gap-1 p-1 text-[11px] text-muted-foreground can-hover:opacity-0 transition-opacity group-hover:opacity-100">
-            {isCloud ? (
-              <>
-                <KeyRound className="size-3" />
-                {translate('auto.components.settings.VoiceSpeechModelMenuItem.addKey', 'Add key')}
-              </>
-            ) : (
-              <Download className="size-3" />
-            )}
+        ) : !isCloud && !isReady && !isDownloading ? (
+          <span className="flex shrink-0 items-center p-1 text-muted-foreground can-hover:opacity-0 transition-opacity group-hover:opacity-100">
+            <Download className="size-3" />
           </span>
         ) : null}
       </div>

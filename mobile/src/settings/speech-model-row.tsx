@@ -1,5 +1,5 @@
 import { ActivityIndicator, Pressable, Text, View } from 'react-native'
-import { AudioLines, Check, Download, KeyRound, Trash2 } from 'lucide-react-native'
+import { AudioLines, Check, Download, Trash2 } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
 import { voiceCabinetStyles as styles } from './voice-cabinet-styles'
 import {
@@ -24,7 +24,6 @@ type Props = {
   variant: 'picker' | 'manage'
   onSelect: () => void
   onDownload: () => void
-  onAddKey: () => void
   onDelete?: () => void
 }
 
@@ -76,7 +75,7 @@ export function SpeechModelRow(props: Props) {
       <SpeechModelRowAction {...props} usable={usable} />
     </>
   )
-  // Why: an accessible Pressable merges its children, hiding nested Use/Delete/Add key from VoiceOver.
+  // Why: an accessible Pressable merges its children, hiding nested Use/Delete from VoiceOver.
   if (variant === 'manage') {
     return (
       <View style={styles.modelRow} testID={`speech-model-${model.id}`}>
@@ -93,7 +92,7 @@ export function SpeechModelRow(props: Props) {
       ]}
       disabled={!rowTappable}
       onPress={onSelect}
-      // Why: unusable rows carry their own Add key / Download button, which must stay reachable.
+      // Why: an undownloaded row carries its own Download button, which must stay reachable.
       accessible={usable}
       accessibilityRole="radio"
       aria-checked={selected}
@@ -114,7 +113,6 @@ function SpeechModelRowAction({
   usable,
   onSelect,
   onDownload,
-  onAddKey,
   onDelete
 }: Props & { usable: boolean }) {
   if (busy === 'select' && variant === 'picker') {
@@ -162,18 +160,9 @@ function SpeechModelRowAction({
       </View>
     )
   }
+  // Why: one key unlocks every model of a provider, so the key prompt lives on the provider, not each row.
   if (!local) {
-    return (
-      <Pressable
-        style={({ pressed }) => [styles.actionButton, pressed && styles.actionPressed]}
-        disabled={locked}
-        onPress={onAddKey}
-        accessibilityLabel={'Add API key for ' + speechModelLabel(model)}
-      >
-        <KeyRound size={13} color={colors.textSecondary} strokeWidth={2.2} />
-        <Text style={styles.actionText}>Add key</Text>
-      </Pressable>
-    )
+    return null
   }
   if (isSpeechModelInFlight(model)) {
     return <ActivityIndicator size="small" color={colors.textSecondary} />

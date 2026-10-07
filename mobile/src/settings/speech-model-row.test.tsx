@@ -50,7 +50,6 @@ function renderRow(variant: 'picker' | 'manage', status: MobileSpeechProviderMod
         variant,
         onSelect: vi.fn(),
         onDownload: vi.fn(),
-        onAddKey: vi.fn(),
         onDelete: vi.fn()
       })
     )
@@ -63,10 +62,10 @@ describe('SpeechModelRow accessibility', () => {
     expect(renderRow('manage', 'ready').type).toBe('View')
   })
 
-  it('stops an unusable picker row from merging its Add key button', () => {
+  it('leaves the key prompt to the provider instead of each cloud model row', () => {
     const row = renderRow('picker', 'not-downloaded')
     expect(row.props.accessible).toBe(false)
-    expect(row.findAllByProps({ accessibilityLabel: 'Add API key for Model' })).not.toHaveLength(0)
+    expect(row.findAllByProps({ accessibilityLabel: 'Add API key for Model' })).toHaveLength(0)
   })
 
   it('keeps a usable picker row as one selectable radio', () => {

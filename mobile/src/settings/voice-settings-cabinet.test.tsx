@@ -127,14 +127,14 @@ describe('voice settings provider cabinet', () => {
     expect(onOpenProvider).toHaveBeenCalledWith('deepgram')
   })
 
-  it('picks a usable model and sends an unusable one to its provider for a key', async () => {
+  it('picks a usable model and asks for one key per provider, not per model', async () => {
     const { operations } = voiceOperations({})
     const onOpenProvider = await mount(operations)
     await press('voice-model-picker')
     expect(text()).toContain('Choose a model')
 
     await act(async () => {
-      renderer.root.findByProps({ accessibilityLabel: 'Add API key for Nova-3' }).props.onPress()
+      renderer.root.findByProps({ testID: 'speech-provider-add-key-deepgram' }).props.onPress()
     })
     expect(onOpenProvider).toHaveBeenCalledWith('deepgram')
 

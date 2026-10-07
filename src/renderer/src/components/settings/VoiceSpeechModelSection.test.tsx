@@ -276,13 +276,18 @@ describe('VoiceSpeechModelSection', () => {
       modelStates: [{ id: localModel.id, status: 'ready' }]
     })
 
-    const labels = [...container.querySelectorAll('[data-testid="group-label"]')].map(
-      (node) => node.textContent
-    )
-    expect(labels).toEqual(['On-device', 'Soniox', 'OpenAI'])
+    const groupLabels = [...container.querySelectorAll('[data-testid="group-label"]')]
+    expect(groupLabels.map((node) => node.querySelector('span')?.textContent)).toEqual([
+      'On-device',
+      'Soniox',
+      'OpenAI'
+    ])
+    // One key per provider: the prompt sits on the group, never on each model row.
+    expect(groupLabels[0].textContent).not.toContain('API key needed')
+    expect(groupLabels[1].textContent).toContain('API key needed')
     const options = [...container.querySelectorAll<HTMLElement>('[role="option"]')]
     expect(options[1].textContent).toContain('live')
-    expect(options[1].textContent).toContain('Add key')
+    expect(options[1].textContent).not.toContain('Add key')
     expect(options[2].textContent).not.toContain('live')
     root.unmount()
   })

@@ -12676,7 +12676,8 @@
           "addKey": "Add key"
         },
         "VoiceSpeechModelSection": {
-          "onDevice": "On-device"
+          "onDevice": "On-device",
+          "apiKeyNeeded": "API key needed"
         },
         "VoiceTranscriptionLanguage": {
           "auto": "Auto-detect",
