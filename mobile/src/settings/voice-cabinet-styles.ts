@@ -4,7 +4,8 @@ import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 /** Why: stretch compact buttons to a 44pt touch target without overlapping their neighbours. */
 export const voiceCabinetHitSlop = {
   actionButton: { top: 7, bottom: 7 },
-  iconButton: { top: 5, bottom: 5, left: 2, right: 5 },
+  // Why: 34pt + 10 each axis = 44pt; left stays within the rowActions gap so it never covers Use.
+  iconButton: { top: 5, bottom: 5, left: 4, right: 6 },
   groupKeyButton: { top: 10, bottom: 10, left: 6, right: 6 }
 } as const
 

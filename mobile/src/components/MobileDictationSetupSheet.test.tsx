@@ -7,6 +7,7 @@ import type { RpcClient } from '../transport/rpc-client'
 import type { MobileSpeechProvidersState } from '../dictation/speech-provider-reply-schema'
 
 const fetchSpeechProviders = vi.hoisted(() => vi.fn())
+const fetchDictationSetup = vi.hoisted(() => vi.fn())
 
 vi.mock('react-native', () => ({
   View: 'View',
@@ -35,6 +36,10 @@ vi.mock('../settings/speech-model-grouped-list', async () => {
   }
 })
 vi.mock('../dictation/mobile-speech-providers', () => ({ fetchSpeechProviders }))
+vi.mock('../dictation/mobile-dictation-setup', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../dictation/mobile-dictation-setup')>()),
+  fetchDictationSetup
+}))
 
 let renderer: ReactTestRenderer | undefined
 
@@ -42,6 +47,7 @@ afterEach(() => {
   act(() => renderer?.unmount())
   renderer = undefined
   fetchSpeechProviders.mockReset()
+  fetchDictationSetup.mockReset()
 })
 
 function deferred<T>() {
@@ -118,5 +124,23 @@ describe('MobileDictationSetupSheet accessibility', () => {
     await render(fakeClient())
     const toggle = renderer?.root.findByProps({ accessibilityLabel: 'Dictation enabled' })
     expect(toggle?.props.value).toBe(true)
+  })
+})
+
+describe('MobileDictationSetupSheet legacy rows', () => {
+  it('keeps a long legacy model label on one shrinkable line', async () => {
+    const label = 'A very long legacy speech model label that would push Download off the row'
+    fetchSpeechProviders.mockResolvedValue(null)
+    fetchDictationSetup.mockResolvedValue({
+      enabled: true,
+      dictationMode: 'toggle',
+      selectedModelId: '',
+      models: [{ id: 'long', label, provider: 'local', status: 'not-downloaded', sizeBytes: 1 }]
+    })
+    await render(fakeClient())
+    const text = renderer?.root.findByProps({ children: label })
+    expect(text?.props.numberOfLines).toBe(1)
+    expect(text?.props.style).toMatchObject({ flexShrink: 1 })
+    expect(text?.parent?.props.style).toMatchObject({ minWidth: 0 })
   })
 })

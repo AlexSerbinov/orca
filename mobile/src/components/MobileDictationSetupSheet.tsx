@@ -264,7 +264,9 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
                 <View key={model.id} style={styles.modelRow}>
                   <View style={styles.modelInfo}>
                     <View style={styles.modelTitleRow}>
-                      <Text style={styles.modelLabel}>{model.label}</Text>
+                      <Text style={styles.modelLabel} numberOfLines={1}>
+                        {model.label}
+                      </Text>
                       {model.recommended ? (
                         <Text
                           style={styles.recommended}
@@ -374,8 +376,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm
   },
   modelInfo: { flex: 1, minWidth: 0 },
-  modelTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  modelLabel: { color: colors.textPrimary, fontSize: typography.bodySize },
+  // Why: minWidth 0 lets a long legacy label shrink instead of pushing Use/Download off the row.
+  modelTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0 },
+  modelLabel: { flexShrink: 1, color: colors.textPrimary, fontSize: typography.bodySize },
   recommended: {
     color: colors.statusGreen,
     fontSize: 10,

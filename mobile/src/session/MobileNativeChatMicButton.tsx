@@ -28,7 +28,9 @@ export function MobileNativeChatMicButton({
   const hold = dictationMode === 'hold'
   return (
     <Pressable
+      accessibilityRole="button"
       accessibilityLabel={micActive ? 'Stop dictation' : 'Dictate'}
+      accessibilityState={{ disabled }}
       style={({ pressed }) => [buttonStyle, pressed && pressedStyle]}
       // Hold mode is walkie-talkie (press-in/out); toggle mode taps.
       onPress={hold ? undefined : onMicPress}

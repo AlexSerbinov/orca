@@ -108,6 +108,24 @@ describe('SpeechModelRow layout', () => {
     ).toBeGreaterThanOrEqual(44)
   })
 
+  it('gives the Delete and Download icon buttons a 44pt touch target across too', () => {
+    function touchWidth(node: ReactTestInstance): number {
+      const { style, hitSlop } = node.props
+      const resolved: unknown = typeof style === 'function' ? style({ pressed: false }) : style
+      const flat: { width?: number }[] = Array.isArray(resolved) ? resolved : [resolved]
+      const base = Math.max(...flat.map((entry) => entry?.width ?? 0))
+      return base + (hitSlop?.left ?? 0) + (hitSlop?.right ?? 0)
+    }
+    const row = renderRow('manage', 'ready', { local: true })
+    expect(
+      touchWidth(row.findByProps({ accessibilityLabel: 'Delete Model' }))
+    ).toBeGreaterThanOrEqual(44)
+    const download = renderRow('manage', 'not-downloaded', { local: true })
+    expect(
+      touchWidth(download.findByProps({ accessibilityLabel: 'Download Model' }))
+    ).toBeGreaterThanOrEqual(44)
+  })
+
   it('caps Dynamic Type on the LIVE and Recommended badges', () => {
     const row = renderRow('manage', 'ready', { model: { realtime: true, recommended: true } })
     for (const label of ['LIVE', 'Recommended']) {
