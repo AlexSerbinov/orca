@@ -13,6 +13,7 @@ import {
 } from './mobile-dictation-session-state'
 import { startMobileDictationDesktopSession } from './mobile-dictation-desktop-start'
 import { useMobileDictationLiveCaption } from './mobile-dictation-live-caption'
+import { createMobileDictationStreamSalvage } from './mobile-dictation-stream-salvage'
 import {
   dictationSessionCancel,
   dictationSessionFinish
@@ -45,6 +46,8 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
   const pendingAudioBudgetRef = useRef(new MobileDictationPendingAudioBudget())
   const acceptingChunksRef = useRef(false)
   const generationRef = useRef(0)
+  const streamSalvageRef = useRef(createMobileDictationStreamSalvage())
+  const stopRef = useRef<() => Promise<void>>(async () => {})
   const { caption, acceptCaption } = useMobileDictationLiveCaption(
     status,
     (id) => statusRef.current === 'recording' && activeIdRef.current === id
@@ -74,22 +77,31 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
     [applyStatus]
   )
 
-  const closeDictationAudio = useCallback(() => {
-    acceptingChunksRef.current = false
+  const resetChunkQueue = useCallback((accepting: boolean) => {
+    acceptingChunksRef.current = accepting
     pendingChunksRef.current.clear()
     pendingAudioBudgetRef.current.reset()
+  }, [])
+
+  const closeDictationAudio = useCallback(() => {
+    resetChunkQueue(false)
     try {
       void capture.end()
     } catch (err) {
       // Cleanup must keep going when a synchronous seam throws, or the dictation state would leak.
       console.error('Failed to stop microphone recording', err)
     }
-  }, [capture])
+  }, [capture, resetChunkQueue])
 
   const failActiveDictation = useCallback(
     (dictationId: string, err: unknown) => {
       const client = clientRef.current
       if (activeIdRef.current !== dictationId) {
+        return
+      }
+      // Why: a provider stream that died mid-dictation still holds committed text; finish keeps it.
+      const finish = statusRef.current === 'recording' ? stopRef.current : null
+      if (streamSalvageRef.current.claim(dictationId, err, finish)) {
         return
       }
       activeIdRef.current = null
@@ -138,6 +150,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
 
     const generation = generationRef.current + 1
     generationRef.current = generation
+    streamSalvageRef.current.reset()
     setError(null)
     applyStatus('starting')
     let opened
@@ -188,9 +201,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
       },
       setIdle: () => applyStatus('idle'),
       commitRecordingStart: () => {
-        acceptingChunksRef.current = true
-        pendingChunksRef.current.clear()
-        pendingAudioBudgetRef.current.reset()
+        resetChunkQueue(true)
         if (!capture.begin()) {
           return false
         }
@@ -198,13 +209,11 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
         return true
       },
       rollbackRecordingStart: () => {
-        acceptingChunksRef.current = false
-        pendingChunksRef.current.clear()
-        pendingAudioBudgetRef.current.reset()
+        resetChunkQueue(false)
         void capture.end()
       }
     })
-  }, [applyStatus, capture])
+  }, [applyStatus, capture, resetChunkQueue])
 
   const stop = useCallback(async () => {
     const client = clientRef.current
@@ -215,6 +224,14 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
 
     const generation = generationRef.current + 1
     generationRef.current = generation
+    const isCurrent = () =>
+      isCurrentMobileDictationFinish(
+        generationRef.current,
+        generation,
+        enabledRef.current,
+        activeIdRef.current,
+        dictationId
+      )
     applyStatus('processing')
     try {
       // Inside the try so a throwing native shutdown still runs the finally
@@ -227,15 +244,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
       await capture.end()
       acceptingChunksRef.current = false
       await Promise.allSettled(Array.from(pendingChunksRef.current))
-      if (
-        !isCurrentMobileDictationFinish(
-          generationRef.current,
-          generation,
-          enabledRef.current,
-          activeIdRef.current,
-          dictationId
-        )
-      ) {
+      if (!isCurrent()) {
         return
       }
       const finished = dictationSessionFinish.interpret(
@@ -245,32 +254,29 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
           { timeoutMs: DICTATION_FINISH_TIMEOUT_MS }
         )
       )
-      if (
-        !isCurrentMobileDictationFinish(
-          generationRef.current,
-          generation,
-          enabledRef.current,
-          activeIdRef.current,
-          dictationId
-        )
-      ) {
+      if (!isCurrent()) {
         return
       }
       const transcript = rpcPayloadMember(finished, 'text')
       const text = typeof transcript === 'string' ? transcript.trim() : ''
       activeIdRef.current = null
-      pendingChunksRef.current.clear()
-      pendingAudioBudgetRef.current.reset()
+      resetChunkQueue(false)
       applyStatus('idle')
+      const streamFailure = streamSalvageRef.current.take(dictationId)
       if (text) {
         onTranscriptRef.current(text)
-      } else {
-        reportError(new Error('No speech detected.'))
+      }
+      if (streamFailure || !text) {
+        reportError(new Error(streamFailure ?? 'No speech detected.'))
       }
     } catch (err) {
       failActiveDictation(dictationId, err)
     }
-  }, [applyStatus, capture, failActiveDictation])
+  }, [applyStatus, capture, failActiveDictation, resetChunkQueue])
+
+  useLayoutEffect(() => {
+    stopRef.current = stop
+  }, [stop])
 
   /**
    * Ends whatever dictation is underway. `reason === null` is the user's own cancel, the one silent

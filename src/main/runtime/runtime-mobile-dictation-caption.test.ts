@@ -132,4 +132,40 @@ describe('mobile dictation live captions', () => {
       text: 'Hello world.'
     })
   })
+
+  it('marks a mid-dictation stream failure so the phone finishes instead of discarding', async () => {
+    const controller = createController()
+    await controller.start({ dictationId: 'd1', ...CLIENT })
+    stt.sink?.({ type: 'final', text: 'Kept words.' })
+    stt.sink?.({ type: 'error', error: 'Soniox closed the stream (1000).' })
+
+    expect(() => controller.feed(CHUNK)).toThrow(
+      'dictation_stream_failed: Soniox closed the stream (1000).'
+    )
+    await expect(controller.finish({ dictationId: 'd1', ...CLIENT })).resolves.toEqual({
+      dictationId: 'd1',
+      text: 'Kept words.'
+    })
+  })
+
+  it('marks a feed failure the speech service reported', async () => {
+    const controller = createController()
+    await controller.start({ dictationId: 'd1', ...CLIENT })
+    stt.feedAudio.mockImplementationOnce(() => {
+      stt.sink?.({ type: 'error', error: 'limited to 30 minutes' })
+      throw new Error('limited to 30 minutes')
+    })
+
+    expect(() => controller.feed(CHUNK)).toThrow('dictation_stream_failed: limited to 30 minutes')
+  })
+
+  it('still fails finish when the stream failed before any text', async () => {
+    const controller = createController()
+    await controller.start({ dictationId: 'd1', ...CLIENT })
+    stt.sink?.({ type: 'error', error: 'Soniox rejected the API key (401).' })
+
+    await expect(controller.finish({ dictationId: 'd1', ...CLIENT })).rejects.toThrow(
+      'Soniox rejected the API key (401).'
+    )
+  })
 })

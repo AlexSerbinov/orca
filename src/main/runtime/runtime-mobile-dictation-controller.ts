@@ -1,6 +1,7 @@
 import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { RuntimeDictationChunkReply } from '../../shared/runtime-speech-provider-contracts'
 import { resolveTranscriptionLanguageHint } from '../../shared/speech-transcription-languages'
+import { formatDictationStreamFailure } from '../../shared/dictation-stream-failure'
 import { getSpeechModelManager, getSpeechSttService } from '../speech/speech-runtime-service'
 import type { RuntimeStore } from './runtime-store-contract'
 
@@ -92,14 +93,22 @@ export class RuntimeMobileDictationController {
       throw new Error('dictation_stream_closing')
     }
     if (session.errors.length > 0) {
-      throw new Error(session.errors[0])
+      throw new Error(formatDictationStreamFailure(session.errors[0]))
     }
     const pcm = Buffer.from(params.audioBase64, 'base64')
     const samples = new Float32Array(Math.floor(pcm.length / 2))
     for (let i = 0; i < samples.length; i += 1) {
       samples[i] = pcm.readInt16LE(i * 2) / 32768
     }
-    getSpeechSttService(this.requireStore()).feedAudio(samples, params.sampleRate, session.owner)
+    try {
+      getSpeechSttService(this.requireStore()).feedAudio(samples, params.sampleRate, session.owner)
+    } catch (error) {
+      // Why: a feed failure the session recorded (duration cap, send error) still leaves text to finish.
+      if (session.errors.length > 0) {
+        throw new Error(formatDictationStreamFailure(session.errors[0]))
+      }
+      throw error
+    }
     const text = joinTranscript(session)
     // Why: realtime providers update partials asynchronously; the chunk reply carries them as captions.
     return text
@@ -116,13 +125,12 @@ export class RuntimeMobileDictationController {
     session.state = 'closing'
     try {
       await getSpeechSttService(this.requireStore()).stopDictation(session.owner)
-      if (session.errors.length > 0) {
+      const text = joinTranscript(session)
+      // Why: a stream that failed mid-dictation already committed text; returning it beats losing it.
+      if (session.errors.length > 0 && !text) {
         throw new Error(session.errors[0])
       }
-      return {
-        dictationId: params.dictationId,
-        text: joinTranscript(session)
-      }
+      return { dictationId: params.dictationId, text }
     } finally {
       if (this.session?.id === session.id) {
         this.session = null
