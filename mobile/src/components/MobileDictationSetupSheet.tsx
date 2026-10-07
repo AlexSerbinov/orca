@@ -404,9 +404,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: spacing.sm,
     marginTop: spacing.lg,
     minHeight: 44,
     paddingVertical: spacing.sm
   },
-  manageLinkText: { color: colors.textSecondary, fontSize: typography.bodySize, fontWeight: '500' }
+  // Why: flex 1 wraps a long (or large Dynamic Type) label instead of pushing the chevron out.
+  manageLinkText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: typography.bodySize,
+    fontWeight: '500'
+  }
 })

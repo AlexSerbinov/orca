@@ -10,13 +10,17 @@ import {
   type LayoutChangeEvent
 } from 'react-native'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
-import { captionCharBudget, captionTail } from './dictation-caption-tail'
+import {
+  CAPTION_LINE_HEIGHT,
+  CAPTION_MAX_FONT_SCALE,
+  captionCharBudget,
+  captionStripMinHeight,
+  captionTail
+} from './dictation-caption-tail'
 import {
   useMobileDictationCaption,
   type MobileDictationCaptionStore
 } from '../hooks/mobile-dictation-caption-store'
-
-const CAPTION_LINE_HEIGHT = 19
 
 export type MobileDictationCaptionState = {
   readonly isRecording: boolean
@@ -47,7 +51,12 @@ export function MobileDictationCaptionStrip({ dictation, variant }: Props) {
   }
   return (
     <View
-      style={[styles.strip, variant === 'dock' ? styles.dock : styles.card]}
+      style={[
+        styles.strip,
+        // Why: reserve both caption lines at the Dynamic Type size so the strip doesn't jump.
+        { minHeight: captionStripMinHeight(fontScale) },
+        variant === 'dock' ? styles.dock : styles.card
+      ]}
       testID="dictation-caption-strip"
       accessibilityRole="text"
       accessibilityLiveRegion="polite"
@@ -61,6 +70,7 @@ export function MobileDictationCaptionStrip({ dictation, variant }: Props) {
         <Text
           style={styles.caption}
           numberOfLines={2}
+          maxFontSizeMultiplier={CAPTION_MAX_FONT_SCALE}
           // Why: iOS head-ellipsizes multi-line text natively; Android only honours tail there.
           ellipsizeMode={Platform.OS === 'ios' ? 'head' : 'tail'}
           onLayout={onCaptionLayout}
@@ -68,7 +78,12 @@ export function MobileDictationCaptionStrip({ dictation, variant }: Props) {
           {caption}
         </Text>
       ) : (
-        <Text style={styles.status} numberOfLines={1} onLayout={onCaptionLayout}>
+        <Text
+          style={styles.status}
+          numberOfLines={1}
+          maxFontSizeMultiplier={CAPTION_MAX_FONT_SCALE}
+          onLayout={onCaptionLayout}
+        >
           {dictation.isRecording ? 'Listening…' : 'Transcribing…'}
         </Text>
       )}
@@ -97,9 +112,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    // Why: reserve both caption lines so the strip doesn't jump as the first words arrive.
-    minHeight: CAPTION_LINE_HEIGHT * 2 + spacing.sm * 2
+    paddingVertical: spacing.sm
   },
   dock: {
     borderTopWidth: 1,

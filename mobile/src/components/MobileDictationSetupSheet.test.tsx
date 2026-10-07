@@ -125,6 +125,16 @@ describe('MobileDictationSetupSheet accessibility', () => {
     const toggle = renderer?.root.findByProps({ accessibilityLabel: 'Dictation enabled' })
     expect(toggle?.props.value).toBe(true)
   })
+
+  it('lets the manage link label wrap beside its chevron', async () => {
+    fetchSpeechProviders.mockResolvedValue(cabinetState())
+    await render(fakeClient())
+    const label = renderer?.root.findByProps({ children: 'Manage providers and API keys' })
+    expect(label?.props.style).toMatchObject({ flex: 1 })
+    expect(label?.parent?.props.style({ pressed: false })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ gap: 8 })])
+    )
+  })
 })
 
 describe('MobileDictationSetupSheet legacy rows', () => {

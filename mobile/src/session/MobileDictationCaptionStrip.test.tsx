@@ -52,6 +52,19 @@ function captionStore(text: string): MobileDictationCaptionStore {
 }
 
 describe('MobileDictationCaptionStrip', () => {
+  it('reserves two scaled caption lines and caps the caption Dynamic Type', () => {
+    render(
+      createElement(MobileDictationCaptionStrip, {
+        dictation: { ...idle, isRecording: true, captionStore: captionStore('hello there') },
+        variant: 'dock'
+      })
+    )
+    const strip = renderer.root.findByProps({ testID: 'dictation-caption-strip' })
+    expect(strip.props.style).toEqual(expect.arrayContaining([{ minHeight: 54 }]))
+    const caption = renderer.root.findByProps({ children: 'hello there' })
+    expect(caption.props.maxFontSizeMultiplier).toBe(1.5)
+  })
+
   it('renders nothing while the mic is closed', () => {
     expect(
       render(createElement(MobileDictationCaptionStrip, { dictation: idle, variant: 'dock' }))
