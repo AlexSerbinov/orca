@@ -34,10 +34,17 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
   const refreshModelStates = useAppStore((s) => s.refreshModelStates)
   const markFeatureTipsSeen = useAppStore((s) => s.markFeatureTipsSeen)
   const [catalog, setCatalog] = useState<SpeechModelManifest[]>([])
+  // Why: async key clears must resolve the selected model against the newest catalog, not the click-time one.
+  const catalogRef = useRef(catalog)
+  useEffect(() => {
+    catalogRef.current = catalog
+  }, [catalog])
   const [permissionPending, setPermissionPending] = useState(false)
   const cloudKeys = useCloudSpeechKeys()
   const refreshCloudKeys = cloudKeys.refresh
   const [keyDialogSession, setKeyDialogSession] = useState(0)
+  // Why: a save that outlives its dialog must not close or pick a model for a newer dialog.
+  const keyDialogSessionRef = useRef(0)
   // Why: the last provider stays set after close so the closing animation keeps its title.
   const [keyDialog, setKeyDialog] = useState<{
     providerId: CloudSpeechProviderId
@@ -164,7 +171,8 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
     providerId: CloudSpeechProviderId,
     pendingModelId: string | null
   ): void => {
-    setKeyDialogSession((session) => session + 1)
+    keyDialogSessionRef.current += 1
+    setKeyDialogSession(keyDialogSessionRef.current)
     setKeyDialog({ providerId, pendingModelId })
     setKeyDialogOpen(true)
   }
@@ -174,14 +182,16 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
       return
     }
     const { providerId, pendingModelId } = keyDialog
+    const session = keyDialogSessionRef.current
     await cloudKeys.saveKey(providerId, apiKey, verify)
+    const stillCurrent = keyDialogSessionRef.current === session
     updateVoiceSettings({
       ...(providerId === 'openai' ? { openAiApiKeyConfigured: true } : {}),
-      ...(pendingModelId ? { sttModel: pendingModelId } : {})
+      ...(pendingModelId && stillCurrent ? { sttModel: pendingModelId } : {})
     })
     // Why: the key is already saved; a failed state refresh must not read as a save error.
     await Promise.resolve(refreshModelStates()).catch(() => {})
-    if (mountedRef.current) {
+    if (mountedRef.current && keyDialogSessionRef.current === session) {
       setKeyDialogOpen(false)
     }
     toast.success(
@@ -191,12 +201,25 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
     )
   }
 
+  const loadLatestCatalog = async (): Promise<SpeechModelManifest[]> => {
+    if (catalogRef.current.length > 0) {
+      return catalogRef.current
+    }
+    // Why: a clear before the first catalog fetch lands would otherwise keep the provider's model selected.
+    const fetched = await window.api.speech.getCatalog().catch(() => [])
+    if (fetched.length > 0 && mountedRef.current) {
+      setCatalog(fetched)
+    }
+    return fetched
+  }
+
   const clearCloudKey = async (providerId: CloudSpeechProviderId): Promise<void> => {
     const providerLabel = getCloudSpeechProvider(providerId).label
     try {
       await cloudKeys.clearKey(providerId)
+      const latestCatalog = await loadLatestCatalog()
       const current = voiceSettingsRef.current
-      const selectedProvider = catalog.find((m) => m.id === current.sttModel)?.provider
+      const selectedProvider = latestCatalog.find((m) => m.id === current.sttModel)?.provider
       updateVoiceSettings({
         ...(providerId === 'openai' ? { openAiApiKeyConfigured: false } : {}),
         sttModel: selectedProvider === providerId ? '' : current.sttModel

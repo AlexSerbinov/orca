@@ -433,6 +433,110 @@ describe('VoicePane', () => {
     root.unmount()
   })
 
+  it('does not let a save from a closed dialog close a newer provider dialog', async () => {
+    const { root } = await renderVoicePane({
+      voiceEnabled: true,
+      markFeatureTipsSeen: vi.fn(),
+      updateSettings: vi.fn()
+    })
+    let resolveSave: () => void = () => {}
+    window.api.speech.saveCloudKey = vi.fn(
+      (providerId: CloudSpeechKeyStatus['providerId']) =>
+        new Promise<CloudSpeechKeyStatus>((resolve) => {
+          resolveSave = () => resolve(keyStatus(providerId, true))
+        })
+    )
+
+    await clickButton(findButton(document.body, 'Add API key'))
+    const input = document.querySelector<HTMLInputElement>('#cloud-speech-api-key')
+    if (!input) {
+      throw new Error('API key input was not rendered')
+    }
+    await typeInto(input, 'soniox-test-key')
+    await clickButton(findButton(document.body, 'Check and save'))
+    await clickButton(findButton(document.body, 'Close'))
+    // Soniox is still saving, so its row button is disabled; open the next free provider.
+    const nextAddButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (candidate) => candidate.textContent?.trim() === 'Add API key' && !candidate.disabled
+    )
+    if (!nextAddButton) {
+      throw new Error('No enabled "Add API key" button was rendered')
+    }
+    await clickButton(nextAddButton)
+    const newerTitle = document.querySelector('[data-slot="dialog-title"]')?.textContent
+
+    await act(async () => {
+      resolveSave()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(newerTitle).not.toContain('Soniox')
+    expect(document.querySelector('#cloud-speech-api-key')).not.toBeNull()
+    expect(document.querySelector('[data-slot="dialog-title"]')?.textContent).toBe(newerTitle)
+    root.unmount()
+  })
+
+  it('deselects a removed provider model even when the catalog had not loaded at click time', async () => {
+    const updateSettings = vi.fn()
+    const groqModel: SpeechModelManifest = {
+      id: 'groq-whisper-large-v3',
+      label: 'Whisper Large v3',
+      description: 'Groq',
+      provider: 'groq',
+      language: 'multi',
+      type: 'cloud',
+      sampleRate: 16000,
+      streaming: false
+    }
+    const storeState = {
+      modelStates: [],
+      refreshModelStates: vi.fn(),
+      markFeatureTipsSeen: vi.fn()
+    }
+    useAppStoreMock.mockImplementation((selector: (state: Record<string, unknown>) => unknown) =>
+      selector(storeState)
+    )
+    useShortcutLabelMock.mockReturnValue('Ctrl+Shift+Y')
+    installWindowApi(vi.fn(async () => deniedMicrophoneResult))
+    window.api.speech.getCloudKeyStatuses = vi.fn(async () => [keyStatus('groq', true)])
+    // The first fetch races the click and returns nothing; the clear must re-read the catalog.
+    window.api.speech.getCatalog = vi.fn().mockResolvedValueOnce([]).mockResolvedValue([groqModel])
+    const settings: GlobalSettings = {
+      ...makeSettings(),
+      voice: { ...getDefaultVoiceSettings(), enabled: true, sttModel: groqModel.id }
+    }
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(
+        <TooltipProvider>
+          <VoicePane settings={settings} updateSettings={updateSettings} />
+        </TooltipProvider>
+      )
+    })
+
+    const remove = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Remove Groq API key"]'
+    )
+    if (!remove) {
+      throw new Error('Remove Groq API key button was not rendered')
+    }
+    await clickButton(remove)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    root.unmount()
+
+    expect(window.api.speech.getCatalog).toHaveBeenCalledTimes(2)
+    expect(updateSettings).toHaveBeenCalledWith({
+      voice: expect.objectContaining({ sttModel: '' })
+    })
+  })
+
   it('shows the provider verdict after testing a saved key', async () => {
     useAppStoreMock.mockImplementation((selector: (state: Record<string, unknown>) => unknown) =>
       selector({ modelStates: [], refreshModelStates: vi.fn(), markFeatureTipsSeen: vi.fn() })
