@@ -21,7 +21,8 @@ export function useStructuredChatLiveSession(
   controller: StructuredChatController,
   historyPhase: ReturnType<typeof structuredChatHistoryPhase>,
   sessionId: string,
-  agent: NativeChatLiveSession['agent']
+  agent: NativeChatLiveSession['agent'],
+  hostReachable: boolean
 ): NativeChatLiveSession {
   return useMemo<NativeChatLiveSession>(
     () => ({
@@ -39,7 +40,8 @@ export function useStructuredChatLiveSession(
       sessionId,
       agent,
       ...(controller.error ? { error: controller.error } : {}),
-      hasMore: controller.hasOlder,
+      // Older pages can't load while the host is unreachable, so the row waits for it.
+      hasMore: controller.hasOlder && hostReachable,
       loadingEarlier: controller.loadingOlder,
       olderHistoryGeneration: controller.olderHistoryGeneration,
       loadEarlier: controller.loadOlder,
@@ -50,6 +52,6 @@ export function useStructuredChatLiveSession(
             ? 'error'
             : 'ready'
     }),
-    [controller, historyPhase, agent, sessionId]
+    [controller, historyPhase, agent, sessionId, hostReachable]
   )
 }
