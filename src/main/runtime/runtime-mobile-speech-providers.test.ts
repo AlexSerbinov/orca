@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { CloudSpeechProviderId } from '../../shared/cloud-speech-providers'
 import type { RuntimeStore } from './runtime-store-contract'
 
 const keyStore = vi.hoisted(() => ({
@@ -8,22 +9,27 @@ const keyStore = vi.hoisted(() => ({
 }))
 const verifyCloudSpeechApiKeyMock = vi.hoisted(() => vi.fn())
 
-vi.mock('../speech/cloud-speech-key-store', () => ({
-  hasCloudSpeechApiKey: (id: string) => keyStore.keys.has(id),
-  getCloudSpeechApiKeyHint: (id: string) => {
-    const key = keyStore.keys.get(id)
-    return key ? `…${key.slice(-4)}` : null
-  },
-  readCloudSpeechApiKey: (id: string) => keyStore.keys.get(id) ?? '',
-  saveCloudSpeechApiKey: (id: string, key: string) => {
-    keyStore.saveCloudSpeechApiKey(id, key)
-    keyStore.keys.set(id, key)
-  },
-  clearCloudSpeechApiKey: (id: string) => {
-    keyStore.clearCloudSpeechApiKey(id)
-    keyStore.keys.delete(id)
+vi.mock('../speech/cloud-speech-key-store', async () => {
+  const { beginCloudSpeechKeyChange } = await import('../speech/cloud-speech-key-change-fence')
+  return {
+    hasCloudSpeechApiKey: (id: string) => keyStore.keys.has(id),
+    getCloudSpeechApiKeyHint: (id: string) => {
+      const key = keyStore.keys.get(id)
+      return key ? `…${key.slice(-4)}` : null
+    },
+    readCloudSpeechApiKey: (id: string) => keyStore.keys.get(id) ?? '',
+    saveCloudSpeechApiKey: (id: CloudSpeechProviderId, key: string) => {
+      beginCloudSpeechKeyChange(id)
+      keyStore.saveCloudSpeechApiKey(id, key)
+      keyStore.keys.set(id, key)
+    },
+    clearCloudSpeechApiKey: (id: CloudSpeechProviderId) => {
+      beginCloudSpeechKeyChange(id)
+      keyStore.clearCloudSpeechApiKey(id)
+      keyStore.keys.delete(id)
+    }
   }
-}))
+})
 vi.mock('../speech/cloud-speech-key-verification', () => ({
   verifyCloudSpeechApiKey: verifyCloudSpeechApiKeyMock
 }))
@@ -126,6 +132,67 @@ describe('RuntimeMobileSpeechProviders', () => {
       keyConfigured: true,
       keyHint: '…9876'
     })
+  })
+
+  it('discards a verified save when the key is cleared while verifying', async () => {
+    let finishVerify: (result: { ok: boolean; message: null }) => void = () => {}
+    verifyCloudSpeechApiKeyMock.mockReturnValue(
+      new Promise((resolve) => {
+        finishVerify = resolve
+      })
+    )
+    const { providers } = createStore()
+
+    const saving = providers.saveKey({ providerId: 'groq', apiKey: 'gsk_old1' })
+    await providers.clearKey({ providerId: 'groq' })
+    finishVerify({ ok: true, message: null })
+
+    await expect(saving).rejects.toThrow(
+      "A newer change to this provider's key was made; this save was discarded."
+    )
+    expect(keyStore.saveCloudSpeechApiKey).not.toHaveBeenCalled()
+    expect(keyStore.keys.has('groq')).toBe(false)
+  })
+
+  it('keeps the newer of two overlapping saves even when the older verifies last', async () => {
+    const pending: ((result: { ok: boolean; message: null }) => void)[] = []
+    verifyCloudSpeechApiKeyMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pending.push(resolve)
+        })
+    )
+    const { providers } = createStore()
+
+    const saveA = providers.saveKey({ providerId: 'groq', apiKey: 'gsk_aaaa' })
+    const saveB = providers.saveKey({ providerId: 'groq', apiKey: 'gsk_bbbb' })
+    pending[1]({ ok: true, message: null })
+    await saveB
+    pending[0]({ ok: true, message: null })
+
+    await expect(saveA).rejects.toThrow('this save was discarded')
+    expect(keyStore.keys.get('groq')).toBe('gsk_bbbb')
+  })
+
+  it('discards the older save when it verifies first', async () => {
+    const pending: ((result: { ok: boolean; message: null }) => void)[] = []
+    verifyCloudSpeechApiKeyMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pending.push(resolve)
+        })
+    )
+    const { providers } = createStore()
+
+    const saveA = providers.saveKey({ providerId: 'groq', apiKey: 'gsk_aaaa' })
+    const saveB = providers.saveKey({ providerId: 'groq', apiKey: 'gsk_bbbb' })
+    pending[0]({ ok: true, message: null })
+    await expect(saveA).rejects.toThrow('this save was discarded')
+    pending[1]({ ok: true, message: null })
+    await saveB
+
+    expect(keyStore.saveCloudSpeechApiKey).toHaveBeenCalledTimes(1)
+    expect(keyStore.keys.get('groq')).toBe('gsk_bbbb')
   })
 
   it('rejects unknown providers', async () => {

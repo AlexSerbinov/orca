@@ -12,6 +12,7 @@ import {
   type CloudSpeechProviderId
 } from '../../shared/cloud-speech-providers'
 import { readCredentialFileProtection } from '../credential-file-protection'
+import { beginCloudSpeechKeyChange } from './cloud-speech-key-change-fence'
 
 const cachedKeys = new Map<CloudSpeechProviderId, string>()
 
@@ -98,6 +99,7 @@ export function saveCloudSpeechApiKey(providerId: CloudSpeechProviderId, apiKey:
   if (!isWellFormedCloudSpeechApiKey(trimmed)) {
     throw new Error(MALFORMED_CLOUD_SPEECH_API_KEY_MESSAGE)
   }
+  beginCloudSpeechKeyChange(providerId)
   const dir = getOrcaDir()
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
@@ -145,6 +147,7 @@ export function readCloudSpeechApiKey(providerId: CloudSpeechProviderId): string
 }
 
 export function clearCloudSpeechApiKey(providerId: CloudSpeechProviderId): void {
+  beginCloudSpeechKeyChange(providerId)
   cachedKeys.delete(providerId)
   rmSync(getKeyPath(providerId), { force: true })
   rmSync(getHintPath(providerId), { force: true })

@@ -23,6 +23,7 @@ import {
   readCloudSpeechApiKey,
   saveCloudSpeechApiKey
 } from '../speech/cloud-speech-key-store'
+import { saveCloudSpeechApiKeyIfLatest } from '../speech/cloud-speech-key-change-fence'
 import { verifyCloudSpeechApiKey } from '../speech/cloud-speech-key-verification'
 import { SPEECH_MODEL_CATALOG } from '../speech/model-catalog'
 import { getSpeechModelManager } from '../speech/speech-runtime-service'
@@ -114,13 +115,19 @@ export class RuntimeMobileSpeechProviders {
     if (!apiKey) {
       throw new Error('Missing API key')
     }
-    if (params.verify !== false) {
-      const result = await verifyCloudSpeechApiKey(providerId, apiKey)
-      if (!result.ok) {
-        throw new Error(result.message ?? 'The provider rejected this API key.')
-      }
-    }
-    saveCloudSpeechApiKey(providerId, apiKey)
+    await saveCloudSpeechApiKeyIfLatest(
+      providerId,
+      async () => {
+        if (params.verify === false) {
+          return
+        }
+        const result = await verifyCloudSpeechApiKey(providerId, apiKey)
+        if (!result.ok) {
+          throw new Error(result.message ?? 'The provider rejected this API key.')
+        }
+      },
+      () => saveCloudSpeechApiKey(providerId, apiKey)
+    )
     this.notifyVoiceListeners()
     return this.list()
   }

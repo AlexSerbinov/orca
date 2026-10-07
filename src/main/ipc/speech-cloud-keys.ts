@@ -13,6 +13,7 @@ import {
   readCloudSpeechApiKey,
   saveCloudSpeechApiKey
 } from '../speech/cloud-speech-key-store'
+import { saveCloudSpeechApiKeyIfLatest } from '../speech/cloud-speech-key-change-fence'
 import { verifyCloudSpeechApiKey } from '../speech/cloud-speech-key-verification'
 
 function requireProviderId(value: unknown): CloudSpeechProviderId {
@@ -35,13 +36,19 @@ export function registerCloudSpeechKeyHandlers(): void {
       if (typeof apiKey !== 'string' || !apiKey.trim()) {
         throw new Error('API key is required')
       }
-      if (verify === true) {
-        const result = await verifyCloudSpeechApiKey(providerId, apiKey)
-        if (!result.ok) {
-          throw new Error(result.message ?? 'The provider rejected this API key.')
-        }
-      }
-      saveCloudSpeechApiKey(providerId, apiKey)
+      await saveCloudSpeechApiKeyIfLatest(
+        providerId,
+        async () => {
+          if (verify !== true) {
+            return
+          }
+          const result = await verifyCloudSpeechApiKey(providerId, apiKey)
+          if (!result.ok) {
+            throw new Error(result.message ?? 'The provider rejected this API key.')
+          }
+        },
+        () => saveCloudSpeechApiKey(providerId, apiKey)
+      )
       return getCloudSpeechKeyStatus(providerId)
     }
   )
