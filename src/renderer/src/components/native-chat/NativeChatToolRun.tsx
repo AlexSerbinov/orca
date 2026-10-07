@@ -1,5 +1,5 @@
 import type { CommentMarkdownLinkClickHandler } from '@/components/sidebar/CommentMarkdown'
-import { useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNativeChatDisclosure } from './native-chat-disclosure-store'
 import { NativeChatToolLine } from './NativeChatToolLine'
@@ -67,7 +67,9 @@ export function NativeChatToolRun({
   trailing,
   expandOverride,
   disclosureId,
-  onLinkClick
+  onLinkClick,
+  asidesBefore,
+  asideAfter
 }: {
   blocks: NativeChatBlock[]
   previousTodoWrite?: NativeChatToolCallBlock
@@ -95,6 +97,9 @@ export function NativeChatToolRun({
    *  opened has to be remembered somewhere that outlives the row. */
   disclosureId?: string
   onLinkClick?: CommentMarkdownLinkClickHandler
+  /** Drawn among the open run's lines: before the block each is keyed by, and after the last. */
+  asidesBefore?: ReadonlyMap<NativeChatBlock, React.ReactNode>
+  asideAfter?: React.ReactNode
 }): React.JSX.Element | null {
   // This row owns the language subscription for its tool, diff, and task labels.
   useTranslation()
@@ -327,7 +332,7 @@ export function NativeChatToolRun({
         <div className="ml-[7px] mt-0.5 border-l border-chat-code-border pl-[13px]">
           {(() => {
             const seen = new Map<string, number>()
-            return headerBlocks.map((block, blockIndex) => {
+            const lines = headerBlocks.map((block, blockIndex) => {
               const taskList = taskLists?.rows.get(block)
               if (taskList) {
                 return <NativeChatTaskList key={`tasks:${blockIndex}`} {...taskList} />
@@ -396,6 +401,26 @@ export function NativeChatToolRun({
                 />
               )
             })
+            if (!asidesBefore && asideAfter === undefined) {
+              return lines
+            }
+            // An aside rides with the block it precedes, so a consumed result still keeps it.
+            return (
+              <>
+                {headerBlocks.map((block, blockIndex) => {
+                  const aside = asidesBefore?.get(block)
+                  return aside === undefined ? (
+                    lines[blockIndex]
+                  ) : (
+                    <Fragment key={`aside:${blockIndex}`}>
+                      {aside}
+                      {lines[blockIndex]}
+                    </Fragment>
+                  )
+                })}
+                {asideAfter}
+              </>
+            )
           })()}
         </div>
       ) : null}

@@ -3,6 +3,7 @@ import type { CommentMarkdownLinkClickHandler } from '@/components/sidebar/Comme
 import { cn } from '@/lib/utils'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
 import { MessageRow, type NativeChatDeliveryNotice } from './NativeChatMessageRow'
+import { NativeChatWorkRunRow } from './NativeChatWorkRunRow'
 import { NativeChatResolutionReceipt } from './NativeChatResolutionReceipt'
 import { NativeChatWorkingStatus } from './NativeChatWorkingStatus'
 import { NativeChatTurnDiffRollup } from './NativeChatTurnDiffRollup'
@@ -76,7 +77,7 @@ export const NativeChatTranscriptRow = memo(function NativeChatTranscriptRow({
       />
     )
   }
-  const { message, turnKey, status, receipt, turnDiff } = slot
+  const { message, turnKey, status, receipt, turnDiff, workRun } = slot
   const deliveryNotice = context.deliveryNotices?.get(message.id)
   const predecessors = context.taskListPredecessors.get(message.id)
   const expanded = turnKey ? context.expandedTurnIds.has(turnKey) : undefined
@@ -97,6 +98,24 @@ export const NativeChatTranscriptRow = memo(function NativeChatTranscriptRow({
       {slot.statusAbove ? statusRow : null}
       {!slot.drawsMessage ? null : receipt ? (
         <NativeChatResolutionReceipt body={receipt} disclosureId={message.id} />
+      ) : workRun ? (
+        <NativeChatWorkRunRow
+          members={workRun}
+          previousTodoWrite={predecessors?.todowrite}
+          previousUpdatePlan={predecessors?.update_plan}
+          revealedDiff={
+            workRun.some((member) => member.id === context.revealedDiff?.messageId)
+              ? (context.revealedDiff ?? undefined)
+              : undefined
+          }
+          expandSignal={context.expandSignal}
+          activeTurnIsWorking={slot.activeTurnIsWorking}
+          trailingRun={slot.trailingRun}
+          onScrollMessageToTop={context.onScrollMessageToTop}
+          onLinkClick={context.onLinkClick}
+          allowFileUriLinks={context.allowFileUriLinks}
+          runtimeContext={context.runtimeContext}
+        />
       ) : (
         <MessageRow
           message={message}

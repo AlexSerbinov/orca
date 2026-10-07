@@ -8,6 +8,7 @@ import { NativeChatMarkdown } from './NativeChatMarkdown'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import type {
+  NativeChatBlock,
   NativeChatMessage,
   NativeChatToolCallBlock
 } from '../../../../shared/native-chat-types'
@@ -78,6 +79,14 @@ function UserMessageMeta({
   )
 }
 
+/** A work run drawn under this message's words in place of its own tool calls: every call in
+ *  the run, and the thoughts among them. */
+export type NativeChatMessageRowRun = {
+  blocks: NativeChatBlock[]
+  asidesBefore: ReadonlyMap<NativeChatBlock, React.ReactNode>
+  asideAfter?: React.ReactNode
+}
+
 /** One message: its prose first, then a collapsible run folding all of the
  *  turn's tool activity. Monochrome per STYLEGUIDE: user prompts read as a
  *  lifted card, assistant prose as body copy, reasoning de-emphasized.
@@ -99,7 +108,8 @@ export const MessageRow = memo(function MessageRow({
   subagentDisclosure,
   inSubagentSection = false,
   runtimeContext,
-  rewind
+  rewind,
+  run
 }: {
   message: NativeChatMessage
   previousTodoWrite?: NativeChatToolCallBlock
@@ -122,6 +132,7 @@ export const MessageRow = memo(function MessageRow({
   runtimeContext?: RuntimeFileOperationArgs | null
   /** On a user row: discards it and everything after it. */
   rewind?: NativeChatRewindSurface
+  run?: NativeChatMessageRowRun
 }): React.JSX.Element | null {
   const rowRef = useRef<HTMLDivElement | null>(null)
   const blocks = nativeChatBlocksInOwnWords(message.blocks)
@@ -309,7 +320,7 @@ export const MessageRow = memo(function MessageRow({
       ) : null}
       {tools.length > 0 || subagentGroups.length > 0 || backgroundTasks.length > 0 ? (
         <NativeChatToolRun
-          blocks={tools}
+          blocks={run?.blocks ?? tools}
           previousTodoWrite={previousTodoWrite}
           previousUpdatePlan={previousUpdatePlan}
           revealedDiff={revealedDiff}
@@ -323,6 +334,8 @@ export const MessageRow = memo(function MessageRow({
           activeTurnIsWorking={activeTurnIsWorking}
           trailing={trailingRun}
           disclosureId={message.id}
+          asidesBefore={run?.asidesBefore}
+          asideAfter={run?.asideAfter}
         />
       ) : null}
       {showControls ? (

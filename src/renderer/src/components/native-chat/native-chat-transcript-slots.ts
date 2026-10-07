@@ -46,6 +46,7 @@ import {
   type NativeChatSubagentSectionSlot
 } from './native-chat-subagent-section-slots'
 import { nativeChatRowRendersProse, nativeChatRowSpeaksOrActs } from './native-chat-trailing-run'
+import { nativeChatWorkRunMember } from '../../../../shared/native-chat-work-run'
 
 export type NativeChatTranscriptSlot =
   | NativeChatMessageSlot
@@ -85,6 +86,9 @@ export type NativeChatMessageSlot = {
   depth: number
   /** Height to reserve before the row has ever been measured. */
   estimatedHeight: number
+  /** Set when this row draws an unbroken stretch of tool calls and thoughts as one run:
+   *  every message in it, `message` first. */
+  workRun?: readonly NativeChatMessage[]
 }
 
 export type NativeChatTranscriptSlotsInput = {
@@ -185,10 +189,50 @@ export function buildNativeChatTranscriptSlots(
     typography
   })
   const pending = [...(sections.openAt.get(null) ?? [])]
+  // Rows of the work run still open, drawn as one slot once something ends it.
+  let run: { slots: NativeChatMessageSlot[]; hasTool: boolean } = { slots: [], hasTool: false }
+  const flushRun = (): void => {
+    const [head] = run.slots
+    if (head && run.slots.length > 1 && run.hasTool) {
+      const workRun = run.slots.map((slot) => slot.message)
+      slots.push({
+        ...head,
+        trailingRun: run.slots.some((slot) => slot.trailingRun),
+        workRun,
+        estimatedHeight: estimateNativeChatRowHeight(
+          nativeChatRowContentMetrics(
+            { ...head.message, role: 'assistant', blocks: workRun.flatMap((m) => m.blocks) },
+            typography
+          ),
+          { hasReceipt: false, hasStatus: head.status !== undefined, hasTurnDiff: false },
+          typography
+        )
+      })
+    } else {
+      slots.push(...run.slots)
+    }
+    run = { slots: [], hasTool: false }
+  }
   for (const [index, message] of messages.entries()) {
-    sectionSlots.openBefore(pending, message, 0)
     const turnKey = turnKeys[index]
     const receipt = receipts.get(message.id)
+    const folded = foldedRows.has(index)
+    const drawsRow =
+      receipt !== undefined ||
+      (!folded && nativeChatRowRendersContent(message.blocks) && message.id !== liveReasoningId)
+    const member = drawsRow ? nativeChatWorkRunMember(message, receipt !== undefined) : null
+    // A row that draws nothing (a folded or empty one, or the live line's thought) leaves the
+    // run open. A drawn row that is not run work or speaks, a new turn, or a subagent section
+    // heading in between ends it.
+    if (
+      run.slots.length > 0 &&
+      ((drawsRow && (member === null || member === 'lead')) ||
+        turnKey !== run.slots[0]!.turnKey ||
+        sectionSlots.opensBefore(pending, message))
+    ) {
+      flushRun()
+    }
+    sectionSlots.openBefore(pending, message, 0)
     const bar = turnKey === undefined ? undefined : bars.get(turnKey)
     // A turn's bar draws at its first row, so a message folded into it (a steer) carries none.
     const candidateStatus =
@@ -201,7 +245,6 @@ export function buildNativeChatTranscriptSlots(
     const status = candidateStatus ?? undefined
     const turnDiff =
       turnKey && lastRowByTurn.get(turnKey) === index ? turnDiffs.get(turnKey) : undefined
-    const folded = foldedRows.has(index)
     // Skipping a folded row entirely is what keeps windowing honest: a counted
     // index the row declines to draw reserves estimated height for nothing and
     // opens a gap in the transcript.
@@ -210,12 +253,9 @@ export function buildNativeChatTranscriptSlots(
       liveTurnKey,
       isWorking || lifecycleWorking
     )
-    const drawsRow =
-      receipt !== undefined ||
-      (!folded && nativeChatRowRendersContent(message.blocks) && message.id !== liveReasoningId)
     const roster = sectionSlots.rosterAt(message.id)
     if (drawsRow || status !== undefined || turnDiff !== undefined) {
-      slots.push({
+      const slot: NativeChatMessageSlot = {
         kind: 'message',
         message,
         turnKey,
@@ -240,10 +280,25 @@ export function buildNativeChatTranscriptSlots(
           },
           typography
         )
-      })
+      }
+      // A row that carries its turn's bar may head a run but not join one; one that carries
+      // the turn's diff rollup, which draws under it, does neither.
+      const joins =
+        member !== null &&
+        roster === undefined &&
+        turnDiff === undefined &&
+        (run.slots.length === 0 || (status === undefined && member !== 'lead'))
+      if (!joins) {
+        flushRun()
+        slots.push(slot)
+      } else {
+        run.slots.push(slot)
+        run.hasTool ||= member !== 'thought'
+      }
     }
     sectionSlots.openAnchoredAt(message, roster, turnKey)
   }
+  flushRun()
   sectionSlots.openBefore(pending, undefined, 0)
   return slots
 }
@@ -261,8 +316,8 @@ export function nativeChatSlotKey(slot: NativeChatTranscriptSlot): string {
   }
 }
 
-/** Slot index of a message id, or -1. Reveal targets arrive as ids because the
- *  row that owns them may not be mounted to be pointed at. */
+/** Slot index of a message id, or -1, counting a work run's members as its row. Reveal
+ *  targets arrive as ids because the row that owns them may not be mounted to be pointed at. */
 export function nativeChatSlotIndexOf(
   slots: readonly NativeChatTranscriptSlot[],
   messageId: string | undefined
@@ -270,7 +325,12 @@ export function nativeChatSlotIndexOf(
   if (messageId === undefined) {
     return -1
   }
-  return slots.findIndex((slot) => slot.kind === 'message' && slot.message.id === messageId)
+  return slots.findIndex(
+    (slot) =>
+      slot.kind === 'message' &&
+      (slot.message.id === messageId ||
+        slot.workRun?.some((member) => member.id === messageId) === true)
+  )
 }
 
 /** Splits off the slots of messages waiting behind the live turn, and of ones shown as not sent
