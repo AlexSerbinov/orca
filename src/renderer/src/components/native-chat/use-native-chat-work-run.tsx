@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import type { CommentMarkdownLinkClickHandler } from '@/components/sidebar/CommentMarkdown'
 import type { NativeChatBlock, NativeChatMessage } from '../../../../shared/native-chat-types'
 import { deriveNativeChatRowContent } from '../../../../shared/native-chat-row-content'
-import { nativeChatReasoningDisclosureKey } from '../../../../shared/native-chat-reasoning-row'
 import {
   nativeChatWorkRunEditKey,
   nativeChatWorkRunEntries
@@ -17,8 +16,6 @@ export type NativeChatWorkRun = {
   blocks: NativeChatBlock[]
   /** The thoughts, among the calls they came between. */
   asides: NativeChatToolRunAsides
-  /** The thoughts' disclosures: one the reader holds open keeps the run open with it. */
-  openWith: readonly string[]
   /** The diff reveal aimed at a member, in the run's own edit numbering. */
   revealedDiff: NativeChatDiffReveal | undefined
 }
@@ -60,10 +57,7 @@ export function useNativeChatWorkRun(
     }
     return {
       blocks,
-      asides: { before, after: thoughtsAfter.map(thought) },
-      openWith: members
-        .filter((message) => message.role === 'reasoning')
-        .map((message) => nativeChatReasoningDisclosureKey(message.id))
+      asides: { before, after: thoughtsAfter.map(thought) }
     }
   }, [members, activeTurnIsWorking, onLinkClick, allowFileUriLinks])
   const runReveal = useMemo(() => {

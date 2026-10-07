@@ -14,17 +14,20 @@ export type NativeChatWorkRunMember = 'lead' | 'tool' | 'thought'
 
 /** What a drawn row contributes to a work run, or null when it ends one. Rows that carry
  *  anything besides words and plain tool activity (a roster, a background task, a question,
- *  an approval's receipt) keep their own row. */
+ *  an approval's receipt) keep their own row. `scopeIsWorking`: the row's turn or subagent is
+ *  still running. */
 export function nativeChatWorkRunMember(
   message: NativeChatMessage,
-  hasReceipt: boolean
+  hasReceipt: boolean,
+  scopeIsWorking: boolean
 ): NativeChatWorkRunMember | null {
   if (hasReceipt) {
     return null
   }
-  // Any drawn thought joins: one with no visible text draws nothing inside the run either.
   if (message.role === 'reasoning') {
-    return 'thought'
+    // A thought still being thought stays in view on its own row; it joins once it ends. Any
+    // other drawn thought joins, and one with no visible text draws nothing inside the run.
+    return scopeIsWorking && message.state === 'running' ? null : 'thought'
   }
   const content = deriveNativeChatRowContent(message.blocks)
   if (

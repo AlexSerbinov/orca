@@ -338,7 +338,6 @@ export const MessageRow = memo(function MessageRow({
           trailing={trailingRun}
           disclosureId={message.id}
           asides={run?.asides}
-          openWith={run?.openWith}
         />
       ) : null}
       {showControls ? (

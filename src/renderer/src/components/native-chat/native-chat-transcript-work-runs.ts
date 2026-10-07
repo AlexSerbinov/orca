@@ -27,7 +27,11 @@ function workRunRow(slot: NativeChatTranscriptSlot): NativeChatWorkRunRow {
   return {
     member:
       slot.drawsMessage && slot.subagentRoster === undefined
-        ? nativeChatWorkRunMember(slot.message, slot.receipt !== undefined)
+        ? nativeChatWorkRunMember(
+            slot.message,
+            slot.receipt !== undefined,
+            slot.activeTurnIsWorking
+          )
         : null,
     draws: true,
     scope: `${slot.depth}:${agentJournalItemSubagentId(slot.message)}:${slot.turnKey}`

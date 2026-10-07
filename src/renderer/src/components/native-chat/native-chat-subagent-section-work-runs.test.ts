@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { NativeChatMessage } from '../../../../shared/native-chat-types'
+import type {
+  NativeChatMessage,
+  NativeChatSubagentState
+} from '../../../../shared/native-chat-types'
 import { projectNativeChatTranscript } from '../../../../shared/native-chat-transcript-projection'
 import { nativeChatTurnMembership } from '../../../../shared/native-chat-turn-membership'
 import { compareMessages } from './native-chat-session-assembler'
@@ -31,12 +34,24 @@ function row(
 const say = (value: string) => [{ type: 'text' as const, text: value }]
 const call = (name: string) => [{ type: 'tool-call' as const, name, input: { name } }]
 const by = (agentId: string) => ({ agentId, producerKind: 'agent' as const })
-const thought = (id: string, agentId?: string) =>
+const thought = (id: string, agentId?: string, state: 'running' | 'completed' = 'completed') =>
   row(id, say(`thinking ${id}`), {
     role: 'reasoning',
-    state: 'completed',
+    state,
     ...(agentId ? by(agentId) : {})
   })
+const roster = (id: string, agentId: string, state: NativeChatSubagentState) =>
+  row(
+    id,
+    [
+      {
+        type: 'subagent-group',
+        groupId: `group-${id}`,
+        agents: [{ id: agentId, label: agentId, state }]
+      }
+    ],
+    { role: 'system' }
+  )
 
 function slotsOf(rows: NativeChatMessage[], open: Record<string, boolean>) {
   const { conversation, subagentRows } = projectNativeChatTranscript(rows, compareMessages)
@@ -106,6 +121,37 @@ describe('work runs and subagent sections', () => {
       '[helper]',
       '>s-a',
       'r1+c'
+    ])
+  })
+
+  // Only a finished thought folds into the run: one still being thought stays in view.
+  it("keeps a working section's open thought out of its run until it ends", () => {
+    const rows = (state: NativeChatSubagentState, last: 'running' | 'completed') => {
+      sequence = 0
+      return [
+        row('ask', say('go'), { role: 'user' }),
+        roster('spawn', 'helper', state),
+        thought('s-r1', 'helper'),
+        row('s-a', call('Read'), by('helper')),
+        thought('s-r2', 'helper', last)
+      ]
+    }
+    expect(outline(slotsOf(rows('working', 'running'), { helper: true }))).toEqual([
+      'ask',
+      'spawn',
+      '>s-r1+s-a',
+      '>s-r2'
+    ])
+    expect(outline(slotsOf(rows('working', 'completed'), { helper: true }))).toEqual([
+      'ask',
+      'spawn',
+      '>s-r1+s-a+s-r2'
+    ])
+    // A thought its finished agent never closed is not still being thought.
+    expect(outline(slotsOf(rows('completed', 'running'), { helper: true }))).toEqual([
+      'ask',
+      'spawn',
+      '>s-r1+s-a+s-r2'
     ])
   })
 })

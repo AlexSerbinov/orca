@@ -69,9 +69,3 @@ export function useNativeChatDisclosure(
   )
   return { open, setOpen }
 }
-
-/** Whether the reader holds any of `keys` open. */
-export function useNativeChatDisclosuresOpen(keys: readonly string[] | undefined): boolean {
-  const store = useContext(NativeChatDisclosureContext)
-  return store !== null && keys !== undefined && keys.some((key) => store.read(key) === true)
-}

@@ -1,10 +1,7 @@
 import type { CommentMarkdownLinkClickHandler } from '@/components/sidebar/CommentMarkdown'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  useNativeChatDisclosure,
-  useNativeChatDisclosuresOpen
-} from './native-chat-disclosure-store'
+import { useNativeChatDisclosure } from './native-chat-disclosure-store'
 import { NativeChatToolLine } from './NativeChatToolLine'
 import { Check, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -78,8 +75,7 @@ export function NativeChatToolRun({
   expandOverride,
   disclosureId,
   onLinkClick,
-  asides,
-  openWith
+  asides
 }: {
   blocks: NativeChatBlock[]
   previousTodoWrite?: NativeChatToolCallBlock
@@ -108,9 +104,6 @@ export function NativeChatToolRun({
   disclosureId?: string
   onLinkClick?: CommentMarkdownLinkClickHandler
   asides?: NativeChatToolRunAsides
-  /** Disclosure keys of rows inside the run: while the reader holds one open, so is the run,
-   *  unless they chose otherwise for the run itself. */
-  openWith?: readonly string[]
 }): React.JSX.Element | null {
   // This row owns the language subscription for its tool, diff, and task labels.
   useTranslation()
@@ -120,10 +113,9 @@ export function NativeChatToolRun({
     disclosureId === undefined
       ? undefined
       : `run:${disclosureId}:${expandOverride ?? '-'}:${expandSignal}:${revealedDiff?.requestId ?? '-'}`
-  const insideHeldOpen = useNativeChatDisclosuresOpen(openWith)
   const { open, setOpen } = useNativeChatDisclosure(
     runKey,
-    revealedDiff ? true : (expandOverride ?? (expandSignal || insideHeldOpen))
+    revealedDiff ? true : (expandOverride ?? expandSignal)
   )
 
   // Childless groups are dropped so `subagentRows.length` stays an honest test of

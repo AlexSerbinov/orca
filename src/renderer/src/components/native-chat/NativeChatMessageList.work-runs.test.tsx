@@ -111,18 +111,21 @@ describe('a thought joining a work run', () => {
     expect(screen.queryByText('Weighing two approaches')).toBeNull()
   })
 
-  // Opened while live, it stays in view once it lands in the run; the run's own choice still wins.
-  it('keeps a thought the reader opened in view, until they close the run', () => {
+  // The run never opens for a thought; the thought keeps its own open state inside it.
+  it('keeps a thought the reader opened live open inside its collapsed run', () => {
     const { rerender } = render(list([command, reasoning('running')]))
     fireEvent.click(screen.getByRole('button', { name: 'Thinking' }))
     expect(screen.getByText('Weighing two approaches')).toBeInTheDocument()
 
     rerender(list([command, reasoning('completed')]))
-    expect(runHeader()).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('Weighing two approaches')).toBeInTheDocument()
-
-    fireEvent.click(runHeader())
     expect(runHeader()).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByText('Weighing two approaches')).toBeNull()
+
+    fireEvent.click(runHeader())
+    expect(screen.getByRole('button', { name: /Thought for/ })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+    expect(screen.getByText('Weighing two approaches')).toBeInTheDocument()
   })
 })
