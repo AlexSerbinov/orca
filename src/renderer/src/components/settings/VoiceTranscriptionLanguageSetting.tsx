@@ -1,15 +1,18 @@
 import {
   AUTO_TRANSCRIPTION_LANGUAGE,
+  getModelTranscriptionLanguages,
   SPEECH_TRANSCRIPTION_LANGUAGES,
   type SpeechTranscriptionLanguage
 } from '../../../../shared/speech-transcription-languages'
-import type { VoiceSettings } from '../../../../shared/speech-types'
+import type { SpeechModelManifest, VoiceSettings } from '../../../../shared/speech-types'
 import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { getIntlLocale, translate } from '@/i18n/i18n'
 
 type VoiceTranscriptionLanguageSettingProps = {
   voiceSettings: VoiceSettings
+  /** The model dictation will use; its own language support narrows the choices. */
+  selectedModel: SpeechModelManifest | undefined
   onUpdateVoiceSettings: (updates: Partial<VoiceSettings>) => void
 }
 
@@ -29,15 +32,48 @@ function createLanguageNamer(): (language: SpeechTranscriptionLanguage) => strin
   }
 }
 
+function describeLanguageSupport(
+  selectedModel: SpeechModelManifest | undefined,
+  supported: string[] | null,
+  current: SpeechTranscriptionLanguage | undefined,
+  nameLanguage: (language: SpeechTranscriptionLanguage) => string
+): string {
+  if (selectedModel && supported === null) {
+    return translate(
+      'auto.components.settings.VoiceTranscriptionLanguage.modelPicksLanguage',
+      '{{value0}} detects the language itself.',
+      { value0: selectedModel.label }
+    )
+  }
+  if (selectedModel && supported && current && current.code !== AUTO_TRANSCRIPTION_LANGUAGE) {
+    if (!supported.includes(current.code)) {
+      return translate(
+        'auto.components.settings.VoiceTranscriptionLanguage.unsupported',
+        "{{value0}} doesn't support {{value1}}, so it will auto-detect.",
+        { value0: selectedModel.label, value1: nameLanguage(current) }
+      )
+    }
+  }
+  return translate(
+    'auto.components.settings.VoiceTranscriptionLanguage.description',
+    'Hint for cloud models. Auto-detect lets the provider choose.'
+  )
+}
+
 export function VoiceTranscriptionLanguageSetting({
   voiceSettings,
+  selectedModel,
   onUpdateVoiceSettings
 }: VoiceTranscriptionLanguageSettingProps): React.JSX.Element {
   const nameLanguage = createLanguageNamer()
-  const known = SPEECH_TRANSCRIPTION_LANGUAGES.some(
+  const current = SPEECH_TRANSCRIPTION_LANGUAGES.find(
     (language) => language.code === voiceSettings.transcriptionLanguage
   )
-  const value = known ? voiceSettings.transcriptionLanguage : AUTO_TRANSCRIPTION_LANGUAGE
+  const value = current ? current.code : AUTO_TRANSCRIPTION_LANGUAGE
+  // Why: no model selected yet means nothing to narrow by, so every language stays available.
+  const supported = selectedModel
+    ? getModelTranscriptionLanguages(selectedModel.transcriptionLanguages)
+    : getModelTranscriptionLanguages('any')
   const label = translate(
     'auto.components.settings.VoiceTranscriptionLanguage.label',
     'Transcription Language'
@@ -48,15 +84,12 @@ export function VoiceTranscriptionLanguageSetting({
       <div className="space-y-0.5">
         <Label>{label}</Label>
         <p className="text-xs text-muted-foreground">
-          {translate(
-            'auto.components.settings.VoiceTranscriptionLanguage.description',
-            'Hint for cloud models. Auto-detect lets the provider choose.'
-          )}
+          {describeLanguageSupport(selectedModel, supported, current, nameLanguage)}
         </p>
       </div>
       <Select
         value={value}
-        disabled={!voiceSettings.enabled}
+        disabled={!voiceSettings.enabled || supported === null}
         onValueChange={(next) => onUpdateVoiceSettings({ transcriptionLanguage: next })}
       >
         <SelectTrigger size="sm" aria-label={label} className="w-44 shrink-0">
@@ -64,7 +97,15 @@ export function VoiceTranscriptionLanguageSetting({
         </SelectTrigger>
         <SelectContent>
           {SPEECH_TRANSCRIPTION_LANGUAGES.map((language) => (
-            <SelectItem key={language.code} value={language.code}>
+            <SelectItem
+              key={language.code}
+              value={language.code}
+              disabled={
+                language.code !== AUTO_TRANSCRIPTION_LANGUAGE &&
+                supported !== null &&
+                !supported.includes(language.code)
+              }
+            >
               {nameLanguage(language)}
             </SelectItem>
           ))}

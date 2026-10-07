@@ -12,6 +12,11 @@ import { VoiceCabinetSections } from './voice-cabinet-sections'
 import { SpeechModelPickerDrawer } from './speech-model-picker-drawer'
 import { SpeechLanguagePickerDrawer } from './speech-language-picker-drawer'
 import type { MobileSpeechProvider } from '../dictation/speech-provider-reply-schema'
+import {
+  findSelectedSpeechModel,
+  speechModelLabel,
+  speechModelLanguageSupport
+} from '../dictation/speech-provider-presentation'
 
 export default function VoiceSettingsScreen({
   operations,
@@ -33,6 +38,7 @@ export default function VoiceSettingsScreen({
   const dictationMode = cabinet ? cabinet.dictationMode : setup?.dictationMode
   const selectedModelLabel =
     setup?.models.find((m) => m.id === setup.selectedModelId)?.label ?? 'None selected'
+  const selectedCabinetModel = cabinet ? findSelectedSpeechModel(cabinet) : null
   const openProvider = (provider: MobileSpeechProvider) => {
     controller.setModelDrawerOpen(false)
     onOpenProvider?.(provider.id)
@@ -126,6 +132,8 @@ export default function VoiceSettingsScreen({
           <SpeechLanguagePickerDrawer
             visible={controller.languageDrawerOpen}
             language={cabinet.language}
+            support={speechModelLanguageSupport(selectedCabinetModel?.model)}
+            modelLabel={selectedCabinetModel ? speechModelLabel(selectedCabinetModel.model) : null}
             onClose={() => controller.setLanguageDrawerOpen(false)}
             onSelect={(code) => void controller.setLanguage(code)}
           />

@@ -12,7 +12,7 @@ import {
   speechModelLabel,
   speechProviderLabel,
   speechProviderStatusText,
-  transcriptionLanguageLabel
+  transcriptionLanguageSummary
 } from '../dictation/speech-provider-presentation'
 import type {
   MobileSpeechProvider,
@@ -82,7 +82,7 @@ export function VoiceCabinetSections({
           <View style={base.rowContent}>
             <Text style={base.rowLabel}>Language</Text>
             <Text style={base.rowSublabel} numberOfLines={1}>
-              {transcriptionLanguageLabel(state.language)}
+              {transcriptionLanguageSummary(state)}
             </Text>
           </View>
           <ChevronRight size={18} color={colors.textMuted} />

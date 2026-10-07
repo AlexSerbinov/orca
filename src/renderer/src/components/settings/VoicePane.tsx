@@ -245,6 +245,7 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
 
       <VoiceTranscriptionLanguageSetting
         voiceSettings={voiceSettings}
+        selectedModel={catalog.find((model) => model.id === voiceSettings.sttModel)}
         onUpdateVoiceSettings={updateVoiceSettings}
       />
 

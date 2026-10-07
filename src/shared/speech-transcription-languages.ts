@@ -35,3 +35,28 @@ export function resolveTranscriptionLanguageHint(value: string | undefined): str
   }
   return /^[a-z]{2,3}$/.test(value) ? value : undefined
 }
+
+/** Which picker languages a model honours: every code, a subset, or none when the model picks its own. */
+export function getModelTranscriptionLanguages(
+  supported: 'any' | readonly string[] | undefined
+): string[] | null {
+  if (supported === undefined) {
+    return null
+  }
+  const codes = SPEECH_TRANSCRIPTION_LANGUAGES.map((entry) => entry.code).filter(
+    (code) => code !== AUTO_TRANSCRIPTION_LANGUAGE
+  )
+  return supported === 'any' ? codes : codes.filter((code) => supported.includes(code))
+}
+
+/** The hint to send for this model, or undefined to let it auto-detect. */
+export function resolveModelLanguageHint(
+  supported: 'any' | readonly string[] | undefined,
+  language: string | undefined
+): string | undefined {
+  const hint = resolveTranscriptionLanguageHint(language)
+  if (!hint) {
+    return undefined
+  }
+  return getModelTranscriptionLanguages(supported)?.includes(hint) ? hint : undefined
+}

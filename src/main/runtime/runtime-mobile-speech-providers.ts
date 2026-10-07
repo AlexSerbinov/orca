@@ -13,7 +13,8 @@ import type {
 import type { SpeechModelManifest, SpeechModelState } from '../../shared/speech-types'
 import {
   AUTO_TRANSCRIPTION_LANGUAGE,
-  SPEECH_TRANSCRIPTION_LANGUAGES
+  SPEECH_TRANSCRIPTION_LANGUAGES,
+  getModelTranscriptionLanguages
 } from '../../shared/speech-transcription-languages'
 import {
   clearCloudSpeechApiKey,
@@ -40,6 +41,7 @@ function toProviderModel(
     label: manifest.label,
     description: manifest.description,
     realtime: manifest.realtime === true,
+    languages: getModelTranscriptionLanguages(manifest.transcriptionLanguages),
     sizeBytes: manifest.sizeBytes ?? null,
     recommended: manifest.recommended === true,
     status: state?.status ?? 'not-downloaded',

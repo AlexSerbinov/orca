@@ -12682,7 +12682,9 @@
         "VoiceTranscriptionLanguage": {
           "auto": "Auto-detect",
           "label": "Transcription Language",
-          "description": "Hint for cloud models. Auto-detect lets the provider choose."
+          "description": "Hint for cloud models. Auto-detect lets the provider choose.",
+          "modelPicksLanguage": "{{value0}} detects the language itself.",
+          "unsupported": "{{value0}} doesn't support {{value1}}, so it will auto-detect."
         }
       },
       "right": {

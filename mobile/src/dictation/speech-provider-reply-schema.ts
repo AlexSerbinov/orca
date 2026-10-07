@@ -30,6 +30,8 @@ const speechProviderModelSchema = z.looseObject({
   label: salvagedOptional('label', z.string()),
   description: salvagedOptional('description', z.string()),
   realtime: salvagedOptional('realtime', z.boolean()),
+  // Why: absent (older desktop) means unknown, so every language stays offered; null means the model picks its own.
+  languages: salvagedOptional('languages', z.array(z.string()).nullable()),
   sizeBytes: salvagedOptional('sizeBytes', z.number().nullable()),
   recommended: salvagedOptional('recommended', z.boolean()),
   status: salvagedOptional('status', z.enum(SPEECH_PROVIDER_MODEL_STATUSES)),

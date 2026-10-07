@@ -13,6 +13,7 @@ function model(
   return {
     description: undefined,
     realtime: false,
+    languages: undefined,
     sizeBytes: null,
     recommended: false,
     progress: null,

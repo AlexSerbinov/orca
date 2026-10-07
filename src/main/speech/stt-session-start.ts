@@ -18,6 +18,7 @@ import {
   waitForSttWorkerReady
 } from './stt-worker-startup'
 import { START_DICTATION_TIMEOUT_MS } from './stt-session-timeouts'
+import { resolveModelLanguageHint } from '../../shared/speech-transcription-languages'
 
 export async function startSttDictation(
   state: SttSessionState,
@@ -93,7 +94,8 @@ async function startSttSession(
     state.eventSink = sink
     state.cloudSession = createCloudSpeechSession(manifest, {
       readApiKey: () => readCloudSpeechApiKey(provider),
-      language: options.language,
+      // Why: a hint the model cannot honour would fail the request; auto-detect instead.
+      language: resolveModelLanguageHint(manifest.transcriptionLanguages, options.language),
       // Why: late provider events after stop must not reach the next dictation's sink.
       sink: (event) => {
         if (state.eventSink === sink) {

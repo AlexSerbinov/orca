@@ -33,6 +33,8 @@ export type SpeechModelManifest = {
   streaming: boolean
   /** Cloud model that transcribes while audio streams in and emits live partials. */
   realtime?: boolean
+  /** Language hints the model accepts: 'any', a list of ISO 639-1 codes, or absent when it picks its own. */
+  transcriptionLanguages?: 'any' | readonly string[]
   modelingUnit?: ModelingUnit
   recommended?: boolean
 }

@@ -20,10 +20,27 @@ function cloudEntry(
       language: 'multilingual',
       sampleRate: 16000,
       streaming: false,
-      realtime: manifest.realtime === true
+      realtime: manifest.realtime === true,
+      transcriptionLanguages: manifest.transcriptionLanguages ?? 'any'
     }
   }
 }
+
+const VOXTRAL_LANGUAGES = [
+  'en',
+  'zh',
+  'hi',
+  'es',
+  'ar',
+  'fr',
+  'pt',
+  'ru',
+  'de',
+  'ja',
+  'ko',
+  'it',
+  'nl'
+]
 
 // Why: OpenAI rows keep type 'openai' because shipped desktop and mobile builds pin that shape.
 const OPENAI_ENTRIES: CloudSpeechCatalogEntry[] = [
@@ -38,7 +55,8 @@ const OPENAI_ENTRIES: CloudSpeechCatalogEntry[] = [
       provider: 'openai',
       language: 'multilingual',
       sampleRate: 16000,
-      streaming: false
+      streaming: false,
+      transcriptionLanguages: 'any'
     }
   },
   {
@@ -51,7 +69,8 @@ const OPENAI_ENTRIES: CloudSpeechCatalogEntry[] = [
       provider: 'openai',
       language: 'multilingual',
       sampleRate: 16000,
-      streaming: false
+      streaming: false,
+      transcriptionLanguages: 'any'
     }
   }
 ]
@@ -122,7 +141,9 @@ const CLOUD_ENTRIES: CloudSpeechCatalogEntry[] = [
     label: 'Voxtral Mini',
     description: 'Mistral Voxtral transcription of the whole recording.',
     provider: 'mistral',
-    apiModel: 'voxtral-mini-latest'
+    apiModel: 'voxtral-mini-latest',
+    // Why: Voxtral transcribes 13 languages; any other hint would be rejected or mis-decoded.
+    transcriptionLanguages: VOXTRAL_LANGUAGES
   })
 ]
 

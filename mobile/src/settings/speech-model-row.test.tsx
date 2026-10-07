@@ -32,6 +32,7 @@ function model(status: MobileSpeechProviderModel['status']): MobileSpeechProvide
     status,
     description: undefined,
     realtime: false,
+    languages: undefined,
     sizeBytes: null,
     recommended: false,
     progress: null

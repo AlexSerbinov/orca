@@ -1,5 +1,6 @@
 import type { RpcRequest, RpcResponse } from './mock-server-rpc-handlers'
 import { CLOUD_SPEECH_PROVIDERS } from '../../src/shared/cloud-speech-providers'
+import { getModelTranscriptionLanguages } from '../../src/shared/speech-transcription-languages'
 import type {
   RuntimeSpeechProviderModel,
   RuntimeSpeechProviderSummary,
@@ -11,6 +12,23 @@ type Success = (id: string, result: unknown) => RpcResponse
 type ErrorResponse = (id: string, code: string, message: string) => RpcResponse
 
 type MockModel = Omit<RuntimeSpeechProviderModel, 'status' | 'progress'> & { providerId: string }
+
+const ALL_LANGUAGES = getModelTranscriptionLanguages('any') ?? []
+const VOXTRAL_LANGUAGES = [
+  'en',
+  'zh',
+  'hi',
+  'es',
+  'ar',
+  'fr',
+  'pt',
+  'ru',
+  'de',
+  'ja',
+  'ko',
+  'it',
+  'nl'
+]
 
 // Why: mirrors the desktop catalog ids so simulator screenshots match what a real host lists.
 const MOCK_MODELS: MockModel[] = [
@@ -27,7 +45,7 @@ const MOCK_MODELS: MockModel[] = [
   cloud('openai', 'openai-gpt-4o-transcribe', 'GPT-4o Transcribe', false),
   cloud('groq', 'groq-whisper-large-v3-turbo', 'Whisper Large v3 Turbo', false),
   cloud('groq', 'groq-whisper-large-v3', 'Whisper Large v3', false),
-  cloud('mistral', 'mistral-voxtral-mini', 'Voxtral Mini', false)
+  cloud('mistral', 'mistral-voxtral-mini', 'Voxtral Mini', false, VOXTRAL_LANGUAGES)
 ]
 
 const MOCK_TRANSCRIPT =
@@ -35,7 +53,16 @@ const MOCK_TRANSCRIPT =
 
 function local(id: string, label: string, sizeBytes: number, recommended: boolean): MockModel {
   const description = 'Runs on your desktop. No API key.'
-  return { providerId: 'local', id, label, description, realtime: false, sizeBytes, recommended }
+  return {
+    providerId: 'local',
+    id,
+    label,
+    description,
+    realtime: false,
+    languages: null,
+    sizeBytes,
+    recommended
+  }
 }
 
 function cloud(
@@ -43,10 +70,19 @@ function cloud(
   id: string,
   label: string,
   realtime: boolean,
-  recommended = false
+  languages: string[] = ALL_LANGUAGES
 ): MockModel {
   const description = realtime ? 'Live captions while you speak.' : 'Transcribes after you stop.'
-  return { providerId, id, label, description, realtime, sizeBytes: null, recommended }
+  return {
+    providerId,
+    id,
+    label,
+    description,
+    realtime,
+    languages,
+    sizeBytes: null,
+    recommended: false
+  }
 }
 
 type MockSpeechState = {

@@ -13,6 +13,11 @@ export type RuntimeSpeechProviderModel = {
   description: string
   /** Transcribes while audio streams in, so the phone can show live captions. */
   realtime: boolean
+  /**
+   * Picker languages the model honours; null when it picks its own (on-device models).
+   * Optional on the wire: older hosts omit it, and readers then treat every language as accepted.
+   */
+  languages?: string[] | null
   sizeBytes: number | null
   recommended: boolean
   status: 'ready' | 'not-downloaded' | 'downloading' | 'extracting' | 'error'

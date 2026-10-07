@@ -96,3 +96,39 @@ export function transcriptionLanguageLabel(code: string | undefined): string {
   )
   return language?.label ?? code ?? 'Auto-detect'
 }
+
+export type SpeechLanguageSupport =
+  /** The model chooses its language itself; a hint would be ignored. */
+  | { kind: 'model-picks' }
+  /** The model honours these picker codes; `null` means every one (or an older desktop that did not say). */
+  | { kind: 'hint'; codes: readonly string[] | null }
+
+export function speechModelLanguageSupport(
+  model: MobileSpeechProviderModel | undefined
+): SpeechLanguageSupport {
+  if (model?.languages === null) {
+    return { kind: 'model-picks' }
+  }
+  return { kind: 'hint', codes: model?.languages ?? null }
+}
+
+export function isLanguageSupported(support: SpeechLanguageSupport, code: string): boolean {
+  if (code === AUTO_TRANSCRIPTION_LANGUAGE) {
+    return true
+  }
+  return support.kind === 'hint' && (support.codes === null || support.codes.includes(code))
+}
+
+/** Language row sublabel: what dictation will actually do with the chosen model. */
+export function transcriptionLanguageSummary(state: MobileSpeechProvidersState): string {
+  const selected = findSelectedSpeechModel(state)
+  const support = speechModelLanguageSupport(selected?.model)
+  if (selected && support.kind === 'model-picks') {
+    return `Detected by ${speechModelLabel(selected.model)}`
+  }
+  const label = transcriptionLanguageLabel(state.language)
+  if (selected && state.language && !isLanguageSupported(support, state.language)) {
+    return `${label} not supported here · auto-detect`
+  }
+  return label
+}

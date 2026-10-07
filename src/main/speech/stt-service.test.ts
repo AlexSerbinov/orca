@@ -134,13 +134,14 @@ vi.mock('worker_threads', () => ({
 
 vi.mock('./model-catalog', () => ({
   getCatalogModel: (id: string) =>
-    id === 'openai-model'
+    id === 'openai-model' || id === 'narrow-cloud-model'
       ? {
           id,
           type: 'openai',
           provider: 'openai',
           streaming: false,
-          sampleRate: 16000
+          sampleRate: 16000,
+          transcriptionLanguages: id === 'openai-model' ? 'any' : ['en', 'de']
         }
       : {
           id: 'model-a',
@@ -447,6 +448,22 @@ describe('SttService', () => {
     sink.mockClear()
     session.sink?.({ type: 'partial', text: 'late' })
     expect(sink).not.toHaveBeenCalled()
+  })
+
+  it('falls back to auto-detect when the model cannot honour the language hint', async () => {
+    const models = {
+      getModelState: vi.fn().mockResolvedValue({ id: 'narrow-cloud-model', status: 'ready' }),
+      getModelDir: vi.fn().mockReturnValue('/tmp/model-a')
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the cloud start path reads only getModelState on the model manager.
+    const service = new SttService(models as unknown as ModelManager)
+
+    await service.startDictation('narrow-cloud-model', vi.fn(), undefined, 'desktop', {
+      language: 'uk'
+    })
+
+    expect(getCloudSessions()[0].language).toBeUndefined()
+    await service.stopDictation('desktop')
   })
 
   it('keeps startup cancellation tombstoned after the worker has been created', async () => {
