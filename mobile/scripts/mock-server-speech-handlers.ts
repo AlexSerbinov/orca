@@ -17,7 +17,7 @@ const MOCK_MODELS: MockModel[] = [
   local('parakeet-tdt-0.6b-v3-int8', 'Parakeet TDT v3', 670_000_000, true),
   local('whisper-tiny', 'Whisper Tiny', 75_000_000, false),
   local('sense-voice-zh-en-ja-ko-yue', 'SenseVoice', 230_000_000, false),
-  cloud('soniox', 'soniox-stt-rt-v5', 'Soniox Real-time v5', true, true),
+  cloud('soniox', 'soniox-stt-rt-v5', 'Soniox Real-time v5', true),
   cloud('elevenlabs', 'elevenlabs-scribe-v2-realtime', 'Scribe v2 Real-time', true),
   cloud('elevenlabs', 'elevenlabs-scribe-v2', 'Scribe v2', false),
   cloud('deepgram', 'deepgram-nova-3', 'Nova-3', true),

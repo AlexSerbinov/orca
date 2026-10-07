@@ -64,8 +64,7 @@ const CLOUD_ENTRIES: CloudSpeechCatalogEntry[] = [
     description: 'Live captions while you speak, 60+ languages. Requires a Soniox API key.',
     provider: 'soniox',
     apiModel: 'stt-rt-v5',
-    realtime: true,
-    recommended: true
+    realtime: true
   }),
   cloudEntry({
     id: 'elevenlabs-scribe-v2-realtime',
