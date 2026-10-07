@@ -1,7 +1,7 @@
 // The running child work a structured session's stream publishes, for the strip above the composer:
 // desktop's view of the same roster, the verdict its rows read, and the Stop that reaches them.
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import type { AgentChildRowContext } from '../../../src/shared/agent-child-row-model'
 import { agentChildRowContextForSessionStream } from '../../../src/shared/agent-child-row-stream-context'
 import type { StructuredAgentSessionState } from '../../../src/shared/structured-agent-session-reducer'
@@ -22,7 +22,8 @@ export type MobileStructuredBackgroundTasks = {
   stop: (taskId?: string) => Promise<unknown>
 }
 
-type OffsetLatch = { sessionKey: string; offsetMs: number }
+/** Coarser than one frame's delivery latency, finer than any clock a row shows. */
+const OFFSET_GRAIN_MS = 1_000
 
 export function useMobileStructuredBackgroundTasks(args: {
   sessionKey: string
@@ -40,21 +41,12 @@ export function useMobileStructuredBackgroundTasks(args: {
   // A disconnected or failed stream keeps the last roster on screen; its live claims then stand
   // for nothing, so they read unverifiable rather than working.
   const streamLive = connected && state.status === 'ready'
-  // Latched once per conversation from its first live host sample, as the turn bar latches its own
-  // per turn: every frame's sample carries fresh delivery latency, and re-deriving it would move the
-  // clocks and rebuild every row on every frame. Clock skew between two machines does not drift.
-  const [latch, setLatch] = useState<OffsetLatch | null>(null)
+  // Re-derived from every frame's host sample, so a host restart or clock correction shows at once;
+  // rounded so a sample's own delivery jitter never rebuilds the rows (they memoize on the value).
   const hostClock = state.hostClock
-  const nextLatch =
-    latch?.sessionKey === sessionKey
-      ? latch
-      : streamLive && hostClock
-        ? { sessionKey, offsetMs: hostClock.receivedAt - hostClock.hostNow }
-        : null
-  if (nextLatch !== latch) {
-    setLatch(nextLatch)
-  }
-  const offsetMs = nextLatch?.offsetMs ?? 0
+  const offsetMs = hostClock
+    ? Math.round((hostClock.receivedAt - hostClock.hostNow) / OFFSET_GRAIN_MS) * OFFSET_GRAIN_MS
+    : 0
   const rowContext = useMemo(
     () => agentChildRowContextForSessionStream(streamLive, offsetMs),
     [streamLive, offsetMs]

@@ -9,6 +9,10 @@ import type { AgentChildWorkView } from '../../../src/shared/agent-status-child-
 import type { AgentSessionSubscribeEvent } from '../../../src/shared/agent-session-wire'
 import type { RpcClient } from '../transport/rpc-client'
 import { resetMobileStructuredSendOperationJournalForTests } from './mobile-structured-send-operation-journal'
+import {
+  backgroundTaskRowMeta,
+  buildBackgroundTaskGroupsFromViews
+} from '../../../src/shared/background-task-roster'
 import { useMobileStructuredAgentSession } from './use-mobile-structured-agent-session'
 import {
   batchEvent,
@@ -136,16 +140,34 @@ describe('mobile structured session background tasks', () => {
     expect(hook?.backgroundTasks.rowContext.transportObservation).toBe('unverifiable')
   })
 
-  it("latches the host clock offset once, so a frame's fresh sample rebuilds nothing", async () => {
+  function stripElapsed(): string {
+    const tasks = hook!.backgroundTasks
+    const [group] = buildBackgroundTaskGroupsFromViews(tasks.view.children ?? [], tasks.rowContext)
+    // The strip reads host-stamped clocks on the host's clock: the phone's now less the offset.
+    return backgroundTaskRowMeta(
+      group!.tasks[0]!.row,
+      Date.now() - tasks.rowContext.hostClockOffsetMs
+    )
+  }
+
+  it('keeps the rows on a jitter-only frame and re-derives a shifted host clock', async () => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(100_000)
     await mount(withChildren(40_000))
     const first = hook?.backgroundTasks
     expect(first?.rowContext.hostClockOffsetMs).toBe(60_000)
-    const frame = batchEvent()
-    act(() => listener?.(frame.type === 'batch' ? { ...frame, hostNow: 41_000 } : frame))
-    const next = hook?.backgroundTasks
+    // Child first seen at host time 1_000; host now is 40_000.
+    expect(stripElapsed()).toBe('39s')
+
+    // A later sample whose delivery took 300 ms longer: the same offset once rounded.
+    const jitter = batchEvent()
+    act(() => listener?.(jitter.type === 'batch' ? { ...jitter, hostNow: 39_700 } : jitter))
+    expect(hook?.backgroundTasks).toBe(first)
+
+    // The host's clock jumped forward 20 s (a restart or correction): every elapsed moves with it.
+    act(() => listener?.(withChildren(60_000)))
+    expect(hook?.backgroundTasks.rowContext.hostClockOffsetMs).toBe(40_000)
+    expect(stripElapsed()).toBe('59s')
     clock.mockRestore()
-    expect(next).toBe(first)
   })
 
   it("stops one child through the host's background-task cancel", async () => {

@@ -39,13 +39,13 @@ export function useMobileNativeChatComposerTray({
   const { cards, onSend, onDelete, pause, onResume, sessionKey, steerHeld } = queued
   return useMemo(
     () => ({
-      // Positional children, so the cards keep their place whether or not the strip draws.
       content: createElement(
         Fragment,
         null,
         backgroundTasks
           ? // Keyed per conversation: one chat's open list or pending Stop never shows in another.
-            // Its own suffix, so it never shares the queued box's key beside it.
+            // Its own suffix: the two never share a key, so each stays mounted as the other comes
+            // and goes.
             createElement(MobileNativeChatBackgroundTasks, {
               key: `${backgroundTasks.sessionKey}:background-tasks`,
               tasks: backgroundTasks
