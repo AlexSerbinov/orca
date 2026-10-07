@@ -58,6 +58,7 @@ export class AcpWriteQueue {
     }
     this.terminalError = error
     this.detachDrain?.()
+    this.detachDrain = undefined
     this.active?.reject(error)
     this.active = undefined
     for (const write of this.queue.splice(0)) {
@@ -89,6 +90,7 @@ export class AcpWriteQueue {
         return
       }
       this.detachDrain?.()
+      this.detachDrain = undefined
       this.active = undefined
       this.bytes -= Buffer.byteLength(write.line)
       write.resolve()
