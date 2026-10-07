@@ -9,7 +9,6 @@ describe('verifyCloudSpeechApiKey', () => {
   it.each([
     ['soniox', 'https://api.soniox.com/v1/models', 'Authorization', 'Bearer key-1'],
     ['deepgram', 'https://api.deepgram.com/v1/projects', 'Authorization', 'Token key-1'],
-    ['elevenlabs', 'https://api.elevenlabs.io/v1/models', 'xi-api-key', 'key-1'],
     ['groq', 'https://api.groq.com/openai/v1/models', 'Authorization', 'Bearer key-1'],
     ['mistral', 'https://api.mistral.ai/v1/models', 'Authorization', 'Bearer key-1'],
     ['openai', 'https://api.openai.com/v1/models', 'Authorization', 'Bearer key-1']
@@ -23,6 +22,22 @@ describe('verifyCloudSpeechApiKey', () => {
     const [calledUrl, init] = fetchMock.mock.calls[0]
     expect(calledUrl).toBe(url)
     expect(new Headers(init?.headers).get(header)).toBe(value)
+    expect(init?.method).toBe('GET')
+  })
+
+  it('probes ElevenLabs by minting a realtime Scribe token without reading it', async () => {
+    const response = respond(200, { token: 'sutkn_secret' })
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response)
+
+    await expect(verifyCloudSpeechApiKey('elevenlabs', 'sk_stt_only', fetchMock)).resolves.toEqual({
+      ok: true,
+      message: null
+    })
+    const [calledUrl, init] = fetchMock.mock.calls[0]
+    expect(calledUrl).toBe('https://api.elevenlabs.io/v1/single-use-token/realtime_scribe')
+    expect(init?.method).toBe('POST')
+    expect(new Headers(init?.headers).get('xi-api-key')).toBe('sk_stt_only')
+    expect(response.bodyUsed).toBe(true)
   })
 
   it('uses the Gemini header instead of a query-string key', async () => {
@@ -60,47 +75,35 @@ describe('verifyCloudSpeechApiKey', () => {
     })
   })
 
-  it('accepts an ElevenLabs key that is valid but lacks the models_read scope', async () => {
+  it('rejects an ElevenLabs key that lacks the speech_to_text scope', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       respond(401, {
         detail: {
           status: 'missing_permissions',
           message:
-            'The API key you used is missing the permission models_read to execute this operation.'
+            'The API key you used is missing the permission speech_to_text to execute this operation.'
         }
       })
     )
 
-    await expect(verifyCloudSpeechApiKey('elevenlabs', 'sk_scoped', fetchMock)).resolves.toEqual({
-      ok: true,
-      message: null
-    })
+    const result = await verifyCloudSpeechApiKey('elevenlabs', 'sk_tts_only', fetchMock)
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('ElevenLabs rejected this API key (401).')
   })
 
-  it.each([
-    ['a different missing scope', 401, 'missing_permissions', 'speech_to_text'],
-    ['a non-auth status', 400, 'missing_permissions', 'models_read'],
-    ['an unrelated detail status', 401, 'invalid_api_key', 'missing the permission models_read']
-  ] as const)(
-    'rejects an ElevenLabs reply with %s',
-    async (_case, status, detailStatus, message) => {
-      const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-        respond(status, {
-          detail: {
-            status: detailStatus,
-            message: message.includes(' ')
-              ? message
-              : `The API key you used is missing the permission ${message} to execute this operation.`
-          }
-        })
+  it('rejects an invalid ElevenLabs key', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        respond(401, { detail: { status: 'invalid_api_key', message: 'Invalid API key' } })
       )
 
-      const result = await verifyCloudSpeechApiKey('elevenlabs', 'sk_scoped', fetchMock)
-
-      expect(result.ok).toBe(false)
-      expect(result.message).toContain(`(${status})`)
-    }
-  )
+    await expect(verifyCloudSpeechApiKey('elevenlabs', 'sk_bad', fetchMock)).resolves.toEqual({
+      ok: false,
+      message: 'ElevenLabs rejected this API key (401). Invalid API key'
+    })
+  })
 
   it('reports network failures without throwing', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error('getaddrinfo ENOTFOUND'))

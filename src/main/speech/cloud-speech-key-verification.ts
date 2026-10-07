@@ -9,9 +9,9 @@ import { describeProviderFailure, readProviderErrorMessage } from './cloud-speec
 
 const KEY_VERIFICATION_TIMEOUT_MS = 10_000
 
-type VerificationRequest = { url: string; headers: Record<string, string> }
+type VerificationRequest = { url: string; headers: Record<string, string>; method?: 'POST' }
 
-// Why: each probe is a cheap authenticated GET, so testing a key never bills an inference.
+// Why: each probe is a cheap authenticated call, so testing a key never bills an inference.
 function buildVerificationRequest(
   providerId: CloudSpeechProviderId,
   apiKey: string
@@ -31,8 +31,12 @@ function buildVerificationRequest(
         headers: { Authorization: `Token ${apiKey}` }
       }
     case 'elevenlabs':
-      // Why: /v1/user needs the user_read scope that restricted STT keys often lack.
-      return { url: 'https://api.elevenlabs.io/v1/models', headers: { 'xi-api-key': apiKey } }
+      // Why: minting a realtime token needs exactly the speech_to_text scope dictation uses.
+      return {
+        url: 'https://api.elevenlabs.io/v1/single-use-token/realtime_scribe',
+        headers: { 'xi-api-key': apiKey },
+        method: 'POST'
+      }
     case 'gemini':
       return {
         url: 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1',
@@ -71,6 +75,7 @@ export async function verifyCloudSpeechApiKey(
   let response: Response
   try {
     response = await fetchImpl(request.url, {
+      method: request.method ?? 'GET',
       headers: { Accept: 'application/json', ...request.headers },
       signal: AbortSignal.timeout(KEY_VERIFICATION_TIMEOUT_MS)
     })
@@ -80,11 +85,8 @@ export async function verifyCloudSpeechApiKey(
     return { ok: false, message: timedOut ? reason : `Could not reach ${label}: ${reason}` }
   }
   if (response.ok) {
-    return { ok: true, message: null }
-  }
-  // Why: ElevenLabs authenticates the key before checking scopes, so a speech-to-text-only key
-  // that lacks only models_read is valid for dictation; any other missing scope is not.
-  if (providerId === 'elevenlabs' && (await isOnlyMissingModelsRead(response))) {
+    // Why: the ElevenLabs probe answers with a live token; never read or keep it.
+    await response.body?.cancel().catch(() => {})
     return { ok: true, message: null }
   }
   const detail = await readProviderErrorMessage(response)
@@ -100,31 +102,4 @@ export async function verifyCloudSpeechApiKey(
     ok: false,
     message: `${label} returned an error (${response.status}). ${detail}`.trim()
   }
-}
-
-async function isOnlyMissingModelsRead(response: Response): Promise<boolean> {
-  if (response.status !== 401 && response.status !== 403) {
-    return false
-  }
-  // Why: clone so the error detail can still be read from the original body.
-  const body: unknown = await response
-    .clone()
-    .json()
-    .catch(() => null)
-  const detail =
-    body &&
-    typeof body === 'object' &&
-    'detail' in body &&
-    body.detail &&
-    typeof body.detail === 'object'
-      ? body.detail
-      : null
-  if (!detail || !('status' in detail) || detail.status !== 'missing_permissions') {
-    return false
-  }
-  return (
-    'message' in detail &&
-    typeof detail.message === 'string' &&
-    /\bmodels_read\b/.test(detail.message)
-  )
 }
