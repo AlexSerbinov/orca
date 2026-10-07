@@ -84,84 +84,87 @@ export function CloudSpeechProviderKeyDialog({
             )}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <Label htmlFor="cloud-speech-api-key">
-              {translate(
-                'auto.components.settings.OpenAiTranscriptionKeyDialog.16015322f9',
-                'API Key'
-              )}
-            </Label>
-            {provider ? (
-              <Button
-                type="button"
-                variant="link"
-                size="xs"
-                onClick={() => void window.api.shell.openUrl(provider.keyUrl)}
-              >
+        {/* Why: short windows scroll the body; -m-1 p-1 keeps the input focus ring unclipped. */}
+        <div className="-m-1 max-h-[calc(100vh-12rem)] space-y-4 overflow-y-auto scrollbar-sleek p-1">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="cloud-speech-api-key">
                 {translate(
-                  'auto.components.settings.CloudSpeechProviderKeyDialog.getKey',
-                  'Get API key'
+                  'auto.components.settings.OpenAiTranscriptionKeyDialog.16015322f9',
+                  'API Key'
                 )}
-                <ExternalLink className="size-3" />
-              </Button>
-            ) : null}
-          </div>
-          <Input
-            id="cloud-speech-api-key"
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            autoFocus
-            value={draft}
-            aria-invalid={error !== null}
-            placeholder={
-              configured && status?.hint
-                ? translate(
-                    'auto.components.settings.CloudSpeechProviderKeyDialog.replacePlaceholder',
-                    'Replace key ending {{hint}}',
-                    { hint: status.hint }
-                  )
-                : (provider?.keyPlaceholder ?? '')
-            }
-            disabled={busy}
-            onChange={(event) => {
-              setDraft(event.target.value)
-              setError(null)
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                void submit(true)
-              }
-            }}
-          />
-          {error ? (
-            <div role="alert" className="space-y-1">
-              <p className="text-xs break-words text-destructive">{error}</p>
-              {rejectedOnVerify ? (
+              </Label>
+              {provider ? (
                 <Button
                   type="button"
                   variant="link"
                   size="xs"
-                  disabled={!canSubmit}
-                  onClick={() => void submit(false)}
+                  onClick={() => void window.api.shell.openUrl(provider.keyUrl)}
                 >
                   {translate(
-                    'auto.components.settings.CloudSpeechProviderKeyDialog.saveUnverified',
-                    'Save without checking'
+                    'auto.components.settings.CloudSpeechProviderKeyDialog.getKey',
+                    'Get API key'
                   )}
+                  <ExternalLink className="size-3" />
                 </Button>
               ) : null}
             </div>
-          ) : null}
+            <Input
+              id="cloud-speech-api-key"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              autoFocus
+              value={draft}
+              aria-invalid={error !== null}
+              placeholder={
+                configured && status?.hint
+                  ? translate(
+                      'auto.components.settings.CloudSpeechProviderKeyDialog.replacePlaceholder',
+                      'Replace key ending {{hint}}',
+                      { hint: status.hint }
+                    )
+                  : (provider?.keyPlaceholder ?? '')
+              }
+              disabled={busy}
+              onChange={(event) => {
+                setDraft(event.target.value)
+                setError(null)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  void submit(true)
+                }
+              }}
+            />
+            {error ? (
+              <div role="alert" className="space-y-1">
+                <p className="text-xs break-words text-destructive">{error}</p>
+                {rejectedOnVerify ? (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="xs"
+                    disabled={!canSubmit}
+                    onClick={() => void submit(false)}
+                  >
+                    {translate(
+                      'auto.components.settings.CloudSpeechProviderKeyDialog.saveUnverified',
+                      'Save without checking'
+                    )}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
+            <Lock className="size-3 shrink-0" />
+            {translate(
+              'auto.components.settings.OpenAiTranscriptionKeyDialog.d246b2bdb3',
+              'Local runtime keys are stored in ~/.orca using Electron encrypted storage when available.'
+            )}
+          </p>
         </div>
-        <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
-          <Lock className="size-3 shrink-0" />
-          {translate(
-            'auto.components.settings.OpenAiTranscriptionKeyDialog.d246b2bdb3',
-            'Local runtime keys are stored in ~/.orca using Electron encrypted storage when available.'
-          )}
-        </p>
         <DialogFooter>
           <Button disabled={!canSubmit} onClick={() => void submit(true)} className="min-w-28">
             {busy ? <Loader2 className="size-4 animate-spin" /> : null}

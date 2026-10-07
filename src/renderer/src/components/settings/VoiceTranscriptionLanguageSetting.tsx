@@ -80,8 +80,9 @@ export function VoiceTranscriptionLanguageSetting({
   )
 
   return (
-    <div className="flex items-center justify-between gap-4 py-2">
-      <div className="min-w-0 flex-1 space-y-0.5">
+    // Why: on narrow windows the control wraps under the text instead of squeezing it.
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2">
+      <div className="min-w-48 flex-1 space-y-0.5">
         <Label>{label}</Label>
         <p className="text-xs text-muted-foreground">
           {describeLanguageSupport(selectedModel, supported, current, nameLanguage)}
@@ -92,7 +93,7 @@ export function VoiceTranscriptionLanguageSetting({
         disabled={!voiceSettings.enabled || supported === null}
         onValueChange={(next) => onUpdateVoiceSettings({ transcriptionLanguage: next })}
       >
-        <SelectTrigger size="sm" aria-label={label} className="w-36 shrink-0 sm:w-44">
+        <SelectTrigger size="sm" aria-label={label} className="w-44 shrink-0">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

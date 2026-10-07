@@ -37,7 +37,7 @@ function CloudSpeechKeyTestVerdict({
     )
   }
   return (
-    <p role="alert" className="text-xs text-destructive">
+    <p role="alert" className="text-xs break-words text-destructive">
       {test.result.message ??
         translate(
           'auto.components.settings.CloudSpeechProviderRow.keyRejected',
@@ -87,7 +87,7 @@ export function CloudSpeechProviderRow({
           <p className="text-xs text-muted-foreground">{provider.description}</p>
           <CloudSpeechKeyTestVerdict test={test} />
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {configured ? (
             <>
               <Button
