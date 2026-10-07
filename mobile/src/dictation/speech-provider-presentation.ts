@@ -13,14 +13,33 @@ export type SelectedSpeechModel = {
   model: MobileSpeechProviderModel
 }
 
-export function isLocalSpeechProvider(provider: MobileSpeechProvider): boolean {
+export type SpeechProviderKind = 'local' | 'cloud' | 'unknown'
+
+/** 'unknown' is a kind this build has not heard of: shown read-only, never offered key controls. */
+export function speechProviderKind(provider: MobileSpeechProvider): SpeechProviderKind {
+  if (provider.kind !== undefined) {
+    return provider.kind
+  }
   // Why: an unreadable kind falls back to the id the host always gives the on-device row.
-  return provider.kind === undefined ? provider.id === 'local' : provider.kind === 'local'
+  return provider.id === 'local' ? 'local' : 'unknown'
+}
+
+export function isLocalSpeechProvider(provider: MobileSpeechProvider): boolean {
+  return speechProviderKind(provider) === 'local'
+}
+
+export function isCloudSpeechProvider(provider: MobileSpeechProvider): boolean {
+  return speechProviderKind(provider) === 'cloud'
 }
 
 /** The host marks a cloud model ready once its provider holds a key, so one test covers both kinds. */
 export function isSpeechModelUsable(model: MobileSpeechProviderModel): boolean {
   return model.status === 'ready'
+}
+
+/** Allowlist, so a status this build has not heard of (salvaged to absent) never offers Download. */
+export function isSpeechModelDownloadable(model: { status?: string | undefined }): boolean {
+  return model.status === 'not-downloaded' || model.status === 'error'
 }
 
 export function isSpeechModelInFlight(model: MobileSpeechProviderModel): boolean {
@@ -62,6 +81,9 @@ export function speechProviderStatusText(provider: MobileSpeechProvider): string
       return 'No models downloaded'
     }
     return ready === 1 ? '1 model downloaded' : `${ready} models downloaded`
+  }
+  if (!isCloudSpeechProvider(provider)) {
+    return 'Needs a newer Orca app'
   }
   if (!provider.keyConfigured) {
     return 'Not connected'

@@ -2,7 +2,10 @@ import { createElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SpeechModelRow } from './speech-model-row'
-import type { MobileSpeechProviderModel } from '../dictation/speech-provider-reply-schema'
+import {
+  speechProvidersStateSchema,
+  type MobileSpeechProviderModel
+} from '../dictation/speech-provider-reply-schema'
 
 vi.mock('react-native', () => ({
   View: 'View',
@@ -123,5 +126,19 @@ describe('SpeechModelRow action roles', () => {
     expect(
       download.findByProps({ accessibilityLabel: 'Download Model' }).props.accessibilityRole
     ).toBe('button')
+  })
+})
+
+describe('SpeechModelRow unknown status', () => {
+  it('offers no Download for a status this build has not heard of', () => {
+    const parsed = speechProvidersStateSchema.parse({
+      providers: [{ id: 'local', models: [{ id: 'm', label: 'Model', status: 'verifying' }] }]
+    })
+    const status = parsed.providers[0]?.models[0]?.status
+    expect(status).toBeUndefined()
+    const row = renderRow('manage', status, { local: true })
+    expect(row.findAllByProps({ accessibilityLabel: 'Download Model' })).toHaveLength(0)
+    const failed = renderRow('manage', 'error', { local: true })
+    expect(failed.findAllByProps({ accessibilityLabel: 'Download Model' })).toHaveLength(1)
   })
 })

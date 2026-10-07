@@ -8,6 +8,7 @@ import { SpeechModelLivePill } from './speech-model-row'
 import { SpeechProviderRow } from './speech-provider-row'
 import {
   findSelectedSpeechModel,
+  isCloudSpeechProvider,
   isLocalSpeechProvider,
   speechModelLabel,
   speechProviderLabel,
@@ -43,7 +44,9 @@ export function VoiceCabinetSections({
   const selected = findSelectedSpeechModel(state)
   const local = state.providers.find(isLocalSpeechProvider) ?? null
   const cloud = state.providers.filter((provider) => !isLocalSpeechProvider(provider))
-  const connectedCount = cloud.filter((provider) => provider.keyConfigured === true).length
+  const connectedCount = cloud.filter(
+    (provider) => isCloudSpeechProvider(provider) && provider.keyConfigured === true
+  ).length
   return (
     <>
       <Text style={[base.groupHeading, base.inputGroupGap]}>MODEL</Text>

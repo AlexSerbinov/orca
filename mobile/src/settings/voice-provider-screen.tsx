@@ -14,10 +14,7 @@ import { useVoiceProviderController } from './use-voice-provider-controller'
 import { VoiceProviderKeySection } from './voice-provider-key-section'
 import { SpeechProviderKeyDrawer } from './speech-provider-key-drawer'
 import { SpeechModelRow } from './speech-model-row'
-import {
-  isLocalSpeechProvider,
-  speechProviderLabel
-} from '../dictation/speech-provider-presentation'
+import { speechProviderKind, speechProviderLabel } from '../dictation/speech-provider-presentation'
 
 type Props = {
   operations: VoiceSettingsOperations | null
@@ -39,7 +36,10 @@ export default function VoiceProviderScreen({
   const controller = useVoiceProviderController(operations, focused)
   const { state, loading, error, busyAction } = controller
   const provider = state?.providers.find((entry) => entry.id === providerId) ?? null
-  const local = provider ? isLocalSpeechProvider(provider) : false
+  const kind = provider ? speechProviderKind(provider) : 'unknown'
+  const local = kind === 'local'
+  // Why: key controls for a kind this build does not know could send its key to the wrong flow.
+  const cloud = kind === 'cloud'
   const label = provider ? speechProviderLabel(provider) : 'Provider'
 
   return (
@@ -88,7 +88,7 @@ export default function VoiceProviderScreen({
             </View>
           </View>
 
-          {local ? null : (
+          {cloud ? (
             <>
               <Text style={base.groupHeading}>API KEY</Text>
               <VoiceProviderKeySection
@@ -100,9 +100,9 @@ export default function VoiceProviderScreen({
                 onRemove={() => controller.setConfirmRemoveOpen(true)}
               />
             </>
-          )}
+          ) : null}
 
-          <Text style={[base.groupHeading, local ? null : base.inputGroupGap]}>MODELS</Text>
+          <Text style={[base.groupHeading, cloud ? base.inputGroupGap : null]}>MODELS</Text>
           <View style={[base.section, base.sectionTopGap]}>
             {provider.models.map((model, index) => (
               <Fragment key={model.id}>
@@ -124,16 +124,18 @@ export default function VoiceProviderScreen({
           <Text style={cabinet.footnote}>
             {local
               ? 'On-device models run on your desktop. Audio never leaves it.'
-              : provider.keyConfigured
-                ? `Your desktop sends audio to ${label} only while you dictate with one of these models.`
-                : `One ${label} API key unlocks all of these models. Add it above.`}
+              : !cloud
+                ? `Update Orca on this phone to manage ${label} here, or set it up on your desktop.`
+                : provider.keyConfigured
+                  ? `Your desktop sends audio to ${label} only while you dictate with one of these models.`
+                  : `One ${label} API key unlocks all of these models. Add it above.`}
           </Text>
 
           {error ? <Text style={base.error}>{error}</Text> : null}
         </ScrollView>
       )}
 
-      {provider && !local ? (
+      {provider && cloud ? (
         <>
           <SpeechProviderKeyDrawer
             visible={controller.keyDrawerOpen}

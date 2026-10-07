@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import VoiceProviderScreen from './voice-provider-screen'
 import { cabinetState, voiceOperations } from './voice-cabinet.test-fixture'
+import { speechProvidersStateSchema } from '../dictation/speech-provider-reply-schema'
 
 const openURL = vi.hoisted(() => vi.fn())
 
@@ -86,6 +87,29 @@ async function typeKey(value: string): Promise<void> {
 }
 
 describe('voice provider screen', () => {
+  it('shows a provider of an unknown kind read-only, without key controls', async () => {
+    const wire = {
+      ...cabinetState(),
+      providers: [
+        {
+          id: 'acme',
+          kind: 'hybrid',
+          label: 'Acme',
+          keyConfigured: false,
+          models: [{ id: 'acme-1', label: 'Acme One', status: 'ready' }]
+        }
+      ]
+    }
+    const { operations } = voiceOperations({
+      list: vi.fn().mockResolvedValue(speechProvidersStateSchema.parse(wire))
+    })
+    await mount(operations, 'acme')
+    expect(text()).toContain('Acme One')
+    expect(text()).not.toContain('API KEY')
+    expect(renderer.root.findAllByProps({ testID: 'voice-provider-add-key' })).toHaveLength(0)
+    expect(text()).toContain('Update Orca on this phone to manage Acme')
+  })
+
   it('verifies and saves a new key, then shows the provider connected', async () => {
     const connected = cabinetState()
     const deepgram = connected.providers.find((entry) => entry.id === 'deepgram')

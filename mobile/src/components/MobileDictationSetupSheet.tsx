@@ -15,7 +15,10 @@ import {
   type MobileSpeechSetup
 } from '../dictation/mobile-dictation-setup'
 import { fetchSpeechProviders } from '../dictation/mobile-speech-providers'
-import { hasSpeechModelInFlight } from '../dictation/speech-provider-presentation'
+import {
+  hasSpeechModelInFlight,
+  isSpeechModelDownloadable
+} from '../dictation/speech-provider-presentation'
 import type { MobileSpeechProvidersState } from '../dictation/speech-provider-reply-schema'
 import { SpeechModelGroupedList } from '../settings/speech-model-grouped-list'
 import { useVoiceRequestFence } from '../settings/use-voice-request-fence'
@@ -307,7 +310,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
                     )
                   ) : inFlight ? (
                     <ActivityIndicator size="small" color={colors.textSecondary} />
-                  ) : (
+                  ) : !isSpeechModelDownloadable(model) ? null : (
                     <Pressable
                       style={({ pressed }) => [
                         styles.actionButton,

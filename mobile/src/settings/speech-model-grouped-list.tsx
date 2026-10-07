@@ -7,6 +7,7 @@ import { voiceSettingsStyles } from './voice-settings-styles'
 import { voiceCabinetHitSlop, voiceCabinetStyles as styles } from './voice-cabinet-styles'
 import { SpeechModelRow, type SpeechModelBusyAction } from './speech-model-row'
 import {
+  isCloudSpeechProvider,
   isLocalSpeechProvider,
   speechProviderLabel,
   speechProviderStatusText
@@ -46,7 +47,7 @@ export function SpeechModelGroupedList({
             <Text style={styles.drawerGroupTitle} numberOfLines={1}>
               {speechProviderLabel(provider).toUpperCase()}
             </Text>
-            {!local && !provider.keyConfigured ? (
+            {isCloudSpeechProvider(provider) && !provider.keyConfigured ? (
               <Pressable
                 style={({ pressed }) => [styles.groupKeyButton, pressed && styles.actionPressed]}
                 hitSlop={voiceCabinetHitSlop.groupKeyButton}

@@ -8,6 +8,7 @@ import {
 } from './voice-cabinet-styles'
 import {
   formatSpeechModelSize,
+  isSpeechModelDownloadable,
   isSpeechModelInFlight,
   isSpeechModelUsable,
   speechModelLabel,
@@ -180,6 +181,9 @@ function SpeechModelRowAction({
   }
   if (isSpeechModelInFlight(model)) {
     return <ActivityIndicator size="small" color={colors.textSecondary} />
+  }
+  if (!isSpeechModelDownloadable(model)) {
+    return null
   }
   return (
     <Pressable

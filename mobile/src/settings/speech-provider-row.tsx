@@ -5,7 +5,7 @@ import { SpeechProviderLogo } from '../components/SpeechProviderLogo'
 import { voiceSettingsStyles as base } from './voice-settings-styles'
 import { voiceCabinetStyles as styles } from './voice-cabinet-styles'
 import {
-  isLocalSpeechProvider,
+  isCloudSpeechProvider,
   speechProviderLabel,
   speechProviderStatusText
 } from '../dictation/speech-provider-presentation'
@@ -20,7 +20,7 @@ export function SpeechProviderRow({
   inUse: boolean
   onPress: () => void
 }) {
-  const connected = !isLocalSpeechProvider(provider) && provider.keyConfigured === true
+  const connected = isCloudSpeechProvider(provider) && provider.keyConfigured === true
   return (
     <Pressable
       style={({ pressed }) => [base.row, pressed && base.rowPressed]}
