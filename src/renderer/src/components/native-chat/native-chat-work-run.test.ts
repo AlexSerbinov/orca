@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { NativeChatMessage } from '../../../../shared/native-chat-types'
 import type { NativeChatResolvedPrompt } from './native-chat-resolution-receipt'
 import type { NativeChatTurnDiff } from './native-chat-turn-diffs'
+import type { NativeChatTurnStatus } from '../../../../shared/native-chat-turn-status'
 import {
   buildNativeChatTranscriptSlots,
   nativeChatSlotIndexOf,
@@ -36,6 +37,11 @@ function call(id: string, name = 'shell'): NativeChatMessage {
     timestamp: 1,
     source: 'transcript'
   }
+}
+
+/** Agent words with a call folded under them, as `foldToolMessages` hands them over. */
+function lead(id: string): NativeChatMessage {
+  return { ...call(id), blocks: [{ type: 'text', text: `${id} says` }, ...call(id).blocks] }
 }
 
 function build(
@@ -78,22 +84,17 @@ describe('work runs', () => {
       thought('r2'),
       call('b'),
       thought('r3'),
-      text('x', 'Found it.'),
-      call('c'),
+      lead('x'),
       thought('r4'),
       call('d'),
       text('y', 'Done.')
     ])
-    expect(rows(slots)).toEqual(['u', ['r1', 'a', 'r2', 'b', 'r3'], 'x', ['c', 'r4', 'd'], 'y'])
+    expect(rows(slots)).toEqual(['u', ['r1', 'a', 'r2', 'b', 'r3'], ['x', 'r4', 'd'], 'y'])
   })
 
   // The words a call was folded under head the run, so their calls and the ones after a
   // thought read as one run, not two.
   it('lets the agent words that carry calls head the run, but never join one', () => {
-    const lead = (id: string): NativeChatMessage => ({
-      ...call(id),
-      blocks: [{ type: 'text', text: `${id} says` }, ...call(id).blocks]
-    })
     expect(
       rows(
         build([
@@ -172,10 +173,101 @@ describe('work runs', () => {
     expect(slots[1]?.trailingRun).toBe(true)
   })
 
+  // The row draws (and takes a slot), so it joins; inside the run it draws nothing.
+  it('lets a thought with no visible text join rather than split the run', () => {
+    const blank: NativeChatMessage = { ...thought('w'), blocks: [{ type: 'text', text: '\n' }] }
+    expect(rows(build([text('u', 'go', 'user'), call('a'), blank, call('b')]))).toEqual([
+      'u',
+      ['a', 'w', 'b']
+    ])
+  })
+
   it('finds a member by id, for a reveal aimed at it', () => {
     const slots = build([text('u', 'go', 'user'), call('a'), thought('r1'), call('b')])
     expect(nativeChatSlotIndexOf(slots, 'b')).toBe(1)
     expect(nativeChatSlotIndexOf(slots, 'r1')).toBe(1)
+  })
+})
+
+describe('work runs with an edit in their turn', () => {
+  const diff: NativeChatTurnDiff = {
+    files: [
+      {
+        path: 'a.ts',
+        added: 1,
+        removed: 1,
+        truncated: false,
+        target: { messageId: 'a', editKey: 'Diff:0', fileIndex: 0 }
+      }
+    ],
+    added: 1,
+    removed: 1,
+    truncated: false
+  }
+  const turn = [
+    text('u', 'go', 'user'),
+    thought('r1'),
+    call('a', 'Diff'),
+    thought('r2'),
+    call('b'),
+    thought('r3'),
+    call('c')
+  ]
+
+  // The rollup draws under the turn's newest row, which is the run's own last member while live.
+  it('keeps the newest row in the live run, which carries the rollup', () => {
+    const slots = build(turn, {
+      liveTurnKey: 'u',
+      isWorking: true,
+      turnDiffs: new Map([['u', diff]])
+    })
+    expect(rows(slots)).toEqual(['u', ['r1', 'a', 'r2', 'b', 'r3', 'c']])
+    expect(slots[1]?.trailingRun).toBe(true)
+    expect(slots[1]?.turnDiff).toBe(diff)
+    const thinking = build([...turn, thought('r4')], {
+      liveTurnKey: 'u',
+      isWorking: true,
+      turnDiffs: new Map([['u', diff]])
+    })
+    expect(rows(thinking)).toEqual(['u', ['r1', 'a', 'r2', 'b', 'r3', 'c', 'r4']])
+    expect(thinking[1]?.turnDiff).toBe(diff)
+  })
+
+  it('keeps a stopped turn that ended on work as one run once opened', () => {
+    const settled: NativeChatTurnStatus = { startedAt: 1, thinking: false, workedSeconds: 4 }
+    const slots = build(turn, {
+      turnStatuses: { active: null, completedByTurn: { u: settled } },
+      expandedTurnKeys: new Set(['u']),
+      turnDiffs: new Map([['u', diff]])
+    })
+    expect(rows(slots)).toEqual(['u', ['r1', 'a', 'r2', 'b', 'r3', 'c']])
+    expect(slots[1]?.turnDiff).toBe(diff)
+    expect(slots[0]?.turnDiff).toBeUndefined()
+  })
+})
+
+describe('work run height', () => {
+  // Collapsed, a run draws one header: its thoughts' text reserves nothing until it opens.
+  it('reserves one tool row for a collapsed run however long its thoughts are', () => {
+    const long = (id: string): NativeChatMessage => ({
+      ...thought(id),
+      blocks: [{ type: 'text', text: 'x'.repeat(400) }]
+    })
+    const members = Array.from({ length: 12 }, (_, index) => [
+      long(`r${index}`),
+      call(`c${index}`)
+    ]).flat()
+    const [, lone] = build([text('u', 'go', 'user'), call('c')])
+    const [, run] = build([text('u', 'go', 'user'), ...members])
+    expect(run?.workRun).toHaveLength(24)
+    expect(run?.estimatedHeight).toBe(lone?.estimatedHeight)
+  })
+
+  it("adds a lead head's words over the run", () => {
+    const [, alone] = build([text('u', 'go', 'user'), lead('x')])
+    const [, run] = build([text('u', 'go', 'user'), lead('x'), thought('r1'), call('a')])
+    expect(run?.workRun).toHaveLength(3)
+    expect(run?.estimatedHeight).toBe(alone?.estimatedHeight)
   })
 })
 

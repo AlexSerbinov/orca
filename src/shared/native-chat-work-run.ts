@@ -22,10 +22,11 @@ export function nativeChatWorkRunMember(
   if (hasReceipt) {
     return null
   }
-  const content = deriveNativeChatRowContent(message.blocks)
+  // Any drawn thought joins: one with no visible text draws nothing inside the run either.
   if (message.role === 'reasoning') {
-    return content.markdown.trim().length > 0 ? 'thought' : null
+    return 'thought'
   }
+  const content = deriveNativeChatRowContent(message.blocks)
   if (
     message.role !== 'assistant' ||
     content.tools.length === 0 ||
@@ -39,6 +40,53 @@ export function nativeChatWorkRunMember(
     return null
   }
   return content.markdown.length > 0 || content.hasImages ? 'lead' : 'tool'
+}
+
+/** One row of a transcript as the run boundaries read it. */
+export type NativeChatWorkRunRow = {
+  /** What the row adds to a run; null ends one. */
+  member: NativeChatWorkRunMember | null
+  /** False for a row that draws nothing: it neither joins nor ends a run. */
+  draws: boolean
+  /** Runs never cross a scope (a turn, a subagent's section), drawn or not. */
+  scope: string | undefined
+}
+
+/** Each work run's member indexes, ascending. A run has at least two members and at least one
+ *  call; a lead may head one but never join one. Derived per call, so nothing is stored. */
+export function nativeChatWorkRunSpans(rows: readonly NativeChatWorkRunRow[]): number[][] {
+  const spans: number[][] = []
+  let open: number[] = []
+  let hasCall = false
+  let scope: string | undefined
+  const close = (): void => {
+    if (open.length > 1 && hasCall) {
+      spans.push(open)
+    }
+    open = []
+    hasCall = false
+  }
+  for (const [index, row] of rows.entries()) {
+    if (open.length > 0 && row.scope !== scope) {
+      close()
+    }
+    if (!row.draws) {
+      continue
+    }
+    if (row.member === null || row.member === 'lead') {
+      close()
+    }
+    if (row.member === null) {
+      continue
+    }
+    if (open.length === 0) {
+      scope = row.scope
+    }
+    open.push(index)
+    hasCall ||= row.member !== 'thought'
+  }
+  close()
+  return spans
 }
 
 export type NativeChatWorkRunEntries = {

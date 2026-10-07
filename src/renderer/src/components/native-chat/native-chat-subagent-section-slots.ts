@@ -132,15 +132,6 @@ export function nativeChatSubagentSectionSlots({
   /** Heads, ahead of `message`, each pending section whose first row came before
    *  it, with its rows when open; `undefined` flushes the rest. Inside a section
    *  each sits in that section's turn; in the conversation, in its first row's. */
-  /** Whether `openBefore` would head a section ahead of `message`. */
-  function opensBefore(pending: readonly string[], message: NativeChatMessage): boolean {
-    const agentId = pending[0]
-    if (agentId === undefined) {
-      return false
-    }
-    const first = sections.rows.get(agentId)?.[0]
-    return first === undefined || compareMessages(first.message, message) < 0
-  }
   function openBefore(
     pending: string[],
     message: NativeChatMessage | undefined,
@@ -148,11 +139,15 @@ export function nativeChatSubagentSectionSlots({
     section?: { turnKey: string | undefined }
   ) {
     while (pending.length > 0) {
-      if (message !== undefined && !opensBefore(pending, message)) {
-        return
-      }
       const agentId = pending[0]!
       const first = sections.rows.get(agentId)?.[0]
+      if (
+        message !== undefined &&
+        first !== undefined &&
+        compareMessages(first.message, message) >= 0
+      ) {
+        return
+      }
       pending.shift()
       const turnKey = section ? section.turnKey : first?.turnKey
       pushHead(agentId, depth, turnKey)
@@ -163,7 +158,6 @@ export function nativeChatSubagentSectionSlots({
   }
   return {
     openBefore,
-    opensBefore,
     /** Each open child's rows under its entry, then the entries up to the next open one. */
     openAnchoredAt(
       message: NativeChatMessage,

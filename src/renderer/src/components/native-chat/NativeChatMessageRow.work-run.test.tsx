@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { NativeChatMessage } from '../../../../shared/native-chat-types'
-import { NativeChatWorkRunRow } from './NativeChatWorkRunRow'
+import { MessageRow } from './NativeChatMessageRow'
 
 afterEach(() => {
   cleanup()
@@ -34,12 +34,14 @@ function command(id: string, cmd: string): NativeChatMessage {
   }
 }
 
-describe('work run row', () => {
+describe('message row drawing a work run', () => {
   it('speaks for its calls alone, and reads its thoughts in order once opened', () => {
+    const first = thought('r1', 'Check the log first.')
     const { container } = render(
-      <NativeChatWorkRunRow
-        members={[
-          thought('r1', 'Check the log first.'),
+      <MessageRow
+        message={first}
+        workRun={[
+          first,
           command('a', 'ls logs'),
           thought('r2', 'Now search it.'),
           command('b', 'rg error logs'),
@@ -72,8 +74,9 @@ describe('work run row', () => {
       blocks: [{ type: 'text', text: 'Looking at the logs.' }, ...command('a', 'ls logs').blocks]
     }
     const { container } = render(
-      <NativeChatWorkRunRow
-        members={[head, thought('r1', 'Now search it.'), command('b', 'rg error logs')]}
+      <MessageRow
+        message={head}
+        workRun={[head, thought('r1', 'Now search it.'), command('b', 'rg error logs')]}
         expandSignal={false}
         activeTurnIsWorking={false}
         onScrollMessageToTop={() => {}}

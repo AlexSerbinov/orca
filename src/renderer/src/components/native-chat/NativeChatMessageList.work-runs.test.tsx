@@ -1,0 +1,128 @@
+// @vitest-environment happy-dom
+
+import '@testing-library/jest-dom/vitest'
+
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import type { NativeChatLiveSession } from './use-native-chat-live-session'
+import { NativeChatMessageList } from './NativeChatMessageList'
+import { installNativeChatMessageListTestViewport } from './native-chat-message-list-test-viewport'
+import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
+import type { NativeChatMessage } from '../../../../shared/native-chat-types'
+
+let restoreViewport = (): void => {}
+beforeAll(() => {
+  restoreViewport = installNativeChatMessageListTestViewport()
+})
+afterAll(() => restoreViewport())
+afterEach(cleanup)
+
+const STARTED = 1_000
+
+const prompt: NativeChatMessage = {
+  id: 'user-1',
+  role: 'user',
+  blocks: [{ type: 'text', text: 'Start the task' }],
+  timestamp: STARTED - 500,
+  source: 'transcript'
+}
+
+const command: NativeChatMessage = {
+  id: 'tool-1',
+  role: 'assistant',
+  blocks: [{ type: 'tool-call', name: 'Bash', input: { command: 'ls logs' }, state: 'completed' }],
+  timestamp: STARTED,
+  source: 'transcript'
+}
+
+function reasoning(state: 'running' | 'completed'): NativeChatMessage {
+  return {
+    id: 'r-1',
+    role: 'reasoning',
+    blocks: [{ type: 'text', text: 'Weighing two approaches' }],
+    timestamp: STARTED + 50,
+    source: 'transcript',
+    state,
+    ...(state === 'completed' ? { completedAt: STARTED + 12_000 } : {})
+  }
+}
+
+/** The journal that says the turn runs and what its newest content is. */
+function journal(rows: readonly NativeChatMessage[]): AgentJournalRenderItem[] {
+  return [
+    {
+      itemId: prompt.id,
+      revision: 1,
+      sequence: 1,
+      observedAt: 1,
+      body: { kind: 'message', role: 'user', blocks: prompt.blocks }
+    },
+    {
+      itemId: 'turn-1',
+      revision: 1,
+      sequence: 2,
+      observedAt: 2,
+      body: { kind: 'turn', turnId: 'turn-1', state: 'running', userItemId: prompt.id }
+    },
+    ...rows.map((row, index) => ({
+      itemId: row.id,
+      revision: 1,
+      sequence: index + 3,
+      observedAt: index + 3,
+      body: {
+        kind: 'message' as const,
+        role: row.role,
+        blocks: row.blocks,
+        ...(row.state ? { state: row.state } : {})
+      }
+    }))
+  ]
+}
+
+function list(rows: readonly NativeChatMessage[]): React.JSX.Element {
+  const session: NativeChatLiveSession = {
+    messages: [prompt, ...rows],
+    status: 'working',
+    sessionId: 'session-1',
+    agent: 'claude',
+    hasMore: false,
+    loadingEarlier: false,
+    olderHistoryGeneration: 0,
+    loadEarlier: vi.fn(),
+    readPhase: 'ready'
+  }
+  return (
+    <NativeChatMessageList
+      session={session}
+      journalItems={journal(rows)}
+      isWorking
+      expandSignal={false}
+    />
+  )
+}
+
+const runHeader = (): HTMLElement =>
+  document.querySelector<HTMLElement>('[data-native-chat-tool-run-state]')!
+
+describe('a thought joining a work run', () => {
+  it('joins collapsed when the reader never opened it', () => {
+    render(list([command, reasoning('completed')]))
+    expect(runHeader()).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Weighing two approaches')).toBeNull()
+  })
+
+  // Opened while live, it stays in view once it lands in the run; the run's own choice still wins.
+  it('keeps a thought the reader opened in view, until they close the run', () => {
+    const { rerender } = render(list([command, reasoning('running')]))
+    fireEvent.click(screen.getByRole('button', { name: 'Thinking' }))
+    expect(screen.getByText('Weighing two approaches')).toBeInTheDocument()
+
+    rerender(list([command, reasoning('completed')]))
+    expect(runHeader()).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('Weighing two approaches')).toBeInTheDocument()
+
+    fireEvent.click(runHeader())
+    expect(runHeader()).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Weighing two approaches')).toBeNull()
+  })
+})

@@ -1,7 +1,10 @@
 import type { CommentMarkdownLinkClickHandler } from '@/components/sidebar/CommentMarkdown'
-import { Fragment, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNativeChatDisclosure } from './native-chat-disclosure-store'
+import {
+  useNativeChatDisclosure,
+  useNativeChatDisclosuresOpen
+} from './native-chat-disclosure-store'
 import { NativeChatToolLine } from './NativeChatToolLine'
 import { Check, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -47,6 +50,13 @@ import type {
 import { NativeChatToolRunIcon } from './NativeChatToolIcon'
 import { NativeChatToolRunCallCounts } from './NativeChatToolRunCallCounts'
 
+/** Rows drawn among an open run's lines, each keyed: before the block they are keyed by, or
+ *  after the last. */
+export type NativeChatToolRunAsides = {
+  before: ReadonlyMap<NativeChatBlock, readonly React.JSX.Element[]>
+  after: readonly React.JSX.Element[]
+}
+
 /** Stable empty default: a fresh array literal per render breaks memoization. */
 const NO_SUBAGENT_GROUPS: NativeChatSubagentGroupBlock[] = []
 const NO_BACKGROUND_TASKS: NativeChatBackgroundTaskBlock[] = []
@@ -68,8 +78,8 @@ export function NativeChatToolRun({
   expandOverride,
   disclosureId,
   onLinkClick,
-  asidesBefore,
-  asideAfter
+  asides,
+  openWith
 }: {
   blocks: NativeChatBlock[]
   previousTodoWrite?: NativeChatToolCallBlock
@@ -97,9 +107,10 @@ export function NativeChatToolRun({
    *  opened has to be remembered somewhere that outlives the row. */
   disclosureId?: string
   onLinkClick?: CommentMarkdownLinkClickHandler
-  /** Drawn among the open run's lines: before the block each is keyed by, and after the last. */
-  asidesBefore?: ReadonlyMap<NativeChatBlock, React.ReactNode>
-  asideAfter?: React.ReactNode
+  asides?: NativeChatToolRunAsides
+  /** Disclosure keys of rows inside the run: while the reader holds one open, so is the run,
+   *  unless they chose otherwise for the run itself. */
+  openWith?: readonly string[]
 }): React.JSX.Element | null {
   // This row owns the language subscription for its tool, diff, and task labels.
   useTranslation()
@@ -109,9 +120,10 @@ export function NativeChatToolRun({
     disclosureId === undefined
       ? undefined
       : `run:${disclosureId}:${expandOverride ?? '-'}:${expandSignal}:${revealedDiff?.requestId ?? '-'}`
+  const insideHeldOpen = useNativeChatDisclosuresOpen(openWith)
   const { open, setOpen } = useNativeChatDisclosure(
     runKey,
-    revealedDiff ? true : (expandOverride ?? expandSignal)
+    revealedDiff ? true : (expandOverride ?? (expandSignal || insideHeldOpen))
   )
 
   // Childless groups are dropped so `subagentRows.length` stays an honest test of
@@ -401,26 +413,16 @@ export function NativeChatToolRun({
                 />
               )
             })
-            if (!asidesBefore && asideAfter === undefined) {
-              return lines
-            }
-            // An aside rides with the block it precedes, so a consumed result still keeps it.
-            return (
-              <>
-                {headerBlocks.map((block, blockIndex) => {
-                  const aside = asidesBefore?.get(block)
-                  return aside === undefined ? (
+            // One flat keyed list with or without asides, so a row gaining its first never remounts a line.
+            return asides
+              ? [
+                  ...headerBlocks.flatMap((block, blockIndex) => [
+                    ...(asides.before.get(block) ?? []),
                     lines[blockIndex]
-                  ) : (
-                    <Fragment key={`aside:${blockIndex}`}>
-                      {aside}
-                      {lines[blockIndex]}
-                    </Fragment>
-                  )
-                })}
-                {asideAfter}
-              </>
-            )
+                  ]),
+                  ...asides.after
+                ]
+              : lines
           })()}
         </div>
       ) : null}

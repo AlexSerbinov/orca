@@ -8,7 +8,6 @@ import { NativeChatMarkdown } from './NativeChatMarkdown'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import type {
-  NativeChatBlock,
   NativeChatMessage,
   NativeChatToolCallBlock
 } from '../../../../shared/native-chat-types'
@@ -32,6 +31,7 @@ import type {
   NativeChatSubagentRosterState
 } from './native-chat-subagent-sections'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
+import { useNativeChatWorkRun } from './use-native-chat-work-run'
 
 /** What a user message says about its delivery: that nothing has confirmed it yet, quietly in
  *  place of its time, or that it did not go through, with its own Retry when the surface can send
@@ -79,12 +79,31 @@ function UserMessageMeta({
   )
 }
 
-/** A work run drawn under this message's words in place of its own tool calls: every call in
- *  the run, and the thoughts among them. */
-export type NativeChatMessageRowRun = {
-  blocks: NativeChatBlock[]
-  asidesBefore: ReadonlyMap<NativeChatBlock, React.ReactNode>
-  asideAfter?: React.ReactNode
+type MessageRowProps = {
+  message: NativeChatMessage
+  previousTodoWrite?: NativeChatToolCallBlock
+  previousUpdatePlan?: NativeChatToolCallBlock
+  revealedDiff?: NativeChatDiffReveal
+  expandSignal: boolean
+  activeTurnIsWorking?: boolean
+  /** This row's tool run is the turn's last, so it is the one still live. */
+  trailingRun?: boolean
+  /** Align this message's top to the top of the scroll viewport. */
+  onScrollMessageToTop: (el: HTMLElement) => void
+  onLinkClick?: CommentMarkdownLinkClickHandler
+  allowFileUriLinks?: boolean
+  deliveryNotice?: NativeChatDeliveryNotice
+  /** On a roster row: its list's state and the subagents whose rows open below it. */
+  subagentRoster?: NativeChatSubagentRosterState
+  subagentDisclosure?: NativeChatSubagentDisclosure
+  /** Inside a subagent's section, whose border has to reach past the row's controls. */
+  inSubagentSection?: boolean
+  runtimeContext?: RuntimeFileOperationArgs | null
+  /** On a user row: discards it and everything after it. */
+  rewind?: NativeChatRewindSurface
+  /** This row draws a run of tool calls and thoughts: every message in it, `message` first.
+   *  The same row either way, so a row becoming a run keeps everything it has mounted. */
+  workRun?: readonly NativeChatMessage[]
 }
 
 /** One message: its prose first, then a collapsible run folding all of the
@@ -109,31 +128,8 @@ export const MessageRow = memo(function MessageRow({
   inSubagentSection = false,
   runtimeContext,
   rewind,
-  run
-}: {
-  message: NativeChatMessage
-  previousTodoWrite?: NativeChatToolCallBlock
-  previousUpdatePlan?: NativeChatToolCallBlock
-  revealedDiff?: NativeChatDiffReveal
-  expandSignal: boolean
-  activeTurnIsWorking?: boolean
-  /** This row's tool run is the turn's last, so it is the one still live. */
-  trailingRun?: boolean
-  /** Align this message's top to the top of the scroll viewport. */
-  onScrollMessageToTop: (el: HTMLElement) => void
-  onLinkClick?: CommentMarkdownLinkClickHandler
-  allowFileUriLinks?: boolean
-  deliveryNotice?: NativeChatDeliveryNotice
-  /** On a roster row: its list's state and the subagents whose rows open below it. */
-  subagentRoster?: NativeChatSubagentRosterState
-  subagentDisclosure?: NativeChatSubagentDisclosure
-  /** Inside a subagent's section, whose border has to reach past the row's controls. */
-  inSubagentSection?: boolean
-  runtimeContext?: RuntimeFileOperationArgs | null
-  /** On a user row: discards it and everything after it. */
-  rewind?: NativeChatRewindSurface
-  run?: NativeChatMessageRowRun
-}): React.JSX.Element | null {
+  workRun
+}: MessageRowProps): React.JSX.Element | null {
   const rowRef = useRef<HTMLDivElement | null>(null)
   const blocks = nativeChatBlocksInOwnWords(message.blocks)
   // One pass per block set, shared with the list that decides whether this row
@@ -144,6 +140,12 @@ export const MessageRow = memo(function MessageRow({
   const isReasoning = message.role === 'reasoning'
   const isSystem = message.role === 'system'
   const providerFrame = blocks.find((block) => block.type === 'text' && block.providerFrame)
+  const run = useNativeChatWorkRun(workRun, {
+    revealedDiff,
+    activeTurnIsWorking,
+    onLinkClick,
+    allowFileUriLinks
+  })
 
   const scrollToTop = useCallback(() => {
     if (rowRef.current) {
@@ -155,6 +157,7 @@ export const MessageRow = memo(function MessageRow({
   // bubble.
   // After all hooks, so hook order stays unconditional.
   if (
+    run === undefined &&
     markdown.length === 0 &&
     !hasImages &&
     tools.length === 0 &&
@@ -273,7 +276,7 @@ export const MessageRow = memo(function MessageRow({
     )
   }
 
-  if (isReasoning) {
+  if (isReasoning && run === undefined) {
     return (
       <div ref={rowRef}>
         <NativeChatReasoningRow
@@ -287,18 +290,18 @@ export const MessageRow = memo(function MessageRow({
     )
   }
 
+  // A thought heading a run reads inside it, so the row has no words of its own.
+  const words = isReasoning ? '' : markdown
   // Assistant controls reveal on hover and keyboard focus; system asides stay chrome-free.
-  const showControls = !isSystem && markdown.length > 0
+  const showControls = !isSystem && words.length > 0
 
   return (
     <div
       ref={rowRef}
-      data-native-chat-message-tone={isReasoning || isSystem ? 'faint' : undefined}
+      data-native-chat-message-tone={isSystem ? 'faint' : undefined}
       className={cn(
         'group relative max-w-full select-text text-sm leading-relaxed text-chat-foreground',
         !isSystem && 'native-chat-message-text',
-        // Reasoning stays quieter while keeping the same upright text as prose.
-        isReasoning && 'border-l-2 border-border/60 pl-3 text-chat-foreground-faint',
         isSystem && 'text-xs text-chat-foreground-faint'
       )}
     >
@@ -307,9 +310,9 @@ export const MessageRow = memo(function MessageRow({
         runtimeContext={runtimeContext}
         enablePreview={runtimeContext !== undefined}
       />
-      {markdown ? (
+      {words ? (
         <NativeChatMarkdown
-          content={markdown}
+          content={words}
           variant="document"
           className="text-sm native-chat-message-text"
           renderCodeBlock={NativeChatCodeBlock}
@@ -318,12 +321,12 @@ export const MessageRow = memo(function MessageRow({
           linkifyFilePaths={onLinkClick !== undefined}
         />
       ) : null}
-      {tools.length > 0 || subagentGroups.length > 0 || backgroundTasks.length > 0 ? (
+      {run || tools.length > 0 || subagentGroups.length > 0 || backgroundTasks.length > 0 ? (
         <NativeChatToolRun
           blocks={run?.blocks ?? tools}
           previousTodoWrite={previousTodoWrite}
           previousUpdatePlan={previousUpdatePlan}
-          revealedDiff={revealedDiff}
+          revealedDiff={run ? run.revealedDiff : revealedDiff}
           onRevealDiff={onScrollMessageToTop}
           onLinkClick={onLinkClick}
           subagentGroups={subagentGroups}
@@ -334,13 +337,13 @@ export const MessageRow = memo(function MessageRow({
           activeTurnIsWorking={activeTurnIsWorking}
           trailing={trailingRun}
           disclosureId={message.id}
-          asidesBefore={run?.asidesBefore}
-          asideAfter={run?.asideAfter}
+          asides={run?.asides}
+          openWith={run?.openWith}
         />
       ) : null}
       {showControls ? (
         <NativeChatAgentControls
-          markdown={markdown}
+          markdown={words}
           timestamp={message.timestamp}
           onScrollToTop={scrollToTop}
           className={cn(
@@ -352,4 +355,19 @@ export const MessageRow = memo(function MessageRow({
       ) : null}
     </div>
   )
-})
+}, sameMessageRowProps)
+
+/** A rebuilt transcript hands every run a fresh member list; same messages, same row. */
+function sameMessageRowProps(previous: MessageRowProps, next: MessageRowProps): boolean {
+  const { workRun: previousRun, ...previousRest } = previous
+  const { workRun: nextRun, ...nextRest } = next
+  const nextProps = new Map(Object.entries(nextRest))
+  return (
+    Object.keys(previousRest).length === nextProps.size &&
+    Object.entries(previousRest).every(
+      ([key, value]) => nextProps.has(key) && Object.is(value, nextProps.get(key))
+    ) &&
+    previousRun?.length === nextRun?.length &&
+    (previousRun ?? []).every((member, index) => member === nextRun?.[index])
+  )
+}
