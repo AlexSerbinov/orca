@@ -92,7 +92,10 @@ export function SpeechModelRow(props: Props) {
   // Why: an accessible Pressable merges its children, hiding nested Use/Delete from VoiceOver.
   if (variant === 'manage') {
     return (
-      <View style={styles.modelRow} testID={`speech-model-${model.id}`}>
+      <View
+        style={[styles.modelRow, readOnly && !selected && styles.modelRowDimmed]}
+        testID={`speech-model-${model.id}`}
+      >
         {content}
       </View>
     )
@@ -137,6 +140,11 @@ function SpeechModelRowAction({
     if (variant === 'picker') {
       return selected ? <Check size={18} color={colors.statusGreen} strokeWidth={2.4} /> : null
     }
+    const deletable = local && onDelete !== undefined
+    // Why: an empty actions wrapper still takes the row's gap and shifts the label.
+    if (!selected && readOnly && !deletable) {
+      return null
+    }
     return (
       <View style={styles.rowActions}>
         {selected ? (
@@ -160,7 +168,7 @@ function SpeechModelRowAction({
             )}
           </Pressable>
         )}
-        {local && onDelete ? (
+        {deletable ? (
           <Pressable
             style={({ pressed }) => [styles.iconButton, pressed && styles.actionPressed]}
             hitSlop={voiceCabinetHitSlop.iconButton}

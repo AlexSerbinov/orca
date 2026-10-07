@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SpeechModelRow } from './speech-model-row'
+import { voiceCabinetStyles } from './voice-cabinet-styles'
 import {
   speechProvidersStateSchema,
   type MobileSpeechProviderModel
@@ -175,5 +176,16 @@ describe('SpeechModelRow read-only provider', () => {
     const manage = renderRow('manage', 'ready', { readOnly: true, onSelect })
     expect(manage.findAllByProps({ accessibilityLabel: 'Use Model' })).toHaveLength(0)
     expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('dims a read-only manage row and drops its empty actions wrapper', () => {
+    const dimmed = voiceCabinetStyles.modelRowDimmed
+    const manage = renderRow('manage', 'ready', { readOnly: true })
+    expect(manage.props.style).toContain(dimmed)
+    expect(manage.findAllByProps({ style: voiceCabinetStyles.rowActions })).toHaveLength(0)
+
+    const writable = renderRow('manage', 'ready')
+    expect(writable.props.style).not.toContain(dimmed)
+    expect(writable.findAllByProps({ style: voiceCabinetStyles.rowActions })).toHaveLength(1)
   })
 })
