@@ -6,6 +6,20 @@ import { CLOUD_TRANSCRIPTION_SAMPLE_RATE } from './cloud-speech-session'
 
 export const SONIOX_REALTIME_URL = 'wss://stt-rt.soniox.com/transcribe-websocket'
 
+/** The stream config frame; also sent by the key probe so it exercises the same permission. */
+export function buildSonioxStreamConfig(
+  apiModel: string,
+  language?: string
+): Record<string, unknown> {
+  return {
+    model: apiModel,
+    audio_format: 'pcm_s16le',
+    sample_rate: CLOUD_TRANSCRIPTION_SAMPLE_RATE,
+    num_channels: 1,
+    ...(language ? { language_hints: [language] } : {})
+  }
+}
+
 type SonioxToken = { text?: unknown; is_final?: unknown }
 
 /** Soniox streams tokens: final ones are sent once, non-final ones are re-sent each message. */
@@ -26,13 +40,7 @@ export class SonioxRealtimeSession extends RealtimeCloudSpeechSession {
   }
 
   protected onOpen(): void {
-    this.sendJson({
-      model: this.apiModel,
-      audio_format: 'pcm_s16le',
-      sample_rate: CLOUD_TRANSCRIPTION_SAMPLE_RATE,
-      num_channels: 1,
-      ...(this.language ? { language_hints: [this.language] } : {})
-    })
+    this.sendJson(buildSonioxStreamConfig(this.apiModel, this.language))
     this.markAccepting()
   }
 

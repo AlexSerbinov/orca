@@ -75,6 +75,8 @@ const OPENAI_ENTRIES: CloudSpeechCatalogEntry[] = [
   }
 ]
 
+export const SONIOX_REALTIME_API_MODEL = 'stt-rt-v5'
+
 const CLOUD_ENTRIES: CloudSpeechCatalogEntry[] = [
   ...OPENAI_ENTRIES,
   cloudEntry({
@@ -82,7 +84,7 @@ const CLOUD_ENTRIES: CloudSpeechCatalogEntry[] = [
     label: 'Soniox Real-time v5',
     description: 'Live captions while you speak, 60+ languages. Requires a Soniox API key.',
     provider: 'soniox',
-    apiModel: 'stt-rt-v5',
+    apiModel: SONIOX_REALTIME_API_MODEL,
     realtime: true
   }),
   cloudEntry({

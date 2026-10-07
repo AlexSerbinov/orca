@@ -6,14 +6,16 @@ import {
   type CloudSpeechProviderId
 } from '../../shared/cloud-speech-providers'
 import { describeProviderFailure, readProviderErrorMessage } from './cloud-speech-provider-errors'
+import { verifySonioxApiKey } from './soniox-key-verification'
 
 const KEY_VERIFICATION_TIMEOUT_MS = 10_000
 
 type VerificationRequest = { url: string; headers: Record<string, string>; method?: 'POST' }
+type HttpProbedProviderId = Exclude<CloudSpeechProviderId, 'soniox'>
 
 // Why: each probe is a cheap authenticated call, so testing a key never bills an inference.
 function buildVerificationRequest(
-  providerId: CloudSpeechProviderId,
+  providerId: HttpProbedProviderId,
   apiKey: string
 ): VerificationRequest {
   switch (providerId) {
@@ -23,8 +25,6 @@ function buildVerificationRequest(
       return { url: 'https://api.groq.com/openai/v1/models', headers: bearer(apiKey) }
     case 'mistral':
       return { url: 'https://api.mistral.ai/v1/models', headers: bearer(apiKey) }
-    case 'soniox':
-      return { url: 'https://api.soniox.com/v1/models', headers: bearer(apiKey) }
     case 'deepgram':
       return {
         url: 'https://api.deepgram.com/v1/projects',
@@ -70,6 +70,9 @@ export async function verifyCloudSpeechApiKey(
   }
   if (!isWellFormedCloudSpeechApiKey(trimmed)) {
     return { ok: false, message: MALFORMED_CLOUD_SPEECH_API_KEY_MESSAGE }
+  }
+  if (providerId === 'soniox') {
+    return verifySonioxApiKey(trimmed, KEY_VERIFICATION_TIMEOUT_MS)
   }
   const request = buildVerificationRequest(providerId, trimmed)
   let response: Response

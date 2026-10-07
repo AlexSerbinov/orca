@@ -1,4 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
+
+const { verifySonioxApiKey } = vi.hoisted(() => ({
+  verifySonioxApiKey: vi.fn(async () => ({ ok: true, message: null }))
+}))
+
+vi.mock('./soniox-key-verification', () => ({ verifySonioxApiKey }))
+
 import { verifyCloudSpeechApiKey } from './cloud-speech-key-verification'
 
 function respond(status: number, body: unknown = {}): Response {
@@ -7,7 +14,6 @@ function respond(status: number, body: unknown = {}): Response {
 
 describe('verifyCloudSpeechApiKey', () => {
   it.each([
-    ['soniox', 'https://api.soniox.com/v1/models', 'Authorization', 'Bearer key-1'],
     ['deepgram', 'https://api.deepgram.com/v1/projects', 'Authorization', 'Token key-1'],
     ['groq', 'https://api.groq.com/openai/v1/models', 'Authorization', 'Bearer key-1'],
     ['mistral', 'https://api.mistral.ai/v1/models', 'Authorization', 'Bearer key-1'],
@@ -40,6 +46,17 @@ describe('verifyCloudSpeechApiKey', () => {
     expect(response.bodyUsed).toBe(true)
   })
 
+  it('verifies Soniox on its real-time endpoint instead of an HTTP probe', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+
+    await expect(verifyCloudSpeechApiKey('soniox', ' key-1 ', fetchMock)).resolves.toEqual({
+      ok: true,
+      message: null
+    })
+    expect(verifySonioxApiKey).toHaveBeenCalledWith('key-1', 10_000)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('uses the Gemini header instead of a query-string key', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(respond(200))
 
@@ -55,10 +72,10 @@ describe('verifyCloudSpeechApiKey', () => {
       .fn<typeof fetch>()
       .mockResolvedValue(respond(401, { message: 'Incorrect API key provided: sk-secret12345' }))
 
-    const result = await verifyCloudSpeechApiKey('soniox', 'sk-secret12345', fetchMock)
+    const result = await verifyCloudSpeechApiKey('groq', 'sk-secret12345', fetchMock)
 
     expect(result.ok).toBe(false)
-    expect(result.message).toContain('Soniox rejected this API key (401).')
+    expect(result.message).toContain('Groq rejected this API key (401).')
     expect(result.message).not.toContain('sk-secret12345')
   })
 
