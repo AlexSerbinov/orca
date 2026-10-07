@@ -3,6 +3,7 @@ import type { NativeChatComposerInput } from './native-chat-composer-input'
 import type { ClipboardEventHandler, KeyboardEventHandler, RefObject } from 'react'
 import { useLayoutEffect, useRef } from 'react'
 import { ImageOff } from 'lucide-react'
+import { flushSync } from 'react-dom'
 import type { useImeEnterGestureOwnership } from '@/lib/ime-composition-keyboard-event'
 import { cn } from '@/lib/utils'
 import type { ComposerAutocomplete, NativeChatPickerItem } from './native-chat-composer-state'
@@ -281,6 +282,11 @@ export function NativeChatComposerField({
                 }
               }}
               onCompositionStart={() => {
+                if (imeEnterGesture.isComposing()) {
+                  imeEnterGesture.setComposing(false)
+                  // Settle the interrupted composition before the new one takes browser ownership.
+                  flushSync(() => settleImeValue(textareaRef.current!))
+                }
                 compositionBaseRef.current = textareaRef.current!.value
                 imeEnterGesture.setComposing(true)
               }}

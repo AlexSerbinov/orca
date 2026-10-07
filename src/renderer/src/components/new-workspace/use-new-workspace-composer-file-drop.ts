@@ -25,7 +25,7 @@ export function useNewWorkspaceComposerFileDrop(args: Args) {
   return useOsFileDropOwner(ownerRef, {
     consumer: 'agent',
     sequence,
-    canAccept: Boolean(args.projectPath && args.hostId),
+    canAccept: Boolean(args.projectPath && args.hostId && args.applyDrop),
     captureDestination: () => {
       const connectionId = args.connectionId
       const host = parseExecutionHostId(args.hostId)

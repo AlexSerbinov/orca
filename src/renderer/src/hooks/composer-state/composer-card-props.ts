@@ -194,7 +194,8 @@ export function buildComposerCardProps(state: ComposerModel) {
     linkedOnlyTemplatePreview: shouldApplyLinkedOnlyTemplate ? linkedOnlyTemplatePrompt : null,
     attachmentPaths,
     getAttachmentLabel,
-    onNativeFileDrop: state.applyNativeDrop,
+    // Quick create has no attachment display or launch-prompt destination.
+    onNativeFileDrop: createGateMode === 'quick' ? undefined : state.applyNativeDrop,
     onAddAttachment: () => void handleAddAttachment(),
     onRemoveAttachment: (pathValue) =>
       setAttachmentPaths((current) => current.filter((currentPath) => currentPath !== pathValue)),

@@ -301,7 +301,11 @@ export default function NewWorkspaceComposerCard(
       onDragLeave={dragHandlers.onDragLeave}
       className={cn(
         'flex min-h-0 min-w-0 flex-1 flex-col gap-1 rounded-md transition',
-        isFileDragOver && 'ring-2 ring-ring/30',
+        isFileDragOver &&
+          props.selectedRepoPath &&
+          selectedRepoExecutionHostId &&
+          props.onNativeFileDrop &&
+          'ring-2 ring-ring/30',
         containerClassName
       )}
     >

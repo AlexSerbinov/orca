@@ -86,7 +86,7 @@ export type ComposerCardActionProps = {
   onAgentPromptChange: ComposerModel['setAgentPrompt']
   linkedOnlyTemplatePreview: string | null
   getAttachmentLabel: (pathValue: string) => string
-  onNativeFileDrop: ComposerModel['applyNativeDrop']
+  onNativeFileDrop?: ComposerModel['applyNativeDrop']
   onAddAttachment: () => void
   onRemoveAttachment: (pathValue: string) => void
   onRemoveLinkedWorkItem: ComposerModel['handleRemoveLinkedWorkItem']

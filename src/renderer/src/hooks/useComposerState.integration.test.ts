@@ -54,8 +54,8 @@ describe('useComposerState integrated lifecycle', () => {
     expect(first.result.current.cardProps.onParentWorktreeIdChange).toBeTypeOf('function')
     act(() => first.result.current.cardProps.onParentWorktreeIdChange('repo-1::/parent'))
     expect(first.result.current.cardProps.parentWorktreeId).toBe('repo-1::/parent')
-    expect(first.result.current.cardProps.onNativeFileDrop).toBeTypeOf('function')
-    expect(second.result.current.cardProps.onNativeFileDrop).toBeTypeOf('function')
+    expect(first.result.current.cardProps.onNativeFileDrop).toBeUndefined()
+    expect(second.result.current.cardProps.onNativeFileDrop).toBeUndefined()
     expect(window.api.ui.onFileDrop).not.toHaveBeenCalled()
 
     second.unmount()
