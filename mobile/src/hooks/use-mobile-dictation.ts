@@ -18,7 +18,7 @@ import {
   dictationSessionCancel,
   dictationSessionFinish
 } from '../dictation/mobile-dictation-operations'
-import { deliverMobileDictationFinish } from './mobile-dictation-finish-outcome'
+import { deliverDictationFinish, readDictationFinish } from './mobile-dictation-finish-outcome'
 import type {
   DictationStatus,
   UseMobileDictationOptions,
@@ -257,11 +257,11 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
       if (!isCurrent()) {
         return
       }
+      const outcome = readDictationFinish(finished, streamSalvageRef.current.take(dictationId))
       activeIdRef.current = null
       resetChunkQueue(false)
       applyStatus('idle')
-      const streamFailure = streamSalvageRef.current.take(dictationId)
-      deliverMobileDictationFinish(finished, streamFailure, onTranscriptRef.current, reportError)
+      deliverDictationFinish(outcome, onTranscriptRef.current, reportError)
     } catch (err) {
       failActiveDictation(dictationId, err)
     }

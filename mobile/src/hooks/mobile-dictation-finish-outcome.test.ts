@@ -1,46 +1,49 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   MOBILE_DICTATION_NO_SPEECH_MESSAGE,
-  deliverMobileDictationFinish,
-  readMobileDictationFinishOutcome
+  deliverDictationFinish,
+  readDictationFinish
 } from './mobile-dictation-finish-outcome'
 
-describe('readMobileDictationFinishOutcome', () => {
+describe('readDictationFinish', () => {
   it('keeps the text and the provider error a newer desktop reports on finish', () => {
-    expect(
-      readMobileDictationFinishOutcome({ text: ' First part. ', error: 'Flush failed' }, null)
-    ).toEqual({ text: 'First part.', errorMessage: 'Flush failed' })
+    expect(readDictationFinish({ text: ' First part. ', error: 'Flush failed' }, null)).toEqual({
+      text: 'First part.',
+      errorMessage: 'Flush failed'
+    })
   })
 
   it('shows a failure a chunk already reported once, not twice', () => {
-    expect(
-      readMobileDictationFinishOutcome({ text: 'kept', error: 'Soniox closed' }, 'Soniox closed')
-    ).toEqual({ text: 'kept', errorMessage: 'Soniox closed' })
+    expect(readDictationFinish({ text: 'kept', error: 'Soniox closed' }, 'Soniox closed')).toEqual({
+      text: 'kept',
+      errorMessage: 'Soniox closed'
+    })
   })
 
   it('reads an old desktop reply without an error member as success', () => {
-    expect(readMobileDictationFinishOutcome({ dictationId: 'd', text: 'hi' }, null)).toEqual({
+    expect(readDictationFinish({ dictationId: 'd', text: 'hi' }, null)).toEqual({
       text: 'hi',
       errorMessage: null
     })
   })
 
-  it('degrades an unreadable reply to no speech instead of throwing', () => {
-    for (const reply of [null, 'text', { text: 5, error: 7 }]) {
-      expect(readMobileDictationFinishOutcome(reply, null)).toEqual({
-        text: '',
-        errorMessage: MOBILE_DICTATION_NO_SPEECH_MESSAGE
-      })
-    }
+  it('degrades unreadable members to no speech', () => {
+    expect(readDictationFinish({ text: 5, error: 7 }, null)).toEqual({
+      text: '',
+      errorMessage: MOBILE_DICTATION_NO_SPEECH_MESSAGE
+    })
+  })
+
+  it('still throws on a null body so the caller cancels the session', () => {
+    expect(() => readDictationFinish(null, null)).toThrow(TypeError)
   })
 })
 
-describe('deliverMobileDictationFinish', () => {
+describe('deliverDictationFinish', () => {
   it('inserts the text before reporting the error', () => {
     const calls: string[] = []
-    deliverMobileDictationFinish(
-      { text: 'kept', error: 'Flush failed' },
-      null,
+    deliverDictationFinish(
+      { text: 'kept', errorMessage: 'Flush failed' },
       (text) => calls.push(`text:${text}`),
       (error) => calls.push(`error:${error.message}`)
     )
@@ -49,7 +52,7 @@ describe('deliverMobileDictationFinish', () => {
 
   it('reports nothing extra for a clean finish', () => {
     const onFailure = vi.fn()
-    deliverMobileDictationFinish({ text: 'kept' }, null, vi.fn(), onFailure)
+    deliverDictationFinish({ text: 'kept', errorMessage: null }, vi.fn(), onFailure)
     expect(onFailure).not.toHaveBeenCalled()
   })
 })

@@ -1,4 +1,5 @@
 import { dictationFinishReplySchema } from '../dictation/dictation-reply-schema'
+import { rpcPayloadMember } from '../transport/rpc-reader-payload'
 
 export const MOBILE_DICTATION_NO_SPEECH_MESSAGE = 'No speech detected.'
 
@@ -12,14 +13,16 @@ export type MobileDictationFinishOutcome = {
 /**
  * Reads a current finish reply. `streamFailure` is the provider message a chunk already reported;
  * the host repeats that same failure in the reply's `error`, so it is shown once, not twice.
+ * Throws on a null or absent body, as the transcript read always has, so the caller's cancel runs.
  */
-export function readMobileDictationFinishOutcome(
+export function readDictationFinish(
   finished: unknown,
   streamFailure: string | null
 ): MobileDictationFinishOutcome {
-  const reply = dictationFinishReplySchema.parse(finished)
-  const text = reply.text?.trim() ?? ''
-  const providerFailure = streamFailure ?? (reply.error?.trim() || null)
+  const transcript = rpcPayloadMember(finished, 'text')
+  const text = typeof transcript === 'string' ? transcript.trim() : ''
+  const reportedFailure = dictationFinishReplySchema.parse(finished).error?.trim() || null
+  const providerFailure = streamFailure ?? reportedFailure
   return {
     text,
     errorMessage: providerFailure ?? (text ? null : MOBILE_DICTATION_NO_SPEECH_MESSAGE)
@@ -27,13 +30,11 @@ export function readMobileDictationFinishOutcome(
 }
 
 /** Inserts the text first, then reports the failure, so a partial transcript is never silent. */
-export function deliverMobileDictationFinish(
-  finished: unknown,
-  streamFailure: string | null,
+export function deliverDictationFinish(
+  outcome: MobileDictationFinishOutcome,
   onTranscript: (text: string) => void,
   onFailure: (error: Error) => void
 ): void {
-  const outcome = readMobileDictationFinishOutcome(finished, streamFailure)
   if (outcome.text) {
     onTranscript(outcome.text)
   }

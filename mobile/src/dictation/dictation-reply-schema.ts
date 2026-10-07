@@ -104,20 +104,16 @@ export type MobileDictationCaptionReply = NonNullable<
  *
  * `speech.dictation.finish` is here for a different reason: the operation's reader would run
  * before the staleness guard in use-mobile-dictation.ts, and failing it would report an unreadable
- * reply for a dictation the user had already superseded. Its body is read after that guard with
- * dictationFinishReplySchema below instead.
+ * reply for a dictation the user had already superseded. Its body is read after that guard
+ * instead: the transcript through `rpcPayloadMember` (keeping its throw on a null body), the
+ * provider error with dictationFinishReplySchema below.
  */
 export const dictationUnreadReplySchema = z.unknown()
 
 /**
- * The finish reply's members (RuntimeDictationFinishReply), read only after the staleness guard.
- *
- * `error` is wire-additive: old hosts omit it. Both members salvage, and the `.catch` keeps an
- * unreadable body a reply with no text, the same `typeof text === 'string'` degrade as before.
+ * The finish reply's optional provider `error` (RuntimeDictationFinishReply), read only after the
+ * staleness guard. Wire-additive: old hosts omit it, and an unreadable one degrades to absent.
  */
 export const dictationFinishReplySchema = z
-  .looseObject({
-    text: salvagedOptional('text', z.string()),
-    error: salvagedOptional('error', z.string())
-  })
-  .catch(() => ({ text: undefined, error: undefined }))
+  .looseObject({ error: salvagedOptional('error', z.string()) })
+  .catch(() => ({ error: undefined }))
