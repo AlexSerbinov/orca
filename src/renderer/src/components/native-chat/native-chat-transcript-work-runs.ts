@@ -30,7 +30,8 @@ function workRunRow(slot: NativeChatTranscriptSlot): NativeChatWorkRunRow {
         ? nativeChatWorkRunMember(
             slot.message,
             slot.receipt !== undefined,
-            slot.activeTurnIsWorking
+            // At the top level the live line owns the open thought; only a section has none.
+            slot.depth > 0 && slot.activeTurnIsWorking
           )
         : null,
     draws: true,

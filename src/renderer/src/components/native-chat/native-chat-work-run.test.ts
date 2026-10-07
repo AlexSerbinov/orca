@@ -165,6 +165,20 @@ describe('work runs', () => {
     expect(rows(build(messages))).toEqual(['u', ['a', 'r1', 'b', 'r2']])
   })
 
+  // At the top level the live line owns the open thought; once it lets go (a Stop in flight),
+  // the thought joins at once rather than standing alone until the turn ends.
+  it('folds an open thought the live line let go of straight into the run', () => {
+    const open: NativeChatMessage = { ...thought('r2'), state: 'running', completedAt: undefined }
+    const messages = [text('u', 'go', 'user'), call('a'), thought('r1'), call('b'), open]
+    const live = { liveTurnKey: 'u', isWorking: true }
+    expect(rows(build(messages, { ...live, liveReasoningId: 'r2' }))).toEqual([
+      'u',
+      ['a', 'r1', 'b']
+    ])
+    expect(rows(build(messages, live))).toEqual(['u', ['a', 'r1', 'b', 'r2']])
+    expect(rows(build(messages))).toEqual(['u', ['a', 'r1', 'b', 'r2']])
+  })
+
   it('is live while any of its calls is the turn frontier', () => {
     const slots = build([text('u', 'go', 'user'), call('a'), thought('r1'), call('b')], {
       liveTurnKey: 'u',

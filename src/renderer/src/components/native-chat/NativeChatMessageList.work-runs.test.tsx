@@ -79,7 +79,10 @@ function journal(rows: readonly NativeChatMessage[]): AgentJournalRenderItem[] {
   ]
 }
 
-function list(rows: readonly NativeChatMessage[]): React.JSX.Element {
+function list(
+  rows: readonly NativeChatMessage[],
+  props: Partial<React.ComponentProps<typeof NativeChatMessageList>> = {}
+): React.JSX.Element {
   const session: NativeChatLiveSession = {
     messages: [prompt, ...rows],
     status: 'working',
@@ -97,6 +100,7 @@ function list(rows: readonly NativeChatMessage[]): React.JSX.Element {
       journalItems={journal(rows)}
       isWorking
       expandSignal={false}
+      {...props}
     />
   )
 }
@@ -127,5 +131,24 @@ describe('a thought joining a work run', () => {
       'true'
     )
     expect(screen.getByText('Weighing two approaches')).toBeInTheDocument()
+  })
+
+  // While the live line is not showing it (a Stop in flight, a prompt the reader owes), the open
+  // thought sits in the run rather than flashing as its own row until the turn ends.
+  it.each([
+    ['a Stop is in flight', { stopping: true }],
+    ['a prompt waits on the reader', { awaitingInput: 'unshown' as const }]
+  ])('keeps an open thought inside the run while %s', (_, props) => {
+    const second: NativeChatMessage = {
+      ...command,
+      id: 'tool-2',
+      blocks: [{ type: 'tool-call', name: 'Bash', input: { command: 'ls' }, state: 'completed' }],
+      timestamp: STARTED + 100
+    }
+    const open = { ...reasoning('running'), id: 'r-2', timestamp: STARTED + 200 }
+    render(list([command, reasoning('completed'), second, open], props))
+    expect(screen.queryByRole('button', { name: /Reasoning|Thought/ })).toBeNull()
+    fireEvent.click(runHeader())
+    expect(screen.getAllByRole('button', { name: /Reasoning|Thought/ })).toHaveLength(2)
   })
 })
