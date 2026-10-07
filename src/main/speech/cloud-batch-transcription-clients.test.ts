@@ -103,6 +103,17 @@ describe('batch cloud transcription clients', () => {
     await expect(transcribe('gemini-3.5-transcribe', 'uk')).resolves.toBe('Привіт, Орка')
   })
 
+  it('sends gpt-transcribe its language as languages[]', async () => {
+    const requests = stubFetch({ text: 'gpt text' })
+
+    await expect(transcribe('openai-gpt-transcribe', 'uk')).resolves.toBe('gpt text')
+
+    const form = formOf(requests[0])
+    expect(form.get('model')).toBe('gpt-transcribe')
+    expect(form.getAll('languages[]')).toEqual(['uk'])
+    expect(form.get('language')).toBeNull()
+  })
+
   it('sends Mistral Voxtral the latest mini model', async () => {
     const requests = stubFetch({ text: 'voxtral text' })
 

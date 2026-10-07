@@ -45,6 +45,21 @@ const VOXTRAL_LANGUAGES = [
 // Why: OpenAI rows keep type 'openai' because shipped desktop and mobile builds pin that shape.
 const OPENAI_ENTRIES: CloudSpeechCatalogEntry[] = [
   {
+    apiModel: 'gpt-transcribe',
+    manifest: {
+      id: 'openai-gpt-transcribe',
+      label: 'GPT Transcribe',
+      description:
+        "OpenAI's newest transcription model: more accurate and cheaper than GPT-4o Transcribe.",
+      type: 'openai',
+      provider: 'openai',
+      language: 'multilingual',
+      sampleRate: 16000,
+      streaming: false,
+      transcriptionLanguages: 'any'
+    }
+  },
+  {
     apiModel: 'gpt-4o-mini-transcribe',
     manifest: {
       id: 'openai-gpt-4o-mini-transcribe',

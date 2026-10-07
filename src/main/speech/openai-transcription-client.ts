@@ -48,7 +48,8 @@ export function createOpenAiCompatibleTranscribe(options: {
     form.append('response_format', 'json')
     form.append('temperature', '0')
     if (language) {
-      form.append('language', language)
+      // Why: gpt-transcribe takes a list of expected languages and rejects the singular field.
+      form.append(options.apiModel === 'gpt-transcribe' ? 'languages[]' : 'language', language)
     }
     // Why: a named WAV blob avoids filesystem temp files and works in packaged apps.
     form.append('file', wavBlob(wav), 'dictation.wav')
