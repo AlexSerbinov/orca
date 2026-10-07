@@ -15,6 +15,7 @@ type MobileDictationSession = {
   finalTexts: string[]
   errors: string[]
   captionRevision: number
+  sentCaptionRevision: number
 }
 
 export class RuntimeMobileDictationController {
@@ -58,7 +59,8 @@ export class RuntimeMobileDictationController {
       partialText: '',
       finalTexts: [],
       errors: [],
-      captionRevision: 0
+      captionRevision: 0,
+      sentCaptionRevision: 0
     }
     try {
       await getSpeechSttService(store).startDictation(
@@ -109,11 +111,15 @@ export class RuntimeMobileDictationController {
       }
       throw error
     }
-    const text = joinTranscript(session)
-    // Why: realtime providers update partials asynchronously; the chunk reply carries them as captions.
-    return text
-      ? { dictationId: params.dictationId, caption: { text, revision: session.captionRevision } }
-      : { dictationId: params.dictationId }
+    // Why: chunks arrive ~31/s; resend the whole transcript only when it changed, including to ''.
+    if (session.captionRevision === session.sentCaptionRevision) {
+      return { dictationId: params.dictationId }
+    }
+    session.sentCaptionRevision = session.captionRevision
+    return {
+      dictationId: params.dictationId,
+      caption: { text: joinTranscript(session), revision: session.captionRevision }
+    }
   }
 
   async finish(params: {

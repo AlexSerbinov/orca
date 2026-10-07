@@ -95,7 +95,7 @@ describe('mobile dictation live captions', () => {
     expect(stt.startDictation.mock.calls[0][4]).toEqual({ language: undefined })
   })
 
-  it('omits the caption until there is text, then grows the revision on each change', async () => {
+  it('sends the caption only when it changed, then grows the revision on each change', async () => {
     const controller = createController()
     await controller.start({ dictationId: 'd1', ...CLIENT })
 
@@ -106,8 +106,9 @@ describe('mobile dictation live captions', () => {
       dictationId: 'd1',
       caption: { text: 'Hello', revision: 1 }
     })
+    expect(controller.feed(CHUNK)).toEqual({ dictationId: 'd1' })
     stt.sink?.({ type: 'partial', text: 'Hello' })
-    expect(controller.feed(CHUNK).caption?.revision).toBe(1)
+    expect(controller.feed(CHUNK)).toEqual({ dictationId: 'd1' })
 
     stt.sink?.({ type: 'partial', text: 'Hello world' })
     stt.sink?.({ type: 'final', text: 'Hello world.' })
@@ -115,6 +116,20 @@ describe('mobile dictation live captions', () => {
     expect(controller.feed(CHUNK)).toEqual({
       dictationId: 'd1',
       caption: { text: 'Hello world. Next', revision: 4 }
+    })
+  })
+
+  it('sends an emptied caption so the phone clears a withdrawn interim', async () => {
+    const controller = createController()
+    await controller.start({ dictationId: 'd1', ...CLIENT })
+    stt.sink?.({ type: 'partial', text: 'uh' })
+    controller.feed(CHUNK)
+
+    stt.sink?.({ type: 'partial', text: '' })
+
+    expect(controller.feed(CHUNK)).toEqual({
+      dictationId: 'd1',
+      caption: { text: '', revision: 2 }
     })
   })
 
