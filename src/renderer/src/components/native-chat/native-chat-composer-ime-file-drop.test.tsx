@@ -8,6 +8,7 @@ import type * as AttachmentUploadModule from './native-chat-attachment-upload'
 import type { NativeChatComposerInput } from './native-chat-composer-input'
 import { NativeChatComposerField } from './NativeChatComposerField'
 import { useNativeChatComposerAttachments } from './use-native-chat-composer-attachments'
+import { useNativeChatComposerNotice } from './use-native-chat-composer-notice'
 import { useNativeChatFileDrops } from './use-native-chat-file-drops'
 import { NativeChatPaneFileDropSurface } from './NativeChatPaneFileDropSurface'
 import { useNativeChatDraft } from './use-native-chat-draft'
@@ -73,7 +74,7 @@ vi.mock('./NativeChatComposerActions', () => ({
   NativeChatComposerActions: () => <div data-testid="composer-actions" />
 }))
 vi.mock('./NativeChatAutocompleteMenus', () => ({
-  NativeChatMentionHint: () => null,
+  NativeChatMentionMenu: () => null,
   NativeChatPickerMenu: () => null
 }))
 vi.mock('./NativeChatImageAttachmentPreview', () => ({
@@ -107,7 +108,7 @@ function ComposerProbe({
   workspaceId = 'worktree-1'
 }: ProbeProps): React.JSX.Element {
   const [caret, setCaret] = useState(initialDraft.length)
-  const [notice, setNotice] = useState<string | null>(null)
+  const { notices, setNotice } = useNativeChatComposerNotice()
   const inputRef = useRef<NativeChatComposerInput>(null)
   const imeEnterGesture = useImeEnterGestureOwnership()
   const { draft, setDraft, flushDraftAppends } = useNativeChatDraft(
@@ -150,7 +151,7 @@ function ComposerProbe({
           canSend={!disabled}
           autocomplete={{ mode: 'none' }}
           activeSuggestion={0}
-          notice={notice}
+          notices={notices}
           imageAttachments={attachments.imageAttachments}
           sendButtonDisabled={false}
           isWorking={false}
@@ -174,7 +175,8 @@ function ComposerProbe({
           pickerListboxId="picker"
           onChoosePickerItem={() => {}}
           onRetrySkills={() => {}}
-          onAcceptMention={() => {}}
+          onChooseMentionFile={() => {}}
+          mentionFiles={{ files: [], loading: false, failed: false }}
           onRemoveImageAttachment={attachments.removeImageAttachment}
           onAttach={() => {}}
           onDictationToggle={() => {}}
