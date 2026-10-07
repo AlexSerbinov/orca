@@ -20,14 +20,13 @@ export class SonioxRealtimeSession extends RealtimeCloudSpeechSession {
     super('Soniox', options)
   }
 
-  protected createSocket(): WebSocket {
-    return openProviderWebSocket(SONIOX_REALTIME_URL)
+  protected createSocket(apiKey: string): WebSocket {
+    // Why: Soniox is retiring api_key in the config frame; the handshake header replaces it.
+    return openProviderWebSocket(SONIOX_REALTIME_URL, { Authorization: `Bearer ${apiKey}` })
   }
 
-  protected onOpen(apiKey: string): void {
-    // Why: Soniox authenticates in the first JSON frame rather than an HTTP header.
+  protected onOpen(): void {
     this.sendJson({
-      api_key: apiKey,
       model: this.apiModel,
       audio_format: 'pcm_s16le',
       sample_rate: CLOUD_TRANSCRIPTION_SAMPLE_RATE,

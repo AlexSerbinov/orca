@@ -26,6 +26,7 @@ export abstract class RealtimeCloudSpeechSession implements CloudSpeechSession {
   private settleFinish: (() => void) | null = null
   private finishSignaled = false
   private acceptTimer: ReturnType<typeof setTimeout> | null = null
+  private apiKey = ''
 
   constructor(
     protected readonly label: string,
@@ -36,18 +37,17 @@ export abstract class RealtimeCloudSpeechSession implements CloudSpeechSession {
 
   /** Opens the socket; called by the factory right after construction. */
   start(): void {
-    let apiKey: string
     let socket: WebSocket
     try {
-      apiKey = this.options.readApiKey()
-      socket = this.createSocket(apiKey)
+      this.apiKey = this.options.readApiKey()
+      socket = this.createSocket(this.apiKey)
     } catch (error) {
       // Why: throwing lets start reject instead of reporting 'ready' for a dead session; ws can echo the key.
       this.close()
       throw new Error(describeProviderFailure(this.label, error))
     }
     this.socket = socket
-    socket.on('open', () => this.onOpen(apiKey))
+    socket.on('open', () => this.onOpen())
     socket.on('message', (data, isBinary) => {
       if (!isBinary) {
         this.handleText(data.toString())
@@ -124,7 +124,7 @@ export abstract class RealtimeCloudSpeechSession implements CloudSpeechSession {
 
   protected abstract createSocket(apiKey: string): WebSocket
   /** Sends any configuration and calls markAccepting() once audio may flow. */
-  protected abstract onOpen(apiKey: string): void
+  protected abstract onOpen(): void
   protected abstract handleMessage(message: Record<string, unknown>): void
   protected abstract sendAudio(pcm: Buffer): void
   /** Asks the provider to flush; it must eventually call markFinished(). */
@@ -168,7 +168,9 @@ export abstract class RealtimeCloudSpeechSession implements CloudSpeechSession {
     if (this.failure || this.closed) {
       return
     }
-    this.failure = redactCloudSpeechSecrets(message) || `${this.label} streaming failed.`
+    // Why: providers can echo a key of any shape, which the pattern redaction would miss.
+    const withoutKey = this.apiKey ? message.split(this.apiKey).join('[redacted]') : message
+    this.failure = redactCloudSpeechSecrets(withoutKey) || `${this.label} streaming failed.`
     this.options.sink({ type: 'error', error: this.failure })
     this.settleFinish?.()
     this.close()

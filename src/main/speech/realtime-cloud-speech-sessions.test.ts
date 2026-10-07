@@ -93,15 +93,17 @@ beforeEach(() => {
 })
 
 describe('Soniox realtime session', () => {
-  it('authenticates in the config frame and buffers audio until the socket opens', async () => {
+  it('authenticates with a Bearer header and buffers audio until the socket opens', async () => {
     const { session, sink, socket } = start('soniox-stt-rt-v5', 'uk')
+    expect(socket.headers?.Authorization).toBe('Bearer rt-key')
     session.feedAudio(SPEECH, 16_000)
     expect(socket.sent).toHaveLength(0)
 
     socket.open()
 
+    expect(socket.jsonFrames()[0]).not.toHaveProperty('api_key')
+    expect(JSON.stringify(socket.jsonFrames())).not.toContain('rt-key')
     expect(socket.jsonFrames()[0]).toMatchObject({
-      api_key: 'rt-key',
       model: 'stt-rt-v5',
       audio_format: 'pcm_s16le',
       sample_rate: 16000,
@@ -145,7 +147,30 @@ describe('Soniox realtime session', () => {
     socket.receive({ error_code: 401, error_message: 'Invalid API key rt-key-abcdef1234567890' })
 
     expect(sink).toHaveBeenCalledWith({ type: 'error', error: expect.stringContaining('401') })
+    expect(JSON.stringify(sink.mock.calls)).not.toContain('rt-key-abcdef1234567890')
     expect(socket.closedWith).toBe(1000)
+  })
+
+  it('maps a rejected handshake to a key error without echoing the key', () => {
+    const { sink, socket } = start('soniox-stt-rt-v5')
+
+    socket.emit('unexpected-response', { destroy: vi.fn() }, { statusCode: 401 })
+
+    expect(sink.mock.calls).toEqual([
+      [{ type: 'error', error: 'Soniox rejected the API key (401).' }]
+    ])
+  })
+
+  it('rejects creation without echoing a key the header cannot carry', () => {
+    FakeWebSocket.constructError = new Error('Invalid header value: "Bearer sk-soniox-secret"')
+    const manifest = getCatalogModel('soniox-stt-rt-v5')
+    if (!manifest) {
+      throw new Error('missing soniox-stt-rt-v5')
+    }
+
+    expect(() =>
+      createCloudSpeechSession(manifest, { readApiKey: () => 'sk-soniox-secret', sink: vi.fn() })
+    ).toThrow('API key contains invalid characters.')
   })
 })
 
