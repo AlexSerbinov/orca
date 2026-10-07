@@ -16,6 +16,7 @@ import type { NativeChatOrcaStopView } from './native-chat-orca-stop-context'
 import { useStructuredAgentSessionHostLabel } from './use-structured-agent-session-host-label'
 import { useNativeChatRestartResuming } from '../native-chat-resume-on-restart-store'
 import { useNativeChatLaunchResumePending } from '../native-chat-launch-resume-decision'
+import type { NativeChatComposerNoticeContent } from './native-chat-composer-notice'
 
 type ContinueAnswer = { outcome?: string }
 
@@ -24,9 +25,9 @@ export type NativeChatInterruptedContinuation = {
   view: NativeChatOrcaStopView
   /** The cut turn Continue is offered on right now, if any. */
   offeredTurnItemId: string | null
-  /** The composer's error line: the composer's own, or else a Continue that did not go through,
-   *  shown while the chat still sits on that cut and gone once it is continued from anywhere. */
-  composerError: string | null
+  /** A Continue that did not go through, for the composer's notice card: shown while the chat
+   *  still sits on that cut and gone once it is continued from anywhere. */
+  continueError: (NativeChatComposerNoticeContent & { onDismiss: () => void }) | null
   continueNow: () => void
 }
 
@@ -42,7 +43,7 @@ export function useNativeChatInterruptedContinuation(input: {
   submissions: readonly Pick<AgentJournalSubmission, 'dispatchState'>[]
   isWorking: boolean
   /** The composer's own error; a Continue click is the user's newer action, so it clears it. */
-  composer: { error: string | null; clearError: () => void }
+  composer: { clearError: () => void }
 }): NativeChatInterruptedContinuation {
   const { target, sessionId } = input
   const hostLabel = useStructuredAgentSessionHostLabel(target)
@@ -97,7 +98,7 @@ export function useNativeChatInterruptedContinuation(input: {
   return {
     view,
     offeredTurnItemId: offered,
-    composerError: input.composer.error ?? failedHere,
+    continueError: failedHere ? { text: failedHere, onDismiss: () => setFailedOn(null) } : null,
     continueNow
   }
 }

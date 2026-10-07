@@ -17792,8 +17792,10 @@
         "send": "Envoyer",
         "noPty": "Aucun terminal actif — rebasculez pour vous reconnecter.",
         "locked": "La saisie est détenue par un autre appareil.",
-        "placeholder": "Envoyer un message…",
-        "mentionHint": "Fichier référencé :",
+        "placeholder": "Demandez ce que vous voulez, @ pour mentionner des fichiers, / pour les commandes",
+        "loadingFiles": "Chargement des fichiers...",
+        "noFiles": "Aucun fichier correspondant",
+        "filesLoadFailed": "Impossible de charger les fichiers",
         "attach": "Joindre un fichier",
         "startDictation": "Démarrer la dictée",
         "stopDictation": "Arrêter la dictée",
@@ -17864,7 +17866,9 @@
         "workspaceAttachmentMismatch": "Les fichiers ne peuvent être joints qu'à leur espace de travail source.",
         "attachmentOwnerChanged": "Cet espace de travail a changé d'hôte lors de la connexion : supprimez à nouveau les fichiers.",
         "attachmentUnreadable": "Impossible de lire les fichiers supprimés.",
-        "tooManyAttachments": "Joignez {{value0}} fichiers maximum à la fois."
+        "tooManyAttachments": "Joignez {{value0}} fichiers maximum à la fois.",
+        "pasteFailed": "Échec du collage.",
+        "commandAttachmentsUnsupported": "Retirez les pièces jointes avant d'utiliser une commande de session de chat."
       },
       "tool": {
         "running": "En cours…",
@@ -18070,11 +18074,13 @@
         "plan": "Plan",
         "historyRepaired": "Une partie de l'historique de ce chat n'a pas pu être chargée.",
         "historyItemTooLarge": "Cette partie du chat était trop volumineuse pour être affichée.",
+        "stoppedBeforeStart": "Arrêté avant le démarrage de l'agent",
+        "dismiss": "Ignorer",
+        "copyError": "Copier l'erreur",
         "orcaStopUpdate": "Orca sur {{machine}} a redémarré pour une mise à jour pendant que cette réponse était en cours.",
         "orcaStopQuit": "Orca sur {{machine}} a été fermé pendant que cette réponse était en cours.",
         "orcaStopCrash": "Orca sur {{machine}} s'est arrêté de manière inattendue pendant que cette réponse était en cours.",
-        "orcaStopCanContinue": "Vous pouvez continuer dans cette conversation.",
-        "stoppedBeforeStart": "Arrêté avant le démarrage de l'agent"
+        "orcaStopCanContinue": "Vous pouvez continuer dans cette conversation."
       },
       "providerFrame": {
         "byteLength": "{{value0}} octets"
@@ -18239,15 +18245,15 @@
       "structuredSessionHostDeclinedDescription": "Ce serveur ne peut pas exécuter de discussion {{value0}} dans cet espace de travail.",
       "structuredSessionHostUnreachable": "Impossible de joindre {{value0}}",
       "structuredSessionHostUnreachableDescription": "Orca n'a pas ouvert de discussion {{value0}}. Vérifiez la connexion au serveur et réessayez.",
-      "interruptedContinue": {
-        "continue": "Continuer",
-        "failed": "Impossible de poursuivre cette conversation. Réessayez ou envoyez un message.",
-        "explanation": "Continuez, et l'agent vérifiera d'abord si sa dernière étape s'est terminée."
-      },
       "hostOutage": {
         "offline": "{{hostName}} est hors ligne",
         "reconnecting": "{{hostName}} se reconnecte…",
         "reconnect": "Reconnecter"
+      },
+      "interruptedContinue": {
+        "continue": "Continuer",
+        "failed": "Impossible de poursuivre cette conversation. Réessayez ou envoyez un message.",
+        "explanation": "Continuez, et l'agent vérifiera d'abord si sa dernière étape s'est terminée."
       }
     },
     "tab": {

@@ -17947,19 +17947,23 @@
         "plan": "Plan",
         "historyRepaired": "Part of this chat's history couldn't be loaded.",
         "historyItemTooLarge": "This part of the chat was too large to show.",
+        "stoppedBeforeStart": "Stopped before the agent started",
+        "dismiss": "Dismiss",
+        "copyError": "Copy error",
         "orcaStopUpdate": "Orca on {{machine}} restarted for an update while this response was in progress.",
         "orcaStopQuit": "Orca on {{machine}} was closed while this response was in progress.",
         "orcaStopCrash": "Orca on {{machine}} stopped unexpectedly while this response was in progress.",
-        "orcaStopCanContinue": "You can continue in this conversation.",
-        "stoppedBeforeStart": "Stopped before the agent started"
+        "orcaStopCanContinue": "You can continue in this conversation."
       },
       "composer": {
         "imageUnsupported": "Image paste is not supported for this agent.",
         "send": "Send",
         "noPty": "No live terminal — toggle back to reconnect.",
         "locked": "Input is held by another device.",
-        "placeholder": "Send a message…",
-        "mentionHint": "Referencing file:",
+        "placeholder": "Ask anything, @ to mention files, / for commands",
+        "loadingFiles": "Loading files...",
+        "noFiles": "No matching files",
+        "filesLoadFailed": "Couldn't load files",
         "attach": "Attach file",
         "startDictation": "Start dictation",
         "stopDictation": "Stop dictation",
@@ -18030,7 +18034,9 @@
         "workspaceAttachmentMismatch": "Files can only be attached to their source workspace.",
         "attachmentOwnerChanged": "This workspace changed hosts while attaching — drop the files again.",
         "attachmentUnreadable": "Couldn't read the dropped files.",
-        "tooManyAttachments": "Attach {{value0}} or fewer files at a time."
+        "tooManyAttachments": "Attach {{value0}} or fewer files at a time.",
+        "pasteFailed": "Paste failed.",
+        "commandAttachmentsUnsupported": "Remove attachments before using a chat-session command."
       },
       "tool": {
         "exitCode": "exit {{value0}}",
@@ -18391,15 +18397,15 @@
       "structuredSessionHostDeclinedDescription": "This server can't run a {{value0}} chat in this workspace.",
       "structuredSessionHostUnreachable": "Could not reach {{value0}}",
       "structuredSessionHostUnreachableDescription": "Orca did not open a {{value0}} chat. Check the connection to the server and try again.",
-      "interruptedContinue": {
-        "continue": "Continue",
-        "failed": "Couldn't continue this chat. Try again, or send a message.",
-        "explanation": "Continue, and the agent first checks whether its last step finished."
-      },
       "hostOutage": {
         "offline": "{{hostName}} is offline",
         "reconnecting": "{{hostName}} is reconnecting…",
         "reconnect": "Reconnect"
+      },
+      "interruptedContinue": {
+        "continue": "Continue",
+        "failed": "Couldn't continue this chat. Try again, or send a message.",
+        "explanation": "Continue, and the agent first checks whether its last step finished."
       }
     },
     "tab": {
