@@ -11,6 +11,7 @@ import type { RpcClient } from '../transport/rpc-client'
 import { resetMobileStructuredSendOperationJournalForTests } from './mobile-structured-send-operation-journal'
 import { useMobileStructuredAgentSession } from './use-mobile-structured-agent-session'
 import {
+  batchEvent,
   CAPABLE,
   fieldsOf,
   mutationOk,
@@ -37,11 +38,12 @@ function childView(id: string): AgentChildWorkView {
   }
 }
 
-function withChildren(): AgentSessionSubscribeEvent {
+function withChildren(hostNow?: number): AgentSessionSubscribeEvent {
   const snapshot = snapshotEvent()
   return snapshot.type === 'snapshot'
     ? {
         ...snapshot,
+        ...(hostNow !== undefined ? { hostNow } : {}),
         backgroundTasks: {
           state: 'monitoring',
           supportsTaskStop: true,
@@ -56,6 +58,7 @@ describe('mobile structured session background tasks', () => {
   let hook: ReturnType<typeof useMobileStructuredAgentSession> | null = null
   let listener: ((value: unknown) => void) | null = null
   const sendRequest = vi.fn<RpcClient['sendRequest']>()
+  const onSendError = vi.fn()
   const client: RpcClient = {
     sendRequest,
     subscribe: (_method, _params, onData) => {
@@ -80,7 +83,7 @@ describe('mobile structured session background tasks', () => {
       connected,
       agent: 'claude',
       hostSupport: CAPABLE,
-      onSendError: vi.fn()
+      onSendError
     })
     return null
   }
@@ -131,6 +134,18 @@ describe('mobile structured session background tasks', () => {
     act(() => renderer?.update(createElement(Harness, { connected: false })))
     expect(hook?.backgroundTasks.view.children).toHaveLength(2)
     expect(hook?.backgroundTasks.rowContext.transportObservation).toBe('unverifiable')
+  })
+
+  it("latches the host clock offset once, so a frame's fresh sample rebuilds nothing", async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(100_000)
+    await mount(withChildren(40_000))
+    const first = hook?.backgroundTasks
+    expect(first?.rowContext.hostClockOffsetMs).toBe(60_000)
+    const frame = batchEvent()
+    act(() => listener?.(frame.type === 'batch' ? { ...frame, hostNow: 41_000 } : frame))
+    const next = hook?.backgroundTasks
+    clock.mockRestore()
+    expect(next).toBe(first)
   })
 
   it("stops one child through the host's background-task cancel", async () => {

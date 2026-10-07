@@ -13,29 +13,11 @@ import {
   backgroundTaskStateReason,
   backgroundTaskStateWord
 } from '../../../src/shared/background-task-roster'
+import { agentStateLabel } from '../worktree/agent-row-display'
 
-// Mirrors desktop agentStateLabel, plus `unverifiable`, which only child rows reach here.
+// Mobile's agent-row words for every state they cover; only child rows reach `unverifiable`.
 export function mobileAgentChildStateLabel(state: AgentChildDisplayState): string {
-  switch (state) {
-    case 'working':
-      return 'Working'
-    case 'monitoring':
-      return 'Monitoring background tasks'
-    case 'waiting':
-      return 'Waiting for input'
-    case 'blocked':
-      return 'Blocked'
-    case 'done':
-      return 'Done'
-    case 'failed':
-      return 'Failed'
-    case 'interrupted':
-      return 'Interrupted'
-    case 'idle':
-      return 'Idle'
-    case 'unverifiable':
-      return 'No recent update'
-  }
+  return state === 'unverifiable' ? 'No recent update' : agentStateLabel(state)
 }
 
 /** Coarse `34m` / `2h` / `3d`, floored so it never overstates the gap (desktop's no-update form). */

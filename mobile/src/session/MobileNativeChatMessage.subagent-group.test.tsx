@@ -115,6 +115,19 @@ describe('mobile transcript roster row', () => {
     expect(textOf(group(tree)[0]!)).toBe('Ran 2 subagents1 failed · 1m 2s · 12k tokens')
   })
 
+  it('speaks the header whole, its clock only once the group stops counting', () => {
+    const label = (tree: ReactTestRenderer): unknown =>
+      group(tree)[0]!.findAll((node) => String(node.type) === 'Pressable')[0]!.props
+        .accessibilityLabel
+    expect(label(render(roster(WORKING)))).toBe('Kicked off 2 subagents · 2 working')
+    const alerted: NativeChatSubagentEntry[] = [
+      ...WORKING,
+      { id: 'c', label: 'lint', state: 'failed', startedAt: 0, settledAt: 5_000 }
+    ]
+    expect(label(render(roster(alerted)))).toBe('Kicked off 3 subagents · 2 working +1 failed')
+    expect(label(render(roster(FINISHED)))).toBe('Ran 2 subagents · 1 failed · 1m 2s · 12k tokens')
+  })
+
   it('keeps the sentence when there is no group it can draw', () => {
     const textOnly: NativeChatMessage = {
       id: 'spawn',

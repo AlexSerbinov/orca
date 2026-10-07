@@ -70,18 +70,21 @@ const NOT_STOPPING: Stopping = { taskIds: new Set(), all: false }
 function TaskRow({
   row,
   now,
+  hostNow,
   supportsTaskStop,
   stopping,
   onStop
 }: {
   row: AgentChildRowModel
   now: number
+  /** `now` on the host's clock, which stamps every elapsed anchor. */
+  hostNow: number
   supportsTaskStop: boolean
   stopping: Stopping
   onStop: (taskId: string) => void
 }): React.JSX.Element {
   const { lead, trail } = mobileAgentChildRowText(row, now)
-  const meta = backgroundTaskRowMeta(row, now)
+  const meta = backgroundTaskRowMeta(row, hostNow)
   const stopId = backgroundTaskRowStopId(row, supportsTaskStop)
   const busy = stopId !== null && stopping.taskIds.has(stopId)
   return (
@@ -124,6 +127,7 @@ function TaskRow({
               key={owned.id}
               row={owned}
               now={now}
+              hostNow={hostNow}
               supportsTaskStop={supportsTaskStop}
               stopping={stopping}
               onStop={onStop}
@@ -146,7 +150,10 @@ function MobileNativeChatBackgroundTasksImpl({
 }): React.JSX.Element | null {
   const { view, rowContext, stop } = tasks
   const [expanded, setExpanded] = useState(false)
-  const [narrow, setNarrow] = useState(() => Dimensions.get('window').width < NARROW_STRIP_WIDTH)
+  // Before the first layout, the window less the strip's own margins, so it opens in its final form.
+  const [narrow, setNarrow] = useState(
+    () => Dimensions.get('window').width - 2 * spacing.lg < NARROW_STRIP_WIDTH
+  )
   const [stopping, setStopping] = useState<Stopping>(NOT_STOPPING)
   const stoppingRef = useRef(NOT_STOPPING)
   const groups = useMemo(
@@ -160,7 +167,9 @@ function MobileNativeChatBackgroundTasksImpl({
   if (!view.show) {
     return null
   }
-  const header = backgroundTasksHeaderContent(groups, { narrow, now }, say)
+  // Elapsed anchors are host-stamped; read them on the host's clock, as the turn bar's start is.
+  const hostNow = now - rowContext.hostClockOffsetMs
+  const header = backgroundTasksHeaderContent(groups, { narrow, now: hostNow }, say)
 
   const updateStopping = (next: Stopping): void => {
     stoppingRef.current = next
@@ -231,14 +240,13 @@ function MobileNativeChatBackgroundTasksImpl({
             {groups.length > 0 ? (
               groups.map((group) => (
                 <View key={group.kind} style={styles.group}>
-                  <Text style={styles.groupLabel}>
-                    {backgroundTaskGroupLabel(group.kind, say).toUpperCase()}
-                  </Text>
+                  <Text style={styles.groupLabel}>{backgroundTaskGroupLabel(group.kind, say)}</Text>
                   {group.tasks.map((entry) => (
                     <TaskRow
                       key={entry.row.id}
                       row={entry.row}
                       now={now}
+                      hostNow={hostNow}
                       supportsTaskStop={view.supportsStop}
                       stopping={stopping}
                       onStop={onStop}
@@ -305,17 +313,20 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     overflow: 'hidden'
   },
+  // Every piece may shrink, so large Dynamic Type ellipsizes the header instead of clipping it.
   segment: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    flexShrink: 0
+    flexShrink: 1,
+    minWidth: 0
   },
   separator: {
     color: colors.textMuted,
     fontSize: typography.metaSize
   },
   segmentText: {
+    flexShrink: 1,
     color: colors.textPrimary,
     fontSize: typography.metaSize,
     fontWeight: '500'
@@ -345,6 +356,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: typography.monoFamily,
     letterSpacing: 0.8,
+    textTransform: 'uppercase',
     paddingBottom: spacing.xs
   },
   row: {

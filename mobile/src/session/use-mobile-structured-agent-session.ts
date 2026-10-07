@@ -196,7 +196,13 @@ export function useMobileStructuredAgentSession(args: {
     selectStructuredAgentTurnActivity(state.items, turnId, state.activity)?.text ?? null
   const thinking = isStructuredAgentSessionThinking(state)
   const isWorking = isStructuredAgentSessionMainAgentWorking(turnId, state.submissions, state.fence)
-  const backgroundTasks = useMobileStructuredBackgroundTasks({ state, turnId, connected, mutate })
+  const backgroundTasks = useMobileStructuredBackgroundTasks({
+    sessionKey,
+    state,
+    turnId,
+    connected,
+    mutate
+  })
   const hostStopping = useMobileStructuredSessionHostStopping({
     client,
     sessionId,

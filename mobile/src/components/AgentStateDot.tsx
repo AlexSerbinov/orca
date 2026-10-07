@@ -20,7 +20,6 @@ const DOT_COLORS: Record<Exclude<AgentDotState, 'working' | 'monitoring'>, strin
   idle: 'rgba(115,115,115,0.4)'
 }
 export const AGENT_WORKING_COLOR = '#eab308'
-const WORKING_COLOR = AGENT_WORKING_COLOR
 
 /** `unverifiable` is a child row's lost contact: desktop's dashed amber ring, a missing-evidence
  *  mark rather than a state claim. */
@@ -38,7 +37,7 @@ export function AgentStateDot({ state }: { state: AgentDotState | 'unverifiable'
   if (state === 'monitoring') {
     return (
       <View style={styles.wrapper} accessibilityLabel="Monitoring background tasks">
-        <Activity size={10} color={WORKING_COLOR} />
+        <Activity size={10} color={AGENT_WORKING_COLOR} />
       </View>
     )
   }
@@ -74,7 +73,7 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     borderWidth: 1.5,
-    borderColor: WORKING_COLOR,
+    borderColor: AGENT_WORKING_COLOR,
     borderTopColor: 'transparent'
   }
 })

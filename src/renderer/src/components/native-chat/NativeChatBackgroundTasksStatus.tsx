@@ -10,7 +10,6 @@ import { AgentChildRowContent } from '@/components/AgentChildRowContent'
 import { agentChildRowName } from '@/components/agent-child-row-text'
 import { Button } from '@/components/ui/button'
 import { useNow } from '@/hooks/use-now'
-import { translate } from '@/i18n/i18n'
 import {
   backgroundTasksHeaderText,
   NARROW_BACKGROUND_TASKS_STRIP_REM
@@ -24,6 +23,7 @@ import {
 } from '../../../../shared/background-task-roster'
 import { backgroundTasksHeaderContent } from './background-task-header-content'
 import { backgroundTaskGroupLabel, buildBackgroundTaskGroups } from './background-task-roster'
+import { sayBackgroundTaskTranslated as say } from './background-task-words-text'
 
 /** Border-box width at the live root font size; no viewport media query, so a
  *  narrow split pane on a wide monitor behaves like a narrow window. */
@@ -107,17 +107,11 @@ function BackgroundTaskRow(props: {
             type="button"
             variant="ghost"
             size="xs"
-            aria-label={translate(
-              'components.native-chat.backgroundTasks.stopTask',
-              'Stop {{value0}}',
-              {
-                value0: agentChildRowName(row)
-              }
-            )}
+            aria-label={say('stopTask', { value0: agentChildRowName(row) })}
             disabled={props.stoppingTaskIds.has(stopId)}
             onClick={() => props.onStop(stopId)}
           >
-            {translate('components.native-chat.backgroundTasks.stop', 'Stop')}
+            {say('stop')}
           </Button>
         ) : null}
       </li>
@@ -274,12 +268,7 @@ export function NativeChatBackgroundTasksStatus(props: {
                   </div>
                 ))
               ) : (
-                <p>
-                  {translate(
-                    'components.native-chat.backgroundTasks.detailsUnavailable',
-                    'Task details are unavailable for this session.'
-                  )}
-                </p>
+                <p>{say('detailsUnavailable')}</p>
               )}
               {!props.supportsTaskStop && props.supportsStopAll ? (
                 <div className={groups.length > 0 ? 'mt-2 border-t border-border pt-2' : 'mt-2'}>
@@ -287,14 +276,11 @@ export function NativeChatBackgroundTasksStatus(props: {
                     type="button"
                     variant="ghost"
                     size="xs"
-                    aria-label={translate(
-                      'components.native-chat.backgroundTasks.stopAll',
-                      'Stop background tasks'
-                    )}
+                    aria-label={say('stopAll')}
                     disabled={props.stoppingAll}
                     onClick={() => props.onStop()}
                   >
-                    {translate('components.native-chat.backgroundTasks.stop', 'Stop')}
+                    {say('stop')}
                   </Button>
                 </div>
               ) : null}

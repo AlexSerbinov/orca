@@ -67,11 +67,26 @@ export function MobileNativeChatSubagentGroup({
     return null
   }
   const { working, headline, verdictState, verdict, alertState, alert, clockStartedAt } = header
+  // Spoken whole, as the live line's is: a working group's clock would otherwise make the live
+  // region re-read the row every second (nested Text spans cannot opt out on their own).
+  const settledElapsed =
+    !working && clockStartedAt !== null && header.settledAt !== null
+      ? formatNativeChatDuration(Math.max(0, (header.settledAt - clockStartedAt) / 1000))
+      : null
+  const accessibilityLabel = [
+    headline,
+    alert === null ? verdict : `${verdict} +${alert}`,
+    settledElapsed,
+    header.tokens
+  ]
+    .filter((part): part is string => part !== null)
+    .join(' · ')
   return (
     <View testID="subagent-group" style={styles.group}>
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
+        accessibilityLabel={accessibilityLabel}
         accessibilityLiveRegion="polite"
         hitSlop={6}
         style={({ pressed }) => [styles.header, pressed && styles.pressed]}
@@ -82,18 +97,15 @@ export function MobileNativeChatSubagentGroup({
         <Text style={[styles.headline, working && styles.headlineWorking]} numberOfLines={1}>
           {headline}
         </Text>
-        <Text style={styles.verdict} numberOfLines={1}>
+        {/* Wraps under itself rather than pushing the headline or chevron out of a phone row. */}
+        <Text style={styles.verdict}>
           {verdict}
           {alert === null ? null : ` +${alert}`}
           {clockStartedAt !== null ? (
-            // Reticks every second while working; screen readers hear it once it stops.
-            <Text
-              accessibilityElementsHidden={working}
-              importantForAccessibility={working ? 'no' : 'auto'}
-            >
+            <>
               {' · '}
               <Elapsed startedAt={clockStartedAt} settledAt={header.settledAt} counting={working} />
-            </Text>
+            </>
           ) : null}
           {header.tokens !== null ? ` · ${header.tokens}` : null}
         </Text>
@@ -113,7 +125,7 @@ export function MobileNativeChatSubagentGroup({
                 >
                   {agent.label}
                 </Text>
-                <Text style={styles.verdict} numberOfLines={1}>
+                <Text style={styles.entryState} numberOfLines={1}>
                   {subagentStateLabel(state, 1, 1, say)}
                   {typeof agent.tokens === 'number'
                     ? ` · ${formatSubagentTokens(agent.tokens)}`
@@ -146,7 +158,8 @@ const styles = StyleSheet.create({
     borderRadius: 3
   },
   headline: {
-    flexShrink: 1,
+    flexShrink: 0,
+    maxWidth: '60%',
     color: colors.textMuted,
     fontSize: typography.bodySize
   },
@@ -154,6 +167,13 @@ const styles = StyleSheet.create({
     color: colors.textPrimary
   },
   verdict: {
+    flex: 1,
+    minWidth: 0,
+    textAlign: 'right',
+    color: colors.textMuted,
+    fontSize: typography.metaSize
+  },
+  entryState: {
     marginLeft: 'auto',
     flexShrink: 0,
     color: colors.textMuted,

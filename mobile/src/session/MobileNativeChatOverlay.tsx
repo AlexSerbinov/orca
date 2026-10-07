@@ -5,8 +5,7 @@ import { foldMobileNativeChatMessages } from './mobile-native-chat-render-data'
 import type { MobileNativeChatImageAttachments } from './use-mobile-native-chat-image-attachments'
 import type { MobileNativeChatController } from './use-mobile-native-chat-controller'
 import { useMobileNativeChatStreamingBubble } from './use-mobile-native-chat-streaming-bubble'
-import { useMobileNativeChatQueuedSlot } from './use-mobile-native-chat-queued-slot'
-import { MobileNativeChatBackgroundTasks } from './MobileNativeChatBackgroundTasks'
+import { useMobileNativeChatComposerTray } from './use-mobile-native-chat-composer-tray'
 
 type Props = {
   controller: MobileNativeChatController
@@ -62,22 +61,24 @@ export function MobileNativeChatOverlay({
     controller.nativeChatStreamLive
   )
   const queued = controller.nativeChatQueued
-  const queuedSlot = useMobileNativeChatQueuedSlot({
-    cards: queued.cards,
-    onSend: queued.send,
-    onDelete: queued.delete,
-    onEdit: queued.edit,
-    pause: queued.pause,
-    onResume: queued.resume,
-    sessionKey: queued.sessionKey,
-    // Nothing steers into a turn a Stop is ending; the host holds such a send until it ends.
-    // The indicator's `stopping` is the display status, decided once in the session hook.
-    steerHeld: controller.nativeChatTurnIndicator?.stopping === true
+  const composerTray = useMobileNativeChatComposerTray({
+    queued: {
+      cards: queued.cards,
+      onSend: queued.send,
+      onDelete: queued.delete,
+      onEdit: queued.edit,
+      pause: queued.pause,
+      onResume: queued.resume,
+      sessionKey: queued.sessionKey,
+      // Nothing steers into a turn a Stop is ending; the host holds such a send until it ends.
+      // The indicator's `stopping` is the display status, decided once in the session hook.
+      steerHeld: controller.nativeChatTurnIndicator?.stopping === true
+    },
+    backgroundTasks: controller.nativeChatBackgroundTasks
   })
   if (!controller.showNativeChat) {
     return null
   }
-  const backgroundTasks = controller.nativeChatBackgroundTasks
   return (
     <View style={styles.overlay}>
       <MobileNativeChatView
@@ -110,25 +111,7 @@ export function MobileNativeChatOverlay({
         onAnswerQuestion={controller.handleNativeChatQuestionAnswer}
         permission={controller.nativeChatPermission}
         onRespondPermission={controller.handleNativeChatRespondPermission}
-        queuedSlot={
-          // The running child work sits just above the queued cards, in the same place between
-          // transcript and composer. Keyed per conversation, so one chat's open list or pending
-          // Stop never shows in another.
-          backgroundTasks
-            ? {
-                ...queuedSlot,
-                cards: (
-                  <>
-                    <MobileNativeChatBackgroundTasks
-                      key={queued.sessionKey}
-                      tasks={backgroundTasks}
-                    />
-                    {queuedSlot.cards}
-                  </>
-                )
-              }
-            : queuedSlot
-        }
+        composerTray={composerTray}
         onOpenFile={onOpenFile}
         hasMore={session.hasMore}
         loadingEarlier={session.loadingEarlier}

@@ -52,14 +52,19 @@ type Props = Parameters<typeof MobileNativeChatBackgroundTasks>[0]
 
 function tasksFor(
   state: AgentSessionBackgroundTaskState | null,
-  options: { streamLive?: boolean; stop?: (taskId?: string) => Promise<unknown> } = {}
+  options: {
+    streamLive?: boolean
+    hostClockOffsetMs?: number
+    stop?: (taskId?: string) => Promise<unknown>
+  } = {}
 ): Props['tasks'] {
   return {
     view: structuredSessionBackgroundTasksView(state, null),
-    rowContext: agentChildRowContextForSessionStream(options.streamLive ?? true, {
-      hostNow: NOW,
-      receivedAt: NOW
-    }),
+    rowContext: agentChildRowContextForSessionStream(
+      options.streamLive ?? true,
+      options.hostClockOffsetMs ?? 0
+    ),
+    sessionKey: 'session-a',
     stop: options.stop ?? vi.fn(async () => undefined)
   }
 }
@@ -154,7 +159,11 @@ describe('MobileNativeChatBackgroundTasks', () => {
     expand(mounted)
     const rows = mounted.root.findAll((node) => node.props.testID === 'background-task-row')
     expect(rows.map(textOf)).toEqual(['review a · Agent18.1k · 1m 5s'])
-    expect(textOf(mounted.root)).toContain('AGENTS')
+    // Uppercased by style, so a screen reader hears the word itself.
+    const label = mounted.root.find(
+      (node) => String(node.type) === 'Text' && node.props.children === 'Agents'
+    )
+    expect(label.props.style).toMatchObject({ textTransform: 'uppercase' })
   })
 
   it('stops one row by its provider id and holds its button while the Stop is on its way', async () => {
@@ -210,6 +219,26 @@ describe('MobileNativeChatBackgroundTasks', () => {
     expect(
       mounted.root.findAll((node) => node.props.testID === 'background-task-row').map(textOf)
     ).toEqual(['Background agent1s', 'Background agent · needs approval1s'])
+  })
+
+  it("reads elapsed on the host's clock when the phone's runs ahead", () => {
+    // The phone is 30 s ahead of the host that stamped the child's start.
+    const mounted = mount(
+      tasksFor(
+        { state: 'monitoring', children: [view('a', { totalTokens: 900 })] },
+        { hostClockOffsetMs: 30_000 }
+      )
+    )
+    expand(mounted)
+    expect(
+      mounted.root.findAll((node) => node.props.testID === 'background-task-row').map(textOf)
+    ).toEqual(['review a · Agent900 · 35s'])
+  })
+
+  it('starts narrow when the window less its margins is narrow', () => {
+    windowWidth.value = 400
+    const mounted = mount(tasksFor({ state: 'monitoring', children: [view('a'), view('b')] }))
+    expect(header(mounted).props.accessibilityLabel).toBe('2 background tasks')
   })
 
   it('claims no live work once the stream is lost', () => {

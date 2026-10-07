@@ -198,15 +198,17 @@ export function subagentGroupBlocks(
   )
 }
 
-/** The row's blocks less the roster's text twin, which only a drawn roster replaces: a row
- *  without a renderable group keeps its sentence, and real text beside a group is never matched. */
+/** Whether `block` is the text twin of a roster the row draws (`drawsGroup`, from
+ *  `subagentGroupBlocks`): only a drawn roster replaces its sentence, and real text beside a group
+ *  is never matched. The one twin rule every transcript applies. */
+export function isReplacedSubagentGroupTwin(block: NativeChatBlock, drawsGroup: boolean): boolean {
+  return drawsGroup && block.type === 'text' && isSubagentGroupFallbackText(block.text)
+}
+
+/** The row's blocks less any roster twin a drawn group replaces. */
 export function withoutSubagentGroupTwins(blocks: readonly NativeChatBlock[]): NativeChatBlock[] {
-  if (subagentGroupBlocks(blocks).length === 0) {
-    return [...blocks]
-  }
-  return blocks.filter(
-    (block) => !(block.type === 'text' && isSubagentGroupFallbackText(block.text))
-  )
+  const drawsGroup = subagentGroupBlocks(blocks).length > 0
+  return blocks.filter((block) => !isReplacedSubagentGroupTwin(block, drawsGroup))
 }
 
 /** Plain-text stand-in for the roster, frozen into the journal at write time for
