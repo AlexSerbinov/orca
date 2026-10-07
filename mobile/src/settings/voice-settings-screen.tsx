@@ -22,13 +22,15 @@ export default function VoiceSettingsScreen({
   operations,
   focused,
   onBack,
-  onOpenProvider
+  onOpenProvider,
+  onOpenCloudProviders
 }: {
   operations: VoiceSettingsOperations | null
   focused: boolean
   onBack: () => void
   /** Opens the provider screen; absent where there is no router (tests). */
   onOpenProvider?: (providerId: string) => void
+  onOpenCloudProviders?: () => void
 }): React.JSX.Element {
   const insets = useSafeAreaInsets()
   const controller = useVoiceSettingsController(operations, focused)
@@ -87,6 +89,7 @@ export default function VoiceSettingsScreen({
               onOpenModelPicker={() => controller.setModelDrawerOpen(true)}
               onOpenLanguagePicker={() => controller.setLanguageDrawerOpen(true)}
               onOpenProvider={openProvider}
+              onOpenCloudProviders={() => onOpenCloudProviders?.()}
             />
           ) : (
             <>

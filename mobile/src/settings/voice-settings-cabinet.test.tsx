@@ -22,6 +22,7 @@ vi.mock('lucide-react-native', () => ({
   Check: 'Icon',
   ChevronLeft: 'Icon',
   ChevronRight: 'Icon',
+  Cloud: 'Icon',
   Download: 'Icon',
   KeyRound: 'Icon',
   Languages: 'Icon',
@@ -54,15 +55,19 @@ async function press(testID: string): Promise<void> {
   })
 }
 
+const onOpenCloudProviders = vi.fn()
+
 async function mount(operations: ReturnType<typeof voiceOperations>['operations']) {
   const onOpenProvider = vi.fn()
+  onOpenCloudProviders.mockClear()
   await act(async () => {
     renderer = create(
       createElement(VoiceSettingsScreen, {
         operations,
         focused: true,
         onBack: vi.fn(),
-        onOpenProvider
+        onOpenProvider,
+        onOpenCloudProviders
       })
     )
   })
@@ -76,8 +81,10 @@ describe('voice settings provider cabinet', () => {
     expect(operations.load).not.toHaveBeenCalled()
     const json = text()
     expect(json).toContain('Soniox Real-time v5')
-    expect(json).toContain('Connected · …a1b2')
-    expect(json).toContain('Not connected')
+    // Cloud providers collapse into one entry; their rows live on the cloud providers screen.
+    expect(json).toContain('Cloud providers')
+    expect(json).toMatch(/1 connected of \d+/)
+    expect(json).not.toContain('Not connected')
     expect(json).toContain('1 model downloaded')
     expect(json).toContain('Auto-detect')
   })
@@ -120,11 +127,13 @@ describe('voice settings provider cabinet', () => {
     expect(text()).not.toContain('PROVIDERS')
   })
 
-  it('opens the provider screen from a provider row', async () => {
+  it('opens on-device models directly and cloud providers on their own screen', async () => {
     const { operations } = voiceOperations({})
     const onOpenProvider = await mount(operations)
-    await press('voice-provider-deepgram')
-    expect(onOpenProvider).toHaveBeenCalledWith('deepgram')
+    await press('voice-provider-local')
+    expect(onOpenProvider).toHaveBeenCalledWith('local')
+    await press('voice-cloud-providers')
+    expect(onOpenCloudProviders).toHaveBeenCalledOnce()
   })
 
   it('picks a usable model and asks for one key per provider, not per model', async () => {
