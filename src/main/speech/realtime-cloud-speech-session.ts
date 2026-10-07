@@ -81,9 +81,10 @@ export abstract class RealtimeCloudSpeechSession implements CloudSpeechSession {
     }
     const pcm = encodePcm16(resampleForCloud(samples, sampleRate))
     this.audioSeconds = nextSeconds
-    if (this.accepting && this.isSocketOpen()) {
+    const socket = this.accepting ? this.openSocket() : null
+    if (socket) {
       // Why: a stalled socket would otherwise buffer the whole dictation in memory.
-      if ((this.socket?.bufferedAmount ?? 0) + pcm.length > MAX_REALTIME_BUFFERED_BYTES) {
+      if (socket.bufferedAmount + pcm.length > MAX_REALTIME_BUFFERED_BYTES) {
         this.fail(`${this.label} connection is too slow.`)
         return
       }
@@ -174,13 +175,12 @@ export abstract class RealtimeCloudSpeechSession implements CloudSpeechSession {
   }
 
   protected sendJson(payload: unknown): void {
-    if (this.socket && this.isSocketOpen()) {
-      this.socket.send(JSON.stringify(payload))
-    }
+    this.openSocket()?.send(JSON.stringify(payload))
   }
 
-  private isSocketOpen(): boolean {
-    return this.socket !== null && this.socket.readyState === this.socket.OPEN
+  private openSocket(): WebSocket | null {
+    const socket = this.socket
+    return socket && socket.readyState === socket.OPEN ? socket : null
   }
 
   private clearAcceptTimer(): void {
