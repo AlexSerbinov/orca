@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { MobileDictationCaptionReply } from '../dictation/dictation-reply-schema'
 import type { DictationStatus } from './mobile-dictation-session-state'
+import { MobileDictationCaptionStore } from './mobile-dictation-caption-store'
 
 /**
  * Orders the live captions chunk replies carry. Chunk RPCs overlap (one every ~32 ms), so replies
@@ -33,29 +34,27 @@ export class MobileDictationLiveCaptionTracker {
 }
 
 /**
- * Live caption state for useMobileDictation. `isCurrent` must answer from refs written
- * synchronously (status + active id), so a reply that lands after stop/cancel is dropped even
- * before the next render clears what is shown.
+ * Live caption store for useMobileDictation. `isCurrent` must answer from refs written
+ * synchronously (status + active id), so a reply that lands after stop/cancel is dropped.
+ * Views paint the caption only while recording, so a cleared-late caption never shows.
  */
 export function useMobileDictationLiveCaption(
   status: DictationStatus,
   isCurrent: (dictationId: string) => boolean
 ): {
-  caption: string
+  captionStore: MobileDictationCaptionStore
   acceptCaption: (dictationId: string, caption: MobileDictationCaptionReply) => void
 } {
   const trackerRef = useRef(new MobileDictationLiveCaptionTracker())
+  const storeRef = useRef(new MobileDictationCaptionStore())
   const isCurrentRef = useRef(isCurrent)
   isCurrentRef.current = isCurrent
-  const [caption, setCaption] = useState('')
-  const [captionStatus, setCaptionStatus] = useState(status)
-  // Why: reset during render rather than in an Effect so a stale caption never paints once.
-  if (status !== captionStatus) {
-    setCaptionStatus(status)
+  // Why: empty the external store before the next dictation can start painting into it.
+  useEffect(() => {
     if (status !== 'recording') {
-      setCaption('')
+      storeRef.current.set('')
     }
-  }
+  }, [status])
 
   const acceptCaption = useCallback((dictationId: string, next: MobileDictationCaptionReply) => {
     if (!isCurrentRef.current(dictationId)) {
@@ -63,9 +62,9 @@ export function useMobileDictationLiveCaption(
     }
     const text = trackerRef.current.accept(dictationId, next)
     if (text !== null) {
-      setCaption(text)
+      storeRef.current.set(text)
     }
   }, [])
 
-  return { caption, acceptCaption }
+  return { captionStore: storeRef.current, acceptCaption }
 }

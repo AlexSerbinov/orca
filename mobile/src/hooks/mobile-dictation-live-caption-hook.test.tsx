@@ -41,10 +41,14 @@ vi.mock('../platform/dictation-capture', () => {
 
 import { useMobileDictation, type UseMobileDictationResult } from './use-mobile-dictation'
 
-const held: { dictation: UseMobileDictationResult | null } = { dictation: null }
+const held: { dictation: UseMobileDictationResult | null; renders: number } = {
+  dictation: null,
+  renders: 0
+}
 
 function mount(client: FakeRpcClient): void {
   function Probe(): null {
+    held.renders += 1
     held.dictation = useMobileDictation({
       client,
       enabled: true,
@@ -63,6 +67,10 @@ function current(): UseMobileDictationResult {
     throw new Error('nothing mounted')
   }
   return held.dictation
+}
+
+function caption(): string {
+  return current().captionStore.getSnapshot()
 }
 
 function answerAll(rpc: FakeRpcClient, result: (request: SentRequest) => unknown): void {
@@ -98,6 +106,7 @@ async function startRecording(rpc: FakeRpcClient): Promise<void> {
 beforeEach(() => {
   seam.chunkHandlers.clear()
   held.dictation = null
+  held.renders = 0
 })
 
 describe('live dictation captions', () => {
@@ -105,7 +114,7 @@ describe('live dictation captions', () => {
     const rpc = createFakeRpcClient()
     mount(rpc)
     await startRecording(rpc)
-    expect(current().caption).toBe('')
+    expect(caption()).toBe('')
 
     emitChunk()
     emitChunk()
@@ -120,7 +129,7 @@ describe('live dictation captions', () => {
       first?.resolve({ id: 'd', ok: true, result: { caption: { text: 'hello', revision: 1 } } })
       await flush()
     })
-    expect(current().caption).toBe('hello world')
+    expect(caption()).toBe('hello world')
   })
 
   it('stays empty against a desktop that sends no caption', async () => {
@@ -132,7 +141,7 @@ describe('live dictation captions', () => {
       answerAll(rpc, () => ({ received: true }))
       await flush()
     })
-    expect(current().caption).toBe('')
+    expect(caption()).toBe('')
     expect(current().isRecording).toBe(true)
   })
 
@@ -145,7 +154,7 @@ describe('live dictation captions', () => {
       answerAll(rpc, () => ({ caption: { text: 'almost done', revision: 1 } }))
       await flush()
     })
-    expect(current().caption).toBe('almost done')
+    expect(caption()).toBe('almost done')
     await act(async () => {
       const stopped = current().stop()
       for (let round = 0; round < 6; round += 1) {
@@ -156,6 +165,28 @@ describe('live dictation captions', () => {
       }
       await stopped
     })
-    expect(current().caption).toBe('')
+    expect(caption()).toBe('')
+  })
+
+  it('updates the caption without re-rendering the component that owns the dictation', async () => {
+    const rpc = createFakeRpcClient()
+    mount(rpc)
+    await startRecording(rpc)
+    const rendersWhileRecording = held.renders
+    const seen: string[] = []
+    const unsubscribe = current().captionStore.subscribe(() => seen.push(caption()))
+    for (const [revision, text] of [
+      [1, 'one'],
+      [2, 'one two']
+    ] as const) {
+      emitChunk()
+      await act(async () => {
+        answerAll(rpc, () => ({ caption: { text, revision } }))
+        await flush()
+      })
+    }
+    unsubscribe()
+    expect(seen).toEqual(['one', 'one two'])
+    expect(held.renders).toBe(rendersWhileRecording)
   })
 })

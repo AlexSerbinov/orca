@@ -3,6 +3,7 @@
 import { Buffer } from 'buffer'
 
 import type { RpcClient } from '../transport/rpc-client'
+import type { MobileDictationCaptionStore } from './mobile-dictation-caption-store'
 
 export type DictationStatus = 'idle' | 'starting' | 'recording' | 'processing' | 'error'
 
@@ -19,8 +20,8 @@ export type UseMobileDictationResult = {
   isRecording: boolean
   isProcessing: boolean
   error: string | null
-  /** Live transcript so far while recording (realtime cloud models); empty otherwise. */
-  caption: string
+  /** Live transcript so far while recording (realtime cloud models); read it with useMobileDictationCaption. */
+  captionStore: MobileDictationCaptionStore
   start: () => Promise<void>
   stop: () => Promise<void>
   cancel: () => Promise<void>

@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MobileDictationCaptionStrip } from './MobileDictationCaptionStrip'
 import { MobileTerminalLiveInputStatus } from './MobileTerminalLiveInputStatus'
+import { MobileDictationCaptionStore } from '../hooks/mobile-dictation-caption-store'
 
 const platform = vi.hoisted(() => ({ OS: 'ios' }))
 
@@ -42,7 +43,13 @@ function render(element: ReturnType<typeof createElement>): string {
   return JSON.stringify(renderer.toJSON())
 }
 
-const idle = { isRecording: false, isProcessing: false, isStarting: false, caption: '' }
+const idle = { isRecording: false, isProcessing: false, isStarting: false }
+
+function captionStore(text: string): MobileDictationCaptionStore {
+  const store = new MobileDictationCaptionStore()
+  store.set(text)
+  return store
+}
 
 describe('MobileDictationCaptionStrip', () => {
   it('renders nothing while the mic is closed', () => {
@@ -65,7 +72,11 @@ describe('MobileDictationCaptionStrip', () => {
   it('shows the newest words, head-ellipsized over two lines on iOS', () => {
     render(
       createElement(MobileDictationCaptionStrip, {
-        dictation: { ...idle, isRecording: true, caption: 'make the captions follow' },
+        dictation: {
+          ...idle,
+          isRecording: true,
+          captionStore: captionStore('make the captions follow')
+        },
         variant: 'dock'
       })
     )
@@ -79,7 +90,7 @@ describe('MobileDictationCaptionStrip', () => {
     const words = Array.from({ length: 60 }, (_, index) => `word${index}`)
     render(
       createElement(MobileDictationCaptionStrip, {
-        dictation: { ...idle, isRecording: true, caption: words.join(' ') },
+        dictation: { ...idle, isRecording: true, captionStore: captionStore(words.join(' ')) },
         variant: 'dock'
       })
     )
@@ -107,7 +118,7 @@ describe('MobileDictationCaptionStrip', () => {
   it('drops the caption for a transcribing note once the user stops', () => {
     const json = render(
       createElement(MobileDictationCaptionStrip, {
-        dictation: { ...idle, isProcessing: true, caption: 'stale words' },
+        dictation: { ...idle, isProcessing: true, captionStore: captionStore('stale words') },
         variant: 'dock'
       })
     )
@@ -123,7 +134,7 @@ describe('MobileTerminalLiveInputStatus caption', () => {
       render(
         createElement(MobileTerminalLiveInputStatus, {
           ...props,
-          dictation: { ...idle, isRecording: true, caption: 'git status' }
+          dictation: { ...idle, isRecording: true, captionStore: captionStore('git status') }
         })
       )
     ).toContain('git status')
@@ -135,5 +146,18 @@ describe('MobileTerminalLiveInputStatus caption', () => {
         })
       )
     ).toContain('Tap mic to stop')
+  })
+
+  it('repaints only from the caption store while recording', () => {
+    const store = new MobileDictationCaptionStore()
+    render(
+      createElement(MobileDictationCaptionStrip, {
+        dictation: { ...idle, isRecording: true, captionStore: store },
+        variant: 'dock'
+      })
+    )
+    expect(JSON.stringify(renderer.toJSON())).toContain('Listening…')
+    act(() => store.set('fresh words'))
+    expect(JSON.stringify(renderer.toJSON())).toContain('fresh words')
   })
 })

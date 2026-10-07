@@ -1,12 +1,16 @@
 import { StyleSheet, Text, View } from 'react-native'
 import { colors, typography } from '../theme/mobile-theme'
+import {
+  useMobileDictationCaption,
+  type MobileDictationCaptionStore
+} from '../hooks/mobile-dictation-caption-store'
 
 type DictationStatus = {
   readonly isStarting: boolean
   readonly isRecording: boolean
   readonly isProcessing: boolean
   /** Live transcript so far; head-ellipsized so the newest words stay visible. */
-  readonly caption?: string
+  readonly captionStore?: MobileDictationCaptionStore
 }
 
 type MobileTerminalLiveInputStatusProps = {
@@ -20,6 +24,7 @@ export function MobileTerminalLiveInputStatus({
   isAttaching,
   liveInputText
 }: MobileTerminalLiveInputStatusProps) {
+  const caption = useMobileDictationCaption(dictation.captionStore)
   const title = dictation.isRecording
     ? 'Listening'
     : dictation.isProcessing
@@ -28,7 +33,7 @@ export function MobileTerminalLiveInputStatus({
         ? 'Starting mic'
         : 'Live input'
   const detail = dictation.isRecording
-    ? dictation.caption || 'Tap mic to stop'
+    ? caption || 'Tap mic to stop'
     : dictation.isProcessing
       ? 'Transcribing on desktop'
       : dictation.isStarting

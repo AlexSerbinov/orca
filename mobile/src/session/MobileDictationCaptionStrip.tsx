@@ -11,13 +11,17 @@ import {
 } from 'react-native'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import { captionCharBudget, captionTail } from './dictation-caption-tail'
+import {
+  useMobileDictationCaption,
+  type MobileDictationCaptionStore
+} from '../hooks/mobile-dictation-caption-store'
 
 const CAPTION_LINE_HEIGHT = 19
 
 export type MobileDictationCaptionState = {
   readonly isRecording: boolean
   readonly isProcessing: boolean
-  readonly caption: string
+  readonly captionStore?: MobileDictationCaptionStore
 }
 
 type Props = {
@@ -31,14 +35,12 @@ type Props = {
 export function MobileDictationCaptionStrip({ dictation, variant }: Props) {
   const { fontScale } = useWindowDimensions()
   const [captionWidth, setCaptionWidth] = useState(0)
+  const liveCaption = useMobileDictationCaption(dictation.captionStore)
   if (!dictation.isRecording && !dictation.isProcessing) {
     return null
   }
   const caption = dictation.isRecording
-    ? captionTail(
-        dictation.caption,
-        captionCharBudget(captionWidth, typography.bodySize, fontScale)
-      )
+    ? captionTail(liveCaption, captionCharBudget(captionWidth, typography.bodySize, fontScale))
     : ''
   const onCaptionLayout = (event: LayoutChangeEvent) => {
     setCaptionWidth(event.nativeEvent.layout.width)

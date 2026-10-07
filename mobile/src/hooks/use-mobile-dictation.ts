@@ -48,7 +48,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
   const generationRef = useRef(0)
   const streamSalvageRef = useRef(createMobileDictationStreamSalvage())
   const stopRef = useRef<() => Promise<void>>(async () => {})
-  const { caption, acceptCaption } = useMobileDictationLiveCaption(
+  const { captionStore, acceptCaption } = useMobileDictationLiveCaption(
     status,
     (id) => statusRef.current === 'recording' && activeIdRef.current === id
   )
@@ -347,7 +347,7 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
     isRecording: status === 'recording',
     isProcessing: status === 'processing',
     error,
-    caption,
+    captionStore,
     start,
     stop,
     cancel
