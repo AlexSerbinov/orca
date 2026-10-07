@@ -127,7 +127,7 @@ export function useVoiceSettingsController(
       if (!operations) {
         return
       }
-      const ticket = fence.begin()
+      const ticket = fence.begin('config')
       setError(null)
       // Optimistic flip so the control responds instantly; reconcile below.
       const { enabled, dictationMode } = params
@@ -139,11 +139,11 @@ export function useVoiceSettingsController(
       setCabinet((prev) => (prev ? { ...prev, ...flip } : prev))
       try {
         const next = await operations.configure(params)
-        if (fence.isLatest(ticket)) {
+        if (fence.claimSnapshot(ticket)) {
           applySetup(next)
         }
       } catch (err) {
-        if (fence.isLatest(ticket)) {
+        if (fence.isLatestInScope(ticket)) {
           setError(errorText(err, 'Could not update'))
           void refreshSetup()
         }
@@ -157,18 +157,20 @@ export function useVoiceSettingsController(
       if (!operations) {
         return
       }
-      const ticket = fence.begin()
+      const ticket = fence.begin('config')
       const busy: SpeechModelBusy = { modelId, type: 'select' }
       setBusyAction(busy)
       setError(null)
       try {
         const next = await operations.configure({ enabled: true, modelId })
-        if (fence.isLatest(ticket)) {
+        if (fence.claimSnapshot(ticket)) {
           applySetup(next)
+        }
+        if (fence.isLatestInScope(ticket)) {
           setModelDrawerOpen(false)
         }
       } catch (err) {
-        if (fence.isLatest(ticket)) {
+        if (fence.isLatestInScope(ticket)) {
           setError(errorText(err, 'Could not select model'))
         }
       } finally {
@@ -183,7 +185,7 @@ export function useVoiceSettingsController(
       if (!operations) {
         return
       }
-      const ticket = fence.begin()
+      const ticket = fence.begin('model')
       const busy: SpeechModelBusy = { modelId, type: 'download' }
       setBusyAction(busy)
       setError(null)
@@ -191,7 +193,7 @@ export function useVoiceSettingsController(
         await operations.download(modelId)
         await refreshSetup()
       } catch (err) {
-        if (fence.isLatest(ticket)) {
+        if (fence.isLatestInScope(ticket)) {
           setError(errorText(err, 'Download failed'))
         }
       } finally {
@@ -208,20 +210,20 @@ export function useVoiceSettingsController(
       }
       // Why: the cabinet is authoritative on a newer desktop; the legacy setup on an older one.
       const deletedSelectedModel = (cabinet?.selectedModelId ?? setup?.selectedModelId) === modelId
-      const ticket = fence.begin()
+      const ticket = fence.begin('model')
       const busy: SpeechModelBusy = { modelId, type: 'delete' }
       setBusyAction(busy)
       setError(null)
       try {
         const next = await operations.delete(modelId)
-        if (fence.isLatest(ticket)) {
+        if (fence.claimSnapshot(ticket)) {
           applySetup(next)
-          if (deletedSelectedModel) {
-            setModelDrawerOpen(false)
-          }
+        }
+        if (deletedSelectedModel && fence.isLatestInScope(ticket)) {
+          setModelDrawerOpen(false)
         }
       } catch (err) {
-        if (fence.isLatest(ticket)) {
+        if (fence.isLatestInScope(ticket)) {
           setError(errorText(err, 'Delete failed'))
         }
       } finally {
@@ -237,17 +239,17 @@ export function useVoiceSettingsController(
       if (!providerOps) {
         return
       }
-      const ticket = fence.begin()
+      const ticket = fence.begin('config')
       setLanguageDrawerOpen(false)
       setError(null)
       setCabinet((prev) => (prev ? { ...prev, language } : prev))
       try {
         const next = await providerOps.setLanguage(language)
-        if (fence.isLatest(ticket)) {
+        if (fence.claimSnapshot(ticket)) {
           setCabinet(next)
         }
       } catch (err) {
-        if (fence.isLatest(ticket)) {
+        if (fence.isLatestInScope(ticket)) {
           setError(errorText(err, 'Could not change the language'))
           void refreshSetup()
         }

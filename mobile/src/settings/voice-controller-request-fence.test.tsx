@@ -226,3 +226,67 @@ describe('voice provider controller request fencing', () => {
     expect(controller.testResult).toBeNull()
   })
 })
+
+describe('voice request fence scopes', () => {
+  it('keeps a key save error while a model select is in flight', async () => {
+    const slowSave = deferred<MobileSpeechProvidersState>()
+    const slowSelect = deferred<MobileSpeechSetup>()
+    const { operations } = voiceOperations({ saveKey: vi.fn().mockReturnValue(slowSave.promise) })
+    operations.configure = vi.fn().mockReturnValue(slowSelect.promise)
+    const hook = mountHook((ops) => useVoiceProviderController(ops, true))
+    await hook.render(operations)
+    await act(async () => current<ProviderController>(hook.latest).openKeyDrawer())
+    await act(async () => void current<ProviderController>(hook.latest).saveKey('deepgram', 'k'))
+    await act(async () => void current<ProviderController>(hook.latest).selectModel('whisper-tiny'))
+
+    await act(async () => slowSave.reject(new Error('Key rejected (401).')))
+    expect(current<ProviderController>(hook.latest).keyError).toBe('Key rejected (401).')
+    expect(current<ProviderController>(hook.latest).keyDrawerOpen).toBe(true)
+  })
+
+  it('closes the key drawer when the save succeeds after a model select started', async () => {
+    const slowSave = deferred<MobileSpeechProvidersState>()
+    const { operations } = voiceOperations({ saveKey: vi.fn().mockReturnValue(slowSave.promise) })
+    operations.configure = vi.fn().mockReturnValue(new Promise(() => {}))
+    const hook = mountHook((ops) => useVoiceProviderController(ops, true))
+    await hook.render(operations)
+    await act(async () => current<ProviderController>(hook.latest).openKeyDrawer())
+    await act(async () => void current<ProviderController>(hook.latest).saveKey('deepgram', 'k'))
+    await act(async () => void current<ProviderController>(hook.latest).selectModel('whisper-tiny'))
+
+    await act(async () => slowSave.resolve(cabinetState({ language: 'fr' })))
+    const controller = current<ProviderController>(hook.latest)
+    expect(controller.keyDrawerOpen).toBe(false)
+    expect(controller.testResult).toEqual({ ok: true, message: null })
+    expect(controller.state?.language).toBe('fr')
+  })
+
+  it('shows a download failure while a model select is in flight', async () => {
+    const slowDownload = deferred<void>()
+    const { operations } = voiceOperations({})
+    operations.download = vi.fn().mockReturnValue(slowDownload.promise)
+    operations.configure = vi.fn().mockReturnValue(new Promise(() => {}))
+    const hook = mountHook((ops) => useVoiceSettingsController(ops, true))
+    await hook.render(operations)
+    await act(async () => void current<SettingsController>(hook.latest).downloadModel('parakeet'))
+    await act(async () => void current<SettingsController>(hook.latest).selectModel('whisper-tiny'))
+
+    await act(async () => slowDownload.reject(new Error('Disk full')))
+    expect(current<SettingsController>(hook.latest).error).toBe('Disk full')
+  })
+
+  it('does not let an older snapshot overwrite a newer write that already landed', async () => {
+    const slowSelect = deferred<MobileSpeechSetup>()
+    const { operations } = voiceOperations({})
+    operations.configure = vi.fn().mockReturnValue(slowSelect.promise)
+    operations.delete = vi.fn().mockResolvedValue({ ...legacySetup, selectedModelId: 'parakeet' })
+    const hook = mountHook((ops) => useVoiceSettingsController(ops, true))
+    await hook.render(operations)
+    await act(async () => void current<SettingsController>(hook.latest).selectModel('whisper-tiny'))
+    await act(async () => current<SettingsController>(hook.latest).deleteModel('other'))
+    expect(current<SettingsController>(hook.latest).cabinet?.selectedModelId).toBe('parakeet')
+
+    await act(async () => slowSelect.resolve({ ...legacySetup, selectedModelId: 'whisper-tiny' }))
+    expect(current<SettingsController>(hook.latest).cabinet?.selectedModelId).toBe('parakeet')
+  })
+})

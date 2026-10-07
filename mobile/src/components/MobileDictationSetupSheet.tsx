@@ -120,14 +120,14 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
       if (!client) {
         return
       }
-      const ticket = fence.begin()
+      const ticket = fence.begin('model')
       setBusy(model.id)
       setError(null)
       try {
         await downloadDictationModel(client, model.id)
         await refreshSetup()
       } catch (err) {
-        if (fence.isLatest(ticket)) {
+        if (fence.isLatestInScope(ticket)) {
           triggerError()
           setError(err instanceof Error ? err.message : 'Download failed')
         }
@@ -145,20 +145,24 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
       if (!client) {
         return
       }
-      const ticket = fence.begin()
+      const ticket = fence.begin('config')
       setBusy(model.id)
       setError(null)
       try {
         const next = await setDictationConfig(client, { enabled: true, modelId: model.id })
-        if (!fence.isLatest(ticket)) {
+        if (fence.claimSnapshot(ticket)) {
+          setSetup(next)
+          setCabinet((prev) =>
+            prev ? { ...prev, enabled: true, selectedModelId: model.id } : prev
+          )
+        }
+        if (!fence.isLatestInScope(ticket)) {
           return
         }
-        setSetup(next)
-        setCabinet((prev) => (prev ? { ...prev, enabled: true, selectedModelId: model.id } : prev))
         triggerSuccess()
         onReady?.()
       } catch (err) {
-        if (fence.isLatest(ticket)) {
+        if (fence.isLatestInScope(ticket)) {
           triggerError()
           setError(err instanceof Error ? err.message : 'Could not select model')
         }
@@ -176,17 +180,16 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
       if (!client) {
         return
       }
-      const ticket = fence.begin()
+      const ticket = fence.begin('config')
       setError(null)
       try {
         const next = await setDictationConfig(client, { enabled })
-        if (!fence.isLatest(ticket)) {
-          return
+        if (fence.claimSnapshot(ticket)) {
+          setSetup(next)
+          setCabinet((prev) => (prev ? { ...prev, enabled } : prev))
         }
-        setSetup(next)
-        setCabinet((prev) => (prev ? { ...prev, enabled } : prev))
       } catch (err) {
-        if (fence.isLatest(ticket)) {
+        if (fence.isLatestInScope(ticket)) {
           setError(err instanceof Error ? err.message : 'Could not update')
         }
       }

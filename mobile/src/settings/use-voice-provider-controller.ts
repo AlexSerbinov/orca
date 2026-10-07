@@ -101,20 +101,22 @@ export function useVoiceProviderController(
       if (!providerOps) {
         return
       }
-      const ticket = fence.begin()
+      const ticket = fence.begin('key')
       const keyRun = startKeyAction('saving')
       setKeyError(null)
       try {
         const next = await providerOps.saveKey(providerId, apiKey)
-        if (!fence.isLatest(ticket)) {
+        if (fence.claimSnapshot(ticket)) {
+          setState(next)
+        }
+        if (!fence.isLatestInScope(ticket)) {
           return
         }
-        setState(next)
         setKeyDrawerOpen(false)
         // Why: the host verified the key before saving, so the connection is known good.
         setTestResult({ ok: true, message: null })
       } catch (err) {
-        if (fence.isLatest(ticket)) {
+        if (fence.isLatestInScope(ticket)) {
           setKeyError(errorText(err, 'Could not save the API key'))
         }
       } finally {
@@ -130,7 +132,7 @@ export function useVoiceProviderController(
         return
       }
       // Why: a save or remove after this test started makes its verdict about a key that is gone.
-      const ticket = fence.peek()
+      const ticket = fence.peek('key')
       const keyRun = startKeyAction('testing')
       setTestResult(null)
       let result: MobileSpeechProviderKeyTest
@@ -141,7 +143,7 @@ export function useVoiceProviderController(
       } finally {
         endKeyAction(keyRun)
       }
-      if (fence.isLatest(ticket)) {
+      if (fence.isLatestInScope(ticket)) {
         setTestResult(result)
       }
     },
@@ -153,17 +155,17 @@ export function useVoiceProviderController(
       if (!providerOps) {
         return
       }
-      const ticket = fence.begin()
+      const ticket = fence.begin('key')
       const keyRun = startKeyAction('removing')
       setError(null)
       setTestResult(null)
       try {
         const next = await providerOps.clearKey(providerId)
-        if (fence.isLatest(ticket)) {
+        if (fence.claimSnapshot(ticket)) {
           setState(next)
         }
       } catch (err) {
-        if (fence.isLatest(ticket)) {
+        if (fence.isLatestInScope(ticket)) {
           setError(errorText(err, 'Could not remove the API key'))
         }
       } finally {
@@ -175,14 +177,15 @@ export function useVoiceProviderController(
 
   const runModelAction = useCallback(
     async (busy: SpeechModelBusy, action: () => Promise<unknown>, fallback: string) => {
-      const ticket = fence.begin()
+      // Why: selecting is a config write; download/delete change model files, so neither hides the other.
+      const ticket = fence.begin(busy.type === 'select' ? 'config' : 'model')
       setBusyAction(busy)
       setError(null)
       try {
         await action()
         await refreshNow()
       } catch (err) {
-        if (fence.isLatest(ticket)) {
+        if (fence.isLatestInScope(ticket)) {
           setError(errorText(err, fallback))
         }
       } finally {
