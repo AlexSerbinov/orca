@@ -151,6 +151,27 @@ describe('Soniox realtime session', () => {
     expect(socket.closedWith).toBe(1000)
   })
 
+  it.each([
+    ['a token without text', { tokens: [{ text: null, is_final: false }] }],
+    ['a token without is_final', { tokens: [{ text: 'hi' }] }],
+    ['a non-array tokens field', { tokens: 'hi' }],
+    ['a non-boolean finished flag', { finished: 'yes' }]
+  ])('fails on %s instead of dropping the in-progress text', (_name, frame) => {
+    const { session, sink, socket } = start('soniox-stt-rt-v5')
+    session.feedAudio(SPEECH, 16_000)
+    socket.open()
+    socket.receive({ tokens: [{ text: 'Hello', is_final: false }] })
+
+    socket.receive(frame)
+
+    expect(sink).toHaveBeenLastCalledWith({
+      type: 'error',
+      error: 'Soniox returned an invalid realtime response.'
+    })
+    expect(sink).not.toHaveBeenCalledWith({ type: 'partial', text: '' })
+    expect(socket.closedWith).toBe(1000)
+  })
+
   it('maps a rejected handshake to a key error without echoing the key', () => {
     const { sink, socket } = start('soniox-stt-rt-v5')
 

@@ -1,4 +1,5 @@
 import type WebSocket from 'ws'
+import { z } from 'zod'
 import { RealtimeCloudSpeechSession } from './realtime-cloud-speech-session'
 import { openProviderWebSocket } from './cloud-speech-websocket'
 import type { CloudSpeechSessionOptions } from './cloud-speech-session'
@@ -20,7 +21,12 @@ export function buildSonioxStreamConfig(
   }
 }
 
-type SonioxToken = { text?: unknown; is_final?: unknown }
+const TokenFrameSchema = z.object({
+  tokens: z.array(z.looseObject({ text: z.string(), is_final: z.boolean() })).optional(),
+  finished: z.boolean().optional()
+})
+
+type SonioxToken = { text: string; is_final: boolean }
 
 /** Soniox streams tokens: final ones are sent once, non-final ones are re-sent each message. */
 export class SonioxRealtimeSession extends RealtimeCloudSpeechSession {
@@ -50,10 +56,16 @@ export class SonioxRealtimeSession extends RealtimeCloudSpeechSession {
       this.fail(`Soniox error ${String(message.error_code ?? '')}: ${detail}`.trim())
       return
     }
-    if (Array.isArray(message.tokens)) {
-      this.acceptTokens(message.tokens)
+    // Why: a malformed token would otherwise be skipped and clear the in-progress text.
+    const frame = TokenFrameSchema.safeParse(message)
+    if (!frame.success) {
+      this.fail(`${this.label} returned an invalid realtime response.`)
+      return
     }
-    if (message.finished === true) {
+    if (frame.data.tokens) {
+      this.acceptTokens(frame.data.tokens)
+    }
+    if (frame.data.finished === true) {
       this.markFinished()
     }
   }
@@ -76,17 +88,14 @@ export class SonioxRealtimeSession extends RealtimeCloudSpeechSession {
     return this.finalText + this.pendingText
   }
 
-  private acceptTokens(tokens: unknown[]): void {
+  private acceptTokens(tokens: SonioxToken[]): void {
     let pending = ''
-    for (const token of tokens) {
-      if (!token || typeof token !== 'object') {
+    for (const { text, is_final: isFinal } of tokens) {
+      // Why: control tokens such as <fin> and <end> are markers, not speech.
+      if (/^<\w+>$/.test(text)) {
         continue
       }
-      const { text, is_final: isFinal }: SonioxToken = token
-      if (typeof text !== 'string' || /^<\w+>$/.test(text)) {
-        continue
-      }
-      if (isFinal === true) {
+      if (isFinal) {
         this.finalText += text
       } else {
         pending += text
