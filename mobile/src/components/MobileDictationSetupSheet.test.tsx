@@ -111,3 +111,12 @@ describe('MobileDictationSetupSheet client switch', () => {
     expect(shownLanguages()).toEqual([])
   })
 })
+
+describe('MobileDictationSetupSheet accessibility', () => {
+  it('names the dictation switch for screen readers', async () => {
+    fetchSpeechProviders.mockResolvedValue(cabinetState())
+    await render(fakeClient())
+    const toggle = renderer?.root.findByProps({ accessibilityLabel: 'Dictation enabled' })
+    expect(toggle?.props.value).toBe(true)
+  })
+})

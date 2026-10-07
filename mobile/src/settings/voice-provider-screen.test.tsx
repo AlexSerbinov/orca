@@ -102,6 +102,7 @@ describe('voice provider screen', () => {
     await press('voice-provider-add-key')
     const input = renderer.root.findByProps({ testID: 'speech-provider-key-input' })
     expect(input.props.secureTextEntry).toBe(true)
+    expect(input.props.accessibilityLabel).toBe('Deepgram API key')
     expect(input.props.autoCorrect).toBe(false)
     expect(input.props.autoCapitalize).toBe('none')
     await typeKey('  dg-secret-key  ')

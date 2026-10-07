@@ -208,6 +208,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
             <View style={styles.enableRow}>
               <Text style={styles.enableLabel}>Dictation enabled</Text>
               <Switch
+                accessibilityLabel="Dictation enabled"
                 value={cabinet.enabled === true}
                 onValueChange={(v) => void handleToggleEnabled(v)}
               />
@@ -245,7 +246,11 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
           <>
             <View style={styles.enableRow}>
               <Text style={styles.enableLabel}>Dictation enabled</Text>
-              <Switch value={setup.enabled} onValueChange={(v) => void handleToggleEnabled(v)} />
+              <Switch
+                accessibilityLabel="Dictation enabled"
+                value={setup.enabled}
+                onValueChange={(v) => void handleToggleEnabled(v)}
+              />
             </View>
 
             {setup.models.map((model) => {
@@ -294,6 +299,8 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
                         hitSlop={ACTION_HIT_SLOP}
                         disabled={rowBusy}
                         onPress={() => void handleUseModel(model)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Use ${model.label}`}
                       >
                         <Text style={styles.actionText}>Use</Text>
                       </Pressable>
@@ -309,6 +316,8 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
                       hitSlop={ACTION_HIT_SLOP}
                       disabled={rowBusy}
                       onPress={() => void handleDownload(model)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Download ${model.label}`}
                     >
                       {rowBusy ? (
                         <ActivityIndicator size="small" color={colors.textSecondary} />

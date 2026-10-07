@@ -112,3 +112,16 @@ describe('SpeechModelRow layout', () => {
     }
   })
 })
+
+describe('SpeechModelRow action roles', () => {
+  it('announces Use, Delete and Download as buttons', () => {
+    const row = renderRow('manage', 'ready', { local: true })
+    for (const label of ['Use Model', 'Delete Model']) {
+      expect(row.findByProps({ accessibilityLabel: label }).props.accessibilityRole).toBe('button')
+    }
+    const download = renderRow('manage', 'not-downloaded', { local: true })
+    expect(
+      download.findByProps({ accessibilityLabel: 'Download Model' }).props.accessibilityRole
+    ).toBe('button')
+  })
+})

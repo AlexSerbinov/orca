@@ -145,6 +145,7 @@ function SpeechModelRowAction({
             hitSlop={voiceCabinetHitSlop.actionButton}
             disabled={locked}
             onPress={onSelect}
+            accessibilityRole="button"
             accessibilityLabel={'Use ' + speechModelLabel(model)}
           >
             {busy === 'select' ? (
@@ -160,6 +161,7 @@ function SpeechModelRowAction({
             hitSlop={voiceCabinetHitSlop.iconButton}
             disabled={locked}
             onPress={onDelete}
+            accessibilityRole="button"
             accessibilityLabel={'Delete ' + speechModelLabel(model)}
           >
             {busy === 'delete' ? (
@@ -185,6 +187,7 @@ function SpeechModelRowAction({
       hitSlop={voiceCabinetHitSlop.iconButton}
       disabled={locked}
       onPress={onDownload}
+      accessibilityRole="button"
       accessibilityLabel={'Download ' + speechModelLabel(model)}
     >
       {busy === 'download' ? (

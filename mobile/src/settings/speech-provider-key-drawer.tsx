@@ -90,6 +90,7 @@ export function SpeechProviderKeyDrawer({
           autoComplete="off"
           spellCheck={false}
           secureTextEntry
+          accessibilityLabel={`${label} API key`}
           editable={!saving}
           returnKeyType="done"
           onSubmitEditing={save}
