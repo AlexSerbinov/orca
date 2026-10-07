@@ -6,6 +6,7 @@ import type { MobileNativeChatImageAttachments } from './use-mobile-native-chat-
 import type { MobileNativeChatController } from './use-mobile-native-chat-controller'
 import { useMobileNativeChatStreamingBubble } from './use-mobile-native-chat-streaming-bubble'
 import { useMobileNativeChatQueuedSlot } from './use-mobile-native-chat-queued-slot'
+import { MobileNativeChatBackgroundTasks } from './MobileNativeChatBackgroundTasks'
 
 type Props = {
   controller: MobileNativeChatController
@@ -76,6 +77,7 @@ export function MobileNativeChatOverlay({
   if (!controller.showNativeChat) {
     return null
   }
+  const backgroundTasks = controller.nativeChatBackgroundTasks
   return (
     <View style={styles.overlay}>
       <MobileNativeChatView
@@ -108,7 +110,25 @@ export function MobileNativeChatOverlay({
         onAnswerQuestion={controller.handleNativeChatQuestionAnswer}
         permission={controller.nativeChatPermission}
         onRespondPermission={controller.handleNativeChatRespondPermission}
-        queuedSlot={queuedSlot}
+        queuedSlot={
+          // The running child work sits just above the queued cards, in the same place between
+          // transcript and composer. Keyed per conversation, so one chat's open list or pending
+          // Stop never shows in another.
+          backgroundTasks
+            ? {
+                ...queuedSlot,
+                cards: (
+                  <>
+                    <MobileNativeChatBackgroundTasks
+                      key={queued.sessionKey}
+                      tasks={backgroundTasks}
+                    />
+                    {queuedSlot.cards}
+                  </>
+                )
+              }
+            : queuedSlot
+        }
         onOpenFile={onOpenFile}
         hasMore={session.hasMore}
         loadingEarlier={session.loadingEarlier}

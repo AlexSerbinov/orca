@@ -45,6 +45,10 @@ import {
   useMobileStructuredQueuedMessageControls,
   type MobileStructuredQueuedMessageControls
 } from './use-mobile-structured-queued-message-controls'
+import {
+  useMobileStructuredBackgroundTasks,
+  type MobileStructuredBackgroundTasks
+} from './use-mobile-structured-background-tasks'
 
 type StructuredMobileSession = ReturnType<typeof useMobileStructuredAgentOptions> &
   ReturnType<typeof useMobileStructuredAgentTurnTiming> & {
@@ -67,6 +71,8 @@ type StructuredMobileSession = ReturnType<typeof useMobileStructuredAgentOptions
     cancelPrompt: (prompt?: { itemId: string; expectedRevision: number }) => Promise<boolean>
     /** The queued-draft cards and their actions, from any host that publishes them. */
     queued: MobileStructuredQueuedMessageControls
+    /** Running child work for the strip above the composer, as desktop shows it. */
+    backgroundTasks: MobileStructuredBackgroundTasks
   }
 
 export function useMobileStructuredAgentSession(args: {
@@ -77,7 +83,7 @@ export function useMobileStructuredAgentSession(args: {
   /** Authenticated identity the host keys mutation admission under. */
   callerIdentity?: string
   enabled: boolean
-  /** Live transport only; gates the connection-scoped hold, nothing else. */
+  /** Live transport only; gates the connection-scoped hold, and whether child rows may read live. */
   connected: boolean
   /** Capability facts from the shared runtime status probe; null follows the legacy wire. */
   hostSupport: StructuredAgentSessionHostSupport | null
@@ -190,6 +196,7 @@ export function useMobileStructuredAgentSession(args: {
     selectStructuredAgentTurnActivity(state.items, turnId, state.activity)?.text ?? null
   const thinking = isStructuredAgentSessionThinking(state)
   const isWorking = isStructuredAgentSessionMainAgentWorking(turnId, state.submissions, state.fence)
+  const backgroundTasks = useMobileStructuredBackgroundTasks({ state, turnId, connected, mutate })
   const hostStopping = useMobileStructuredSessionHostStopping({
     client,
     sessionId,
@@ -292,6 +299,7 @@ export function useMobileStructuredAgentSession(args: {
     question: projectStructuredQuestion(questionPrompt, groupedDraft),
     respondPermission,
     respondQuestion,
-    queued
+    queued,
+    backgroundTasks
   }
 }

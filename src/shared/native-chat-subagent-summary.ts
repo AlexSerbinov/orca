@@ -1,11 +1,11 @@
 // One spawn group's roster → the numbers a single flat row needs.
 //
-// Shared because the producer and the desktop transcript must agree on what
-// "N working" means: the producer uses the same terminal predicate the renderer
-// does, so a state that reads terminal here latches terminal there. Mobile has
-// no roster renderer — it shows only the write-time-frozen fallback sentence,
-// which is why that sentence is built from this same summary, and why the
-// sentence itself may claim nothing that a later reader cannot still verify.
+// Shared because the producer and every transcript (desktop and the phone) must
+// agree on what "N working" means: the producer uses the same terminal predicate
+// the renderers do, so a state that reads terminal here latches terminal there.
+// A client without the block type shows only the write-time-frozen fallback
+// sentence, which is why that sentence is built from this same summary, and why
+// the sentence itself may claim nothing that a later reader cannot still verify.
 
 import {
   isSubagentGroupBlock,
@@ -195,6 +195,17 @@ export function subagentGroupBlocks(
   return blocks.filter(
     (block): block is NativeChatSubagentGroupBlock =>
       isSubagentGroupBlock(block) && isRenderableSubagentGroup(block)
+  )
+}
+
+/** The row's blocks less the roster's text twin, which only a drawn roster replaces: a row
+ *  without a renderable group keeps its sentence, and real text beside a group is never matched. */
+export function withoutSubagentGroupTwins(blocks: readonly NativeChatBlock[]): NativeChatBlock[] {
+  if (subagentGroupBlocks(blocks).length === 0) {
+    return [...blocks]
+  }
+  return blocks.filter(
+    (block) => !(block.type === 'text' && isSubagentGroupFallbackText(block.text))
   )
 }
 

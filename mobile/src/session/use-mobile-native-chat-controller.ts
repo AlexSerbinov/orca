@@ -323,6 +323,7 @@ export function useMobileNativeChatController(args: {
     handleNativeChatStop: activeChatStructured ? structuredNativeChat.cancel : handleNativeChatStop,
     // The inactive lane's session is starved of identity, so its cards stay empty.
     nativeChatQueued: structuredNativeChat.queued,
+    nativeChatBackgroundTasks: activeChatStructured ? structuredNativeChat.backgroundTasks : null,
     nativeChatFilePaths,
     loadNativeChatFiles,
     handleNativeChatSend: activeChatStructured
