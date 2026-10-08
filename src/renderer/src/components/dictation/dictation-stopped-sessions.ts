@@ -18,8 +18,7 @@ export function recordStoppedSession(
     }
   }
 
-  // Why: cached even when waiters existed so a later waiter on this session resolves at once.
-  // Stopped events can also arrive for abandoned startups, so the cache stays bounded.
+  // Why: cached even after waking waiters so later ones resolve at once; bounded for abandoned startups.
   stoppedSessionIdsRef.current.delete(sessionId)
   stoppedSessionIdsRef.current.add(sessionId)
   while (stoppedSessionIdsRef.current.size > MAX_EARLY_STOPPED_SESSION_IDS) {
