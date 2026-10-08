@@ -1,5 +1,5 @@
 import { CLOUD_TRANSCRIPTION_SAMPLE_RATE } from './cloud-speech-session'
-import { resampleToRate } from './stt-audio-resample'
+import { StreamingLinearResampler } from './stt-audio-resample'
 import { assertSupportedDictationSampleRate } from '../../shared/speech-audio-sample-rate'
 
 export type BatchAudioLimit = {
@@ -45,9 +45,18 @@ export function encodePcm16Wav(samples: Float32Array, sampleRate: number): Buffe
   return Buffer.concat([header, pcm])
 }
 
-export function resampleForCloud(samples: Float32Array, sampleRate: number): Float32Array {
-  assertSupportedDictationSampleRate(sampleRate)
-  return resampleToRate(samples, sampleRate, CLOUD_TRANSCRIPTION_SAMPLE_RATE)
+/** One per dictation: resamples successive capture chunks to 16 kHz without seams. */
+export class CloudAudioResampler {
+  private readonly resampler = new StreamingLinearResampler(CLOUD_TRANSCRIPTION_SAMPLE_RATE)
+
+  push(samples: Float32Array, sampleRate: number): Float32Array {
+    assertSupportedDictationSampleRate(sampleRate)
+    return this.resampler.push(samples, sampleRate)
+  }
+
+  reset(): void {
+    this.resampler.reset()
+  }
 }
 
 /** Seconds of audio a chunk adds, computed before resampling so caps are checked pre-allocation. */
@@ -60,6 +69,7 @@ export function cloudAudioSeconds(sampleCount: number, sampleRate: number): numb
 export class BatchDictationAudioBuffer {
   private chunks: Float32Array[] = []
   private sampleCount = 0
+  private readonly resampler = new CloudAudioResampler()
 
   constructor(private readonly limit: BatchAudioLimit = DEFAULT_BATCH_AUDIO_LIMIT) {}
 
@@ -68,7 +78,7 @@ export class BatchDictationAudioBuffer {
     if (bufferedSeconds + cloudAudioSeconds(samples.length, sampleRate) > this.limit.maxSeconds) {
       throw new Error(this.limit.message)
     }
-    const normalized = resampleForCloud(samples, sampleRate)
+    const normalized = this.resampler.push(samples, sampleRate)
     const nextCount = this.sampleCount + normalized.length
     // Why: the caller may transfer or reuse its buffer after feeding.
     this.chunks.push(new Float32Array(normalized))
@@ -87,13 +97,13 @@ export class BatchDictationAudioBuffer {
       combined.set(chunk, offset)
       offset += chunk.length
     }
-    this.chunks = []
-    this.sampleCount = 0
+    this.clear()
     return encodePcm16Wav(combined, CLOUD_TRANSCRIPTION_SAMPLE_RATE)
   }
 
   clear(): void {
     this.chunks = []
     this.sampleCount = 0
+    this.resampler.reset()
   }
 }

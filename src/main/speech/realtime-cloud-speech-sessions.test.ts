@@ -329,6 +329,22 @@ describe('Deepgram realtime session', () => {
     await expect(finished).resolves.toBe('first part second part')
   })
 
+  it('resamples 48 kHz chunks seamlessly and never sends an empty audio frame', () => {
+    const { session, socket } = start('deepgram-nova-3')
+    socket.open()
+
+    session.feedAudio(new Float32Array(1), 48_000)
+    expect(socket.sent).toHaveLength(0)
+    session.feedAudio(new Float32Array(4095).fill(0.1), 48_000)
+    session.feedAudio(new Float32Array(4096).fill(0.1), 48_000)
+
+    const audioBytes = socket.sent.reduce(
+      (total, frame) => total + (Buffer.isBuffer(frame) ? frame.length : 0),
+      0
+    )
+    expect(Math.abs(audioBytes / 2 - 2731)).toBeLessThanOrEqual(1)
+  })
+
   it('fails on a typed Error frame mid-stream', () => {
     const { sink, socket } = start('deepgram-nova-3')
     socket.open()

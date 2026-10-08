@@ -1,5 +1,5 @@
 import type WebSocket from 'ws'
-import { cloudAudioSeconds, encodePcm16, resampleForCloud } from './cloud-speech-audio-encoding'
+import { CloudAudioResampler, cloudAudioSeconds, encodePcm16 } from './cloud-speech-audio-encoding'
 import { describeProviderFailure, redactCloudSpeechSecrets } from './cloud-speech-provider-errors'
 import type { CloudSpeechSession, CloudSpeechSessionOptions } from './cloud-speech-session'
 
@@ -27,6 +27,7 @@ export abstract class RealtimeCloudSpeechSession implements CloudSpeechSession {
   private finishSignaled = false
   private acceptTimer: ReturnType<typeof setTimeout> | null = null
   private apiKey = ''
+  private readonly resampler = new CloudAudioResampler()
 
   constructor(
     protected readonly label: string,
@@ -79,8 +80,12 @@ export abstract class RealtimeCloudSpeechSession implements CloudSpeechSession {
     if (nextSeconds > MAX_REALTIME_AUDIO_SECONDS) {
       throw new Error('Real-time transcription is limited to 30 minutes per dictation')
     }
-    const pcm = encodePcm16(resampleForCloud(samples, sampleRate))
+    const pcm = encodePcm16(this.resampler.push(samples, sampleRate))
     this.audioSeconds = nextSeconds
+    // Why: a chunk too short to complete an output sample waits in the resampler; an empty frame would end some streams.
+    if (pcm.length === 0) {
+      return
+    }
     const socket = this.accepting ? this.openSocket() : null
     if (socket) {
       // Why: a stalled socket would otherwise buffer the whole dictation in memory.
