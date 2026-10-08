@@ -1,12 +1,17 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
+import type { RpcClient } from '../transport/rpc-client'
+import type { VoiceSettingsOperations } from './voice-settings-operations'
 
 /** Independent concerns on the Voice screens; a write only supersedes outcomes in its own scope. */
 export type VoiceRequestScope = 'key' | 'model' | 'config'
 
+/** The desktop a Voice screen talks to: settings operations or the session's RPC client. */
+export type VoiceRequestHost = VoiceSettingsOperations | RpcClient
+
 export type VoiceRequestTicket = {
   epoch: number
   scope: VoiceRequestScope | null
-  host: object | null
+  host: VoiceRequestHost | null
 }
 
 type ScopeEpochs = Record<VoiceRequestScope, number>
@@ -17,7 +22,7 @@ type ScopeEpochs = Record<VoiceRequestScope, number>
  * hides only the outcomes (errors, spinners, drawers) of older writes in the same scope, so a model
  * select cannot swallow a key-save error. A host swap supersedes every ticket.
  */
-export function useVoiceRequestFence(host: object | null) {
+export function useVoiceRequestFence(host: VoiceRequestHost | null) {
   const epoch = useRef(0)
   const scopeEpochs = useRef<ScopeEpochs>({ key: 0, model: 0, config: 0 })
   // Why: the newest write whose state snapshot reached the screen; older snapshots must not regress it.
