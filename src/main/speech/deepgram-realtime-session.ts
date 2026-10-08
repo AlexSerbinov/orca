@@ -18,7 +18,7 @@ const ResultsFrameSchema = z.object({
 })
 
 // Why: live errors arrive as {type:'Error', description, code}; older ones as err_msg/error.
-function readError(message: Record<string, unknown>): string | null {
+export function readDeepgramError(message: Record<string, unknown>): string | null {
   const { err_msg: errMsg, error, type, description, message: text, code } = message
   if (typeof errMsg === 'string' || typeof error === 'string') {
     return String(errMsg ?? error)
@@ -65,7 +65,7 @@ export class DeepgramRealtimeSession extends RealtimeCloudSpeechSession {
   }
 
   protected handleMessage(message: Record<string, unknown>): void {
-    const error = readError(message)
+    const error = readDeepgramError(message)
     if (error !== null) {
       this.fail(`Deepgram error: ${error}`)
       return

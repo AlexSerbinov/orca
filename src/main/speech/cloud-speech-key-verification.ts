@@ -6,30 +6,43 @@ import {
   type CloudSpeechProviderId
 } from '../../shared/cloud-speech-providers'
 import { describeProviderFailure, readProviderErrorMessage } from './cloud-speech-provider-errors'
+import { verifyDeepgramApiKey } from './deepgram-key-verification'
+import {
+  buildOpenAiKeyProbeForm,
+  isOpenAiProbeAudioRejection,
+  OPENAI_KEY_PROBE_URL
+} from './openai-key-verification'
 import { verifySonioxApiKey } from './soniox-key-verification'
+import { describeRejectedKey } from './websocket-key-probe'
 
 const KEY_VERIFICATION_TIMEOUT_MS = 10_000
 
-type VerificationRequest = { url: string; headers: Record<string, string>; method?: 'POST' }
-type HttpProbedProviderId = Exclude<CloudSpeechProviderId, 'soniox'>
+type VerificationRequest = {
+  url: string
+  headers: Record<string, string>
+  method?: 'POST'
+  body?: FormData
+}
+type HttpProbedProviderId = Exclude<CloudSpeechProviderId, 'soniox' | 'deepgram'>
 
-// Why: each probe is a cheap authenticated call, so testing a key never bills an inference.
+// Why: each probe is the cheapest call that needs the same permission dictation uses.
 function buildVerificationRequest(
   providerId: HttpProbedProviderId,
   apiKey: string
 ): VerificationRequest {
   switch (providerId) {
     case 'openai':
-      return { url: 'https://api.openai.com/v1/models', headers: bearer(apiKey) }
+      // Why: restricted OpenAI keys list models without the audio scope transcription needs.
+      return {
+        url: OPENAI_KEY_PROBE_URL,
+        headers: bearer(apiKey),
+        method: 'POST',
+        body: buildOpenAiKeyProbeForm()
+      }
     case 'groq':
       return { url: 'https://api.groq.com/openai/v1/models', headers: bearer(apiKey) }
     case 'mistral':
       return { url: 'https://api.mistral.ai/v1/models', headers: bearer(apiKey) }
-    case 'deepgram':
-      return {
-        url: 'https://api.deepgram.com/v1/projects',
-        headers: { Authorization: `Token ${apiKey}` }
-      }
     case 'elevenlabs':
       // Why: minting a realtime token needs exactly the speech_to_text scope dictation uses.
       return {
@@ -74,12 +87,16 @@ export async function verifyCloudSpeechApiKey(
   if (providerId === 'soniox') {
     return verifySonioxApiKey(trimmed, KEY_VERIFICATION_TIMEOUT_MS)
   }
+  if (providerId === 'deepgram') {
+    return verifyDeepgramApiKey(trimmed, KEY_VERIFICATION_TIMEOUT_MS)
+  }
   const request = buildVerificationRequest(providerId, trimmed)
   let response: Response
   try {
     response = await fetchImpl(request.url, {
       method: request.method ?? 'GET',
       headers: { Accept: 'application/json', ...request.headers },
+      body: request.body,
       signal: AbortSignal.timeout(KEY_VERIFICATION_TIMEOUT_MS)
     })
   } catch (error) {
@@ -92,14 +109,12 @@ export async function verifyCloudSpeechApiKey(
     await response.body?.cancel().catch(() => {})
     return { ok: true, message: null }
   }
+  if (providerId === 'openai' && (await isOpenAiProbeAudioRejection(response.clone()))) {
+    return { ok: true, message: null }
+  }
   const detail = await readProviderErrorMessage(response)
   if (isRejectedKeyStatus(providerId, response.status)) {
-    // Why: 403 often means billing or permissions on a valid key, so it is worded apart from 401.
-    const verdict = response.status === 403 ? 'denied access for' : 'rejected'
-    return {
-      ok: false,
-      message: `${label} ${verdict} this API key (${response.status}). ${detail}`.trim()
-    }
+    return { ok: false, message: describeRejectedKey(label, response.status, detail) }
   }
   return {
     ok: false,

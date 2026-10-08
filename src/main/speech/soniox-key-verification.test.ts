@@ -1,50 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const { FakeWebSocket } = await vi.hoisted(async () => {
-  const { EventEmitter } = await import('node:events')
-  class HoistedFakeWebSocket extends EventEmitter {
-    readonly OPEN = 1
-    static instances: HoistedFakeWebSocket[] = []
-    static constructError: Error | null = null
-    readyState = 0
-    sent: (string | Buffer)[] = []
-    closedWith: number | 'terminated' | null = null
-
-    constructor(
-      readonly url: string | URL,
-      readonly headers?: Record<string, string>
-    ) {
-      super()
-      if (HoistedFakeWebSocket.constructError) {
-        throw HoistedFakeWebSocket.constructError
-      }
-      HoistedFakeWebSocket.instances.push(this)
-    }
-
-    send(data: string | Buffer): void {
-      this.sent.push(data)
-    }
-
-    close(code: number): void {
-      this.closedWith = code
-      this.readyState = 3
-    }
-
-    terminate(): void {
-      this.closedWith = 'terminated'
-      this.readyState = 3
-    }
-
-    open(): void {
-      this.readyState = 1
-      this.emit('open')
-    }
-
-    receive(message: unknown): void {
-      this.emit('message', Buffer.from(JSON.stringify(message)), false)
-    }
-  }
-  return { FakeWebSocket: HoistedFakeWebSocket }
+  const { FakeProviderWebSocket } = await import('./fake-provider-websocket.test-fixture')
+  return { FakeWebSocket: FakeProviderWebSocket }
 })
 
 vi.mock('./cloud-speech-websocket', () => ({
@@ -58,16 +16,11 @@ const KEY = 'soniox-secret-key-123'
 
 function probe(timeoutMs = 10_000) {
   const result = verifySonioxApiKey(KEY, timeoutMs)
-  const socket = FakeWebSocket.instances.at(-1)
-  if (!socket) {
-    throw new Error('no socket opened')
-  }
-  return { result, socket }
+  return { result, socket: FakeWebSocket.latest() }
 }
 
 afterEach(() => {
-  FakeWebSocket.instances = []
-  FakeWebSocket.constructError = null
+  FakeWebSocket.reset()
   vi.useRealTimers()
 })
 

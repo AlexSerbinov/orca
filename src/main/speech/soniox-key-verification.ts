@@ -1,10 +1,8 @@
-import type WebSocket from 'ws'
 import type { CloudSpeechKeyTestResult } from '../../shared/cloud-speech-providers'
 import { CLOUD_TRANSCRIPTION_SAMPLE_RATE } from './cloud-speech-session'
 import { SONIOX_REALTIME_API_MODEL } from './cloud-speech-model-catalog'
-import { describeProviderFailure, redactCloudSpeechSecrets } from './cloud-speech-provider-errors'
-import { openProviderWebSocket } from './cloud-speech-websocket'
 import { buildSonioxStreamConfig, SONIOX_REALTIME_URL } from './soniox-realtime-session'
+import { runWebSocketKeyProbe } from './websocket-key-probe'
 
 const LABEL = 'Soniox'
 // 100 ms of 16-bit mono silence: enough for Soniox to run the session and send `finished`.
@@ -57,72 +55,26 @@ export function verifySonioxApiKey(
   apiKey: string,
   timeoutMs: number
 ): Promise<CloudSpeechKeyTestResult> {
-  return new Promise((resolve) => {
-    let socket: WebSocket | null = null
-    let settled = false
-    const timer = setTimeout(() => fail(`${LABEL} did not respond in time.`), timeoutMs)
-    timer.unref?.()
-
-    function settle(result: CloudSpeechKeyTestResult): void {
-      if (settled) {
-        return
-      }
-      settled = true
-      clearTimeout(timer)
-      closeQuietly(socket)
-      resolve(result)
-    }
-
-    function fail(message: string): void {
-      // Why: providers can echo a key of any shape, which the pattern redaction would miss.
-      const withoutKey = apiKey ? message.split(apiKey).join('[redacted]') : message
-      settle({ ok: false, message: redactCloudSpeechSecrets(withoutKey) })
-    }
-
-    try {
-      socket = openProviderWebSocket(SONIOX_REALTIME_URL, { Authorization: `Bearer ${apiKey}` })
-    } catch (error) {
-      fail(`Could not reach ${LABEL}: ${describeProviderFailure(LABEL, error)}`)
-      return
-    }
-    const probe = socket
-    probe.on('open', () => {
-      probe.send(JSON.stringify(buildSonioxStreamConfig(SONIOX_REALTIME_API_MODEL)))
-      probe.send(Buffer.alloc(PROBE_SILENCE_BYTES))
+  return runWebSocketKeyProbe({
+    label: LABEL,
+    url: SONIOX_REALTIME_URL,
+    headers: { Authorization: `Bearer ${apiKey}` },
+    apiKey,
+    timeoutMs,
+    sendProbe: (socket) => {
+      socket.send(JSON.stringify(buildSonioxStreamConfig(SONIOX_REALTIME_API_MODEL)))
+      socket.send(Buffer.alloc(PROBE_SILENCE_BYTES))
       // Why: an empty text frame ends the audio, so Soniox answers `finished` within a second.
-      probe.send('')
-    })
-    probe.on('message', (data, isBinary) => {
-      const frame = isBinary ? null : readProbeFrame(data.toString())
+      socket.send('')
+    },
+    readFrame: (raw) => {
+      const frame = readProbeFrame(raw)
       if (frame === 'finished') {
-        settle({ ok: true, message: null })
-      } else if (frame) {
-        fail(describeErrorFrame(frame))
+        return { ok: true, message: null }
       }
-    })
-    probe.on('unexpected-response', (request, response) => {
-      request.destroy()
-      fail(describeErrorFrame({ code: response.statusCode ?? 0, type: null, message: '' }))
-    })
-    probe.on('error', (error) =>
-      fail(`Could not reach ${LABEL}: ${describeProviderFailure(LABEL, error)}`)
-    )
-    probe.on('close', (code) =>
-      fail(`${LABEL} closed the connection before confirming the key (${code}).`)
-    )
+      return frame ? { ok: false, message: describeErrorFrame(frame) } : null
+    },
+    describeRefusedHandshake: (status) =>
+      describeErrorFrame({ code: status, type: null, message: '' })
   })
-}
-
-function closeQuietly(socket: WebSocket | null): void {
-  if (!socket) {
-    return
-  }
-  socket.removeAllListeners()
-  // Why: a late socket error after removeAllListeners would otherwise crash the main process.
-  socket.on('error', () => {})
-  if (socket.readyState === socket.OPEN) {
-    socket.close(1000)
-  } else {
-    socket.terminate()
-  }
 }
