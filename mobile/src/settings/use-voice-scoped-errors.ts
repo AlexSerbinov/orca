@@ -25,9 +25,8 @@ export function useVoiceScopedErrors() {
   const clearErrors = useCallback(() => {
     setErrors((prev) => (prev.length === 0 ? prev : []))
   }, [])
-  const error = useMemo(
-    () => (errors.length === 0 ? null : errors.map((entry) => entry.message).join('\n')),
-    [errors]
-  )
-  return { error, setScopeError, clearErrors }
+  // Why: two scopes can fail with the same text; one line is enough and keeps list keys unique.
+  const messages = useMemo(() => [...new Set(errors.map((entry) => entry.message))], [errors])
+  const error = useMemo(() => (messages.length === 0 ? null : messages.join('\n')), [messages])
+  return { error, errors: messages, setScopeError, clearErrors }
 }

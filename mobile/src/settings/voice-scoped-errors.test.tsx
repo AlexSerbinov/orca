@@ -61,6 +61,7 @@ describe('useVoiceScopedErrors', () => {
     act(() => errors().setScopeError('config', 'Could not update'))
     act(() => errors().setScopeError('model', 'Disk full'))
     expect(errors().error).toBe('Disk full\nCould not update')
+    expect(errors().errors).toEqual(['Disk full', 'Could not update'])
 
     act(() => errors().setScopeError('read', null))
     act(() => errors().setScopeError('model', null))
@@ -68,6 +69,14 @@ describe('useVoiceScopedErrors', () => {
 
     act(() => errors().clearErrors())
     expect(errors().error).toBeNull()
+    expect(errors().errors).toEqual([])
+  })
+
+  it('lists a message shared by two scopes once', () => {
+    const errors = mountHook(useVoiceScopedErrors)
+    act(() => errors().setScopeError('config', 'Desktop offline'))
+    act(() => errors().setScopeError('key', 'Desktop offline'))
+    expect(errors().errors).toEqual(['Desktop offline'])
   })
 })
 

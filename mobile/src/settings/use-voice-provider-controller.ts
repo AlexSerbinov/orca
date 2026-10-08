@@ -26,7 +26,7 @@ export function useVoiceProviderController(
 ) {
   const [state, setState] = useState<MobileSpeechProvidersState | null>(null)
   const [loading, setLoading] = useState(true)
-  const { error, setScopeError, clearErrors } = useVoiceScopedErrors()
+  const { error, errors, setScopeError, clearErrors } = useVoiceScopedErrors()
   const [busyAction, setBusyAction] = useState<SpeechModelBusy | null>(null)
   // Why: an object per request so only the request that started the spinner can end it.
   const [keyActionRun, setKeyActionRun] = useState<{ action: ProviderKeyAction } | null>(null)
@@ -244,6 +244,7 @@ export function useVoiceProviderController(
     state,
     loading,
     error,
+    errors,
     busyAction,
     keyAction: keyActionRun?.action ?? null,
     keyError,

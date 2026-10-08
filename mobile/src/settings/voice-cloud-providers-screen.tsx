@@ -9,6 +9,7 @@ import type { VoiceSettingsOperations } from './voice-settings-operations'
 import { VOICE_HOST_UNPAIRED_MESSAGE } from './voice-settings-host-selection'
 import { useVoiceProviderController } from './use-voice-provider-controller'
 import { SpeechProviderRow } from './speech-provider-row'
+import { VoiceErrorList } from './voice-error-list'
 import {
   findSelectedSpeechModel,
   isLocalSpeechProvider
@@ -32,7 +33,7 @@ export default function VoiceCloudProvidersScreen({
   onOpenProvider
 }: Props) {
   const insets = useSafeAreaInsets()
-  const { state, loading, error } = useVoiceProviderController(operations, focused)
+  const { state, loading, error, errors } = useVoiceProviderController(operations, focused)
   const cloud = state?.providers.filter((provider) => !isLocalSpeechProvider(provider)) ?? []
   const selected = state ? findSelectedSpeechModel(state) : null
 
@@ -86,7 +87,7 @@ export default function VoiceCloudProvidersScreen({
             and never sent back to this phone; speech goes from your desktop straight to the
             provider you pick.
           </Text>
-          {error ? <Text style={base.error}>{error}</Text> : null}
+          <VoiceErrorList messages={errors} />
         </ScrollView>
       )}
     </View>

@@ -40,7 +40,7 @@ export function useVoiceSettingsController(
   const [setup, setSetup] = useState<MobileSpeechSetup | null>(null)
   const [cabinet, setCabinet] = useState<MobileSpeechProvidersState | null>(null)
   const [loading, setLoading] = useState(true)
-  const { error, setScopeError, clearErrors } = useVoiceScopedErrors()
+  const { error, errors, setScopeError, clearErrors } = useVoiceScopedErrors()
   const [busyAction, setBusyAction] = useState<SpeechModelBusy | null>(null)
   const [modelDrawerOpen, setModelDrawerOpen] = useState(false)
   const [languageDrawerOpen, setLanguageDrawerOpen] = useState(false)
@@ -268,6 +268,7 @@ export function useVoiceSettingsController(
     cabinet,
     loading,
     error,
+    errors,
     busyAction,
     modelDrawerOpen,
     setModelDrawerOpen,

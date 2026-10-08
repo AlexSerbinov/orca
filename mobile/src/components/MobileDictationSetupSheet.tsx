@@ -20,6 +20,7 @@ import type { MobileSpeechProvidersState } from '../dictation/speech-provider-re
 import { SpeechModelGroupedList } from '../settings/speech-model-grouped-list'
 import { useVoiceRequestFence } from '../settings/use-voice-request-fence'
 import { useVoiceScopedErrors } from '../settings/use-voice-scoped-errors'
+import { VoiceErrorList } from '../settings/voice-error-list'
 import { MobileDictationLegacyModelRow } from './MobileDictationLegacyModelRow'
 
 const POLL_INTERVAL_MS = 1500
@@ -44,7 +45,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
   // Why: keyed by client so a re-pair probes the new desktop instead of trusting the old answer.
   const cabinetSupport = useRef(new WeakMap<object, boolean>())
   const [cabinetClient, setCabinetClient] = useState(client)
-  const { error, setScopeError, clearErrors } = useVoiceScopedErrors()
+  const { errors, setScopeError, clearErrors } = useVoiceScopedErrors()
   const [shownVisible, setShownVisible] = useState(visible)
   const [busy, setBusy] = useState<string | null>(null)
   // Why: replies still in flight from the previous desktop must not repaint this one.
@@ -264,7 +265,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
             ))}
           </>
         )}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <VoiceErrorList messages={errors} />
       </View>
     </BottomDrawer>
   )
@@ -293,7 +294,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm
   },
   enableLabel: { color: colors.textPrimary, fontSize: typography.bodySize },
-  error: { color: colors.statusRed, fontSize: typography.metaSize, marginTop: spacing.md },
   actionPressed: { opacity: 0.7 },
   manageLink: {
     flexDirection: 'row',

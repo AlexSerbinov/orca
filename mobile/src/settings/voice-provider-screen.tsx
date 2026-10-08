@@ -14,6 +14,7 @@ import { useVoiceProviderController } from './use-voice-provider-controller'
 import { VoiceProviderKeySection } from './voice-provider-key-section'
 import { SpeechProviderKeyDrawer } from './speech-provider-key-drawer'
 import { SpeechModelRow } from './speech-model-row'
+import { VoiceErrorList } from './voice-error-list'
 import { speechProviderKind, speechProviderLabel } from '../dictation/speech-provider-presentation'
 
 type Props = {
@@ -132,7 +133,7 @@ export default function VoiceProviderScreen({
                   : `One ${label} API key unlocks all of these models. Add it above.`}
           </Text>
 
-          {error ? <Text style={base.error}>{error}</Text> : null}
+          <VoiceErrorList messages={controller.errors} />
         </ScrollView>
       )}
 

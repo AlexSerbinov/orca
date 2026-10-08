@@ -10,6 +10,7 @@ import { useVoiceSettingsController } from './use-voice-settings-controller'
 import { VOICE_HOST_UNPAIRED_MESSAGE } from './voice-settings-host-selection'
 import { VoiceDictationSection } from './voice-dictation-section'
 import { VoiceCabinetSections } from './voice-cabinet-sections'
+import { VoiceErrorList } from './voice-error-list'
 import { SpeechModelPickerDrawer } from './speech-model-picker-drawer'
 import { SpeechLanguagePickerDrawer } from './speech-language-picker-drawer'
 import type { MobileSpeechProvider } from '../dictation/speech-provider-reply-schema'
@@ -125,7 +126,7 @@ export default function VoiceSettingsScreen({
             </>
           )}
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <VoiceErrorList messages={controller.errors} />
         </ScrollView>
       )}
 
