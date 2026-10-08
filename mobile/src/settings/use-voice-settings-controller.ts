@@ -142,6 +142,7 @@ export function useVoiceSettingsController(
         const next = await operations.configure(params)
         if (fence.claimSnapshot(ticket, refreshSetup)) {
           applySetup(next)
+          setScopeError('read', null)
         }
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {
@@ -166,6 +167,7 @@ export function useVoiceSettingsController(
         const next = await operations.configure({ enabled: true, modelId })
         if (fence.claimSnapshot(ticket, refreshSetup)) {
           applySetup(next)
+          setScopeError('read', null)
         }
         if (fence.isLatestInScope(ticket)) {
           setModelDrawerOpen(false)
@@ -219,6 +221,7 @@ export function useVoiceSettingsController(
         const next = await operations.delete(modelId)
         if (fence.claimSnapshot(ticket, refreshSetup)) {
           applySetup(next)
+          setScopeError('read', null)
         }
         if (deletedSelectedModel && fence.isLatestInScope(ticket)) {
           setModelDrawerOpen(false)
@@ -248,6 +251,7 @@ export function useVoiceSettingsController(
         const next = await providerOps.setLanguage(language)
         if (fence.claimSnapshot(ticket, refreshSetup)) {
           setCabinet(next)
+          setScopeError('read', null)
         }
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {

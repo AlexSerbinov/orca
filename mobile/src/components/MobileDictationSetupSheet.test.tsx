@@ -204,4 +204,29 @@ describe('MobileDictationSetupSheet errors', () => {
     expect(fetchDictationSetup).toHaveBeenCalledTimes(2)
     expect(JSON.stringify(renderer?.toJSON())).toContain('Desktop refused the model')
   })
+  it('clears a failed read once a model select snapshot lands', async () => {
+    const setup = {
+      enabled: true,
+      dictationMode: 'toggle',
+      selectedModelId: '',
+      models: [
+        { id: 'ready', label: 'Ready', provider: 'local', status: 'ready', sizeBytes: 1 },
+        { id: 'fresh', label: 'Fresh', provider: 'local', status: 'not-downloaded', sizeBytes: 1 }
+      ]
+    }
+    fetchSpeechProviders.mockResolvedValue(null)
+    fetchDictationSetup
+      .mockResolvedValueOnce(setup)
+      .mockRejectedValueOnce(new Error('Desktop unreachable'))
+    downloadDictationModel.mockResolvedValue(undefined)
+    setDictationConfig.mockResolvedValue({ ...setup, selectedModelId: 'ready' })
+    await render(fakeClient())
+
+    const downloadFresh = renderer?.root.findByProps({ accessibilityLabel: 'Download Fresh' })
+    await act(async () => downloadFresh?.props.onPress())
+    expect(JSON.stringify(renderer?.toJSON())).toContain('Desktop unreachable')
+    const useReady = renderer?.root.findByProps({ accessibilityLabel: 'Use Ready' })
+    await act(async () => useReady?.props.onPress())
+    expect(JSON.stringify(renderer?.toJSON())).not.toContain('Desktop unreachable')
+  })
 })

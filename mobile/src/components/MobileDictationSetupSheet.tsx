@@ -146,6 +146,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
           setCabinet((prev) =>
             prev ? { ...prev, enabled: true, selectedModelId: model.id } : prev
           )
+          setScopeError('read', null)
         }
         if (!fence.isLatestInScope(ticket)) {
           return
@@ -178,6 +179,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
         if (fence.claimSnapshot(ticket, refreshSetup)) {
           setSetup(next)
           setCabinet((prev) => (prev ? { ...prev, enabled } : prev))
+          setScopeError('read', null)
         }
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {

@@ -105,10 +105,13 @@ export function useVoiceProviderController(
       const ticket = fence.begin('key')
       const keyRun = startKeyAction('saving')
       setKeyError(null)
+      // Why: a newer key change supersedes an earlier removal failure for this provider.
+      setScopeError('key', null)
       try {
         const next = await providerOps.saveKey(providerId, apiKey)
         if (fence.claimSnapshot(ticket, refreshNow)) {
           setState(next)
+          setScopeError('read', null)
         }
         if (!fence.isLatestInScope(ticket)) {
           return
@@ -124,7 +127,7 @@ export function useVoiceProviderController(
         endKeyAction(keyRun)
       }
     },
-    [endKeyAction, fence, providerOps, refreshNow, startKeyAction]
+    [endKeyAction, fence, providerOps, refreshNow, setScopeError, startKeyAction]
   )
 
   const testKey = useCallback(
@@ -164,6 +167,7 @@ export function useVoiceProviderController(
         const next = await providerOps.clearKey(providerId)
         if (fence.claimSnapshot(ticket, refreshNow)) {
           setState(next)
+          setScopeError('read', null)
         }
       } catch (err) {
         if (fence.isLatestInScope(ticket)) {

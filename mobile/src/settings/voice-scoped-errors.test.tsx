@@ -108,3 +108,41 @@ describe('voice controllers keep write errors across reads', () => {
     expect(controller().error).toBe('Keychain locked')
   })
 })
+
+describe('voice controllers clear superseded errors after a successful write', () => {
+  it('clears a key removal error once a later key save succeeds', async () => {
+    const { operations } = voiceOperations({
+      clearKey: vi.fn().mockRejectedValue(new Error('Keychain locked'))
+    })
+    const controller = await mountController(useVoiceProviderController, operations)
+
+    await act(async () => controller().removeKey('soniox'))
+    expect(controller().error).toBe('Keychain locked')
+    await act(async () => controller().saveKey('soniox', 'new-key'))
+    expect(controller().error).toBeNull()
+  })
+
+  it('clears a read error when a write snapshot reaches the provider screen', async () => {
+    const { operations } = voiceOperations({
+      list: vi.fn().mockRejectedValue(new Error('Desktop unreachable'))
+    })
+    const controller = await mountController(useVoiceProviderController, operations)
+    expect(controller().error).toBe('Desktop unreachable')
+
+    await act(async () => controller().saveKey('soniox', 'new-key'))
+    expect(controller().state).not.toBeNull()
+    expect(controller().error).toBeNull()
+  })
+
+  it('clears a read error when a write snapshot reaches the settings screen', async () => {
+    const { operations } = voiceOperations({
+      list: vi.fn().mockRejectedValue(new Error('Desktop unreachable'))
+    })
+    const controller = await mountController(useVoiceSettingsController, operations)
+    expect(controller().error).toBe('Desktop unreachable')
+
+    await act(async () => controller().configure({ enabled: false }))
+    expect(controller().setup).not.toBeNull()
+    expect(controller().error).toBeNull()
+  })
+})
