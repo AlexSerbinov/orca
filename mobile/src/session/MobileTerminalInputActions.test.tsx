@@ -9,6 +9,8 @@ vi.mock('react-native', () => ({ Pressable: 'Pressable', ActivityIndicator: 'Spi
 vi.mock('lucide-react-native', () => ({ ImagePlus: 'Icon', Mic: 'Icon' }))
 
 let renderer: ReactTestRenderer | undefined
+const BUTTON = { opacity: 1 }
+const DIMMED = { opacity: 0.4 }
 
 afterEach(() => {
   act(() => renderer?.unmount())
@@ -34,9 +36,9 @@ function renderMic(
           isProcessing: status === 'processing'
         },
         dictationMode,
-        buttonStyle: undefined,
+        buttonStyle: BUTTON,
         activeButtonStyle: undefined,
-        disabledButtonStyle: undefined,
+        disabledButtonStyle: DIMMED,
         onAttachImage: vi.fn(),
         onAttachFile: vi.fn(),
         onDictationToggle: vi.fn(),
@@ -47,7 +49,8 @@ function renderMic(
     )
   })
   const [, mic] = renderer?.root.findAll((node) => String(node.type) === 'Pressable') ?? []
-  return { mic, onDictationPressIn }
+  const [attach] = renderer?.root.findAll((node) => String(node.type) === 'Pressable') ?? []
+  return { mic, attach, onDictationPressIn }
 }
 
 describe('MobileTerminalInputActions mic', () => {
@@ -72,5 +75,26 @@ describe('MobileTerminalInputActions mic', () => {
     const { mic } = renderMic('processing', 'hold', 'cancellable')
     expect(mic?.props.accessibilityLabel).toBe('Cancel voice dictation')
     expect(mic?.props.disabled).toBe(false)
+  })
+
+  it('disables a toggle-mode mic while its start settles and reports it busy', () => {
+    const { mic } = renderMic('starting', 'toggle')
+    expect(mic?.props.disabled).toBe(true)
+    expect(mic?.props.accessibilityState).toEqual({ disabled: true, busy: true })
+    expect(mic?.props.style).toContain(DIMMED)
+  })
+
+  it('keeps a hold-mode mic live while its start settles so the release still stops it', () => {
+    const { mic } = renderMic('starting', 'hold')
+    expect(mic?.props.disabled).toBe(false)
+    expect(mic?.props.accessibilityState).toEqual({ disabled: false, busy: true })
+    expect(mic?.props.style).not.toContain(DIMMED)
+  })
+
+  it('dims the mic during a salvage and names both actions as buttons', () => {
+    const { mic, attach } = renderMic('processing', 'toggle', 'grace')
+    expect(mic?.props.style).toContain(DIMMED)
+    expect(mic?.props.accessibilityRole).toBe('button')
+    expect(attach?.props.accessibilityRole).toBe('button')
   })
 })
