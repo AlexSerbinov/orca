@@ -1,5 +1,5 @@
 import { createElement, type ReactNode } from 'react'
-import { act, create, type ReactTestRenderer } from 'react-test-renderer'
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MobileDictationSetupSheet } from './MobileDictationSetupSheet'
 import { cabinetState } from '../settings/voice-cabinet.test-fixture'
@@ -86,6 +86,14 @@ async function render(client: RpcClient): Promise<void> {
   })
 }
 
+function legacyAction(text: string): ReactTestInstance | undefined {
+  let node = renderer?.root.findByProps({ children: text })
+  while (node && String(node.type) !== 'Pressable') {
+    node = node.parent ?? undefined
+  }
+  return node
+}
+
 function shownLanguages(): unknown[] {
   const nodes = renderer?.root.findAllByProps({ testID: 'grouped-models' }) ?? []
   return nodes.map((node) => node.props.language)
@@ -143,44 +151,6 @@ describe('MobileDictationSetupSheet accessibility', () => {
   })
 })
 
-describe('MobileDictationSetupSheet legacy rows', () => {
-  it('keeps a long legacy model label on one shrinkable line', async () => {
-    const label = 'A very long legacy speech model label that would push Download off the row'
-    fetchSpeechProviders.mockResolvedValue(null)
-    fetchDictationSetup.mockResolvedValue({
-      enabled: true,
-      dictationMode: 'toggle',
-      selectedModelId: '',
-      models: [{ id: 'long', label, provider: 'local', status: 'not-downloaded', sizeBytes: 1 }]
-    })
-    await render(fakeClient())
-    const text = renderer?.root.findByProps({ children: label })
-    expect(text?.props.numberOfLines).toBe(1)
-    expect(text?.props.style).toMatchObject({ flexShrink: 1 })
-    expect(text?.parent?.props.style).toMatchObject({ minWidth: 0 })
-  })
-
-  it('caps Dynamic Type on the trailing row actions so the model label keeps its room', async () => {
-    fetchSpeechProviders.mockResolvedValue(null)
-    fetchDictationSetup.mockResolvedValue({
-      enabled: true,
-      dictationMode: 'toggle',
-      selectedModelId: 'in-use',
-      models: [
-        { id: 'in-use', label: 'A', provider: 'local', status: 'ready', sizeBytes: 1 },
-        { id: 'ready', label: 'B', provider: 'local', status: 'ready', sizeBytes: 1 },
-        { id: 'fresh', label: 'C', provider: 'local', status: 'not-downloaded', sizeBytes: 1 },
-        { id: 'cloud', label: 'D', provider: 'openai', status: 'not-downloaded', sizeBytes: null }
-      ]
-    })
-    await render(fakeClient())
-    for (const action of ['In use', 'Use', 'Download', 'Set up on desktop']) {
-      const text = renderer?.root.findByProps({ children: action })
-      expect(text?.props.maxFontSizeMultiplier).toBe(1.5)
-    }
-  })
-})
-
 describe('MobileDictationSetupSheet errors', () => {
   it('keeps a failed model select error after a download refreshes the setup', async () => {
     fetchSpeechProviders.mockResolvedValue(null)
@@ -197,9 +167,9 @@ describe('MobileDictationSetupSheet errors', () => {
     downloadDictationModel.mockResolvedValue(undefined)
     await render(fakeClient())
 
-    const useReady = renderer?.root.findByProps({ accessibilityLabel: 'Use Ready' })
+    const useReady = legacyAction('Use')
     await act(async () => useReady?.props.onPress())
-    const downloadFresh = renderer?.root.findByProps({ accessibilityLabel: 'Download Fresh' })
+    const downloadFresh = legacyAction('Download')
     await act(async () => downloadFresh?.props.onPress())
     expect(fetchDictationSetup).toHaveBeenCalledTimes(2)
     expect(JSON.stringify(renderer?.toJSON())).toContain('Desktop refused the model')
@@ -222,10 +192,10 @@ describe('MobileDictationSetupSheet errors', () => {
     setDictationConfig.mockResolvedValue({ ...setup, selectedModelId: 'ready' })
     await render(fakeClient())
 
-    const downloadFresh = renderer?.root.findByProps({ accessibilityLabel: 'Download Fresh' })
+    const downloadFresh = legacyAction('Download')
     await act(async () => downloadFresh?.props.onPress())
     expect(JSON.stringify(renderer?.toJSON())).toContain('Desktop unreachable')
-    const useReady = renderer?.root.findByProps({ accessibilityLabel: 'Use Ready' })
+    const useReady = legacyAction('Use')
     await act(async () => useReady?.props.onPress())
     expect(JSON.stringify(renderer?.toJSON())).not.toContain('Desktop unreachable')
   })

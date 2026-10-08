@@ -246,11 +246,7 @@ export function MobileDictationSetupSheet({ visible, client, hostId, onClose, on
           <>
             <View style={styles.enableRow}>
               <Text style={styles.enableLabel}>Dictation enabled</Text>
-              <Switch
-                accessibilityLabel="Dictation enabled"
-                value={setup.enabled}
-                onValueChange={(v) => void handleToggleEnabled(v)}
-              />
+              <Switch value={setup.enabled} onValueChange={(v) => void handleToggleEnabled(v)} />
             </View>
 
             {setup.models.map((model) => (

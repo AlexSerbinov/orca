@@ -6,7 +6,6 @@ import {
   type MobileSpeechModel,
   type MobileSpeechSetup
 } from '../dictation/mobile-dictation-setup'
-import { isSpeechModelDownloadable } from '../dictation/speech-provider-presentation'
 
 type Props = {
   setup: MobileSpeechSetup
@@ -114,7 +113,7 @@ export function VoiceModelList({
                 </View>
               ) : inFlight ? (
                 <ActivityIndicator size="small" color={colors.textSecondary} />
-              ) : !isSpeechModelDownloadable(model) ? null : (
+              ) : (
                 <Pressable
                   style={({ pressed }) => [styles.iconButton, pressed && styles.actionPressed]}
                   disabled={anyBusy}

@@ -2,11 +2,6 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Check, Download } from 'lucide-react-native'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import { isModelInFlight, type MobileSpeechSetup } from '../dictation/mobile-dictation-setup'
-import { isSpeechModelDownloadable } from '../dictation/speech-provider-presentation'
-import { VOICE_BADGE_MAX_FONT_SCALE } from '../settings/voice-cabinet-styles'
-
-// Why: the compact Use/Download buttons are ~26pt tall; stretch the touch target to 44pt.
-const ACTION_HIT_SLOP = { top: 9, bottom: 9 } as const
 
 type Props = {
   model: MobileSpeechSetup['models'][number]
@@ -36,14 +31,8 @@ export function MobileDictationLegacyModelRow({
     <View style={styles.modelRow}>
       <View style={styles.modelInfo}>
         <View style={styles.modelTitleRow}>
-          <Text style={styles.modelLabel} numberOfLines={1}>
-            {model.label}
-          </Text>
-          {model.recommended ? (
-            <Text style={styles.recommended} maxFontSizeMultiplier={VOICE_BADGE_MAX_FONT_SCALE}>
-              Recommended
-            </Text>
-          ) : null}
+          <Text style={styles.modelLabel}>{model.label}</Text>
+          {model.recommended ? <Text style={styles.recommended}>Recommended</Text> : null}
         </View>
         <Text style={styles.modelMeta}>
           {model.provider === 'openai' ? 'OpenAI API' : formatSize(model.sizeBytes)}
@@ -54,52 +43,39 @@ export function MobileDictationLegacyModelRow({
               : ''}
         </Text>
       </View>
-      {/* Why: capped like the badges, so at the largest text sizes the label keeps its room. */}
       {model.provider === 'openai' ? (
-        <Text style={styles.modelStateText} maxFontSizeMultiplier={VOICE_BADGE_MAX_FONT_SCALE}>
+        <Text style={styles.modelStateText}>
           {model.status === 'ready' ? 'API key set' : 'Set up on desktop'}
         </Text>
       ) : model.status === 'ready' ? (
         selected ? (
           <View style={styles.selectedTag}>
             <Check size={14} color={colors.statusGreen} strokeWidth={2.4} />
-            <Text style={styles.selectedText} maxFontSizeMultiplier={VOICE_BADGE_MAX_FONT_SCALE}>
-              In use
-            </Text>
+            <Text style={styles.selectedText}>In use</Text>
           </View>
         ) : (
           <Pressable
             style={({ pressed }) => [styles.actionButton, pressed && styles.actionPressed]}
-            hitSlop={ACTION_HIT_SLOP}
             disabled={busy}
             onPress={onUse}
-            accessibilityRole="button"
-            accessibilityLabel={`Use ${model.label}`}
           >
-            <Text style={styles.actionText} maxFontSizeMultiplier={VOICE_BADGE_MAX_FONT_SCALE}>
-              Use
-            </Text>
+            <Text style={styles.actionText}>Use</Text>
           </Pressable>
         )
       ) : inFlight ? (
         <ActivityIndicator size="small" color={colors.textSecondary} />
-      ) : !isSpeechModelDownloadable(model) ? null : (
+      ) : (
         <Pressable
           style={({ pressed }) => [styles.actionButton, pressed && styles.actionPressed]}
-          hitSlop={ACTION_HIT_SLOP}
           disabled={busy}
           onPress={onDownload}
-          accessibilityRole="button"
-          accessibilityLabel={`Download ${model.label}`}
         >
           {busy ? (
             <ActivityIndicator size="small" color={colors.textSecondary} />
           ) : (
             <>
               <Download size={13} color={colors.textSecondary} strokeWidth={2.2} />
-              <Text style={styles.actionText} maxFontSizeMultiplier={VOICE_BADGE_MAX_FONT_SCALE}>
-                Download
-              </Text>
+              <Text style={styles.actionText}>Download</Text>
             </>
           )}
         </Pressable>
@@ -117,9 +93,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm
   },
   modelInfo: { flex: 1, minWidth: 0 },
-  // Why: minWidth 0 lets a long legacy label shrink instead of pushing Use/Download off the row.
-  modelTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0 },
-  modelLabel: { flexShrink: 1, color: colors.textPrimary, fontSize: typography.bodySize },
+  modelTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  modelLabel: { color: colors.textPrimary, fontSize: typography.bodySize },
   recommended: {
     color: colors.statusGreen,
     fontSize: 10,

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MobileNativeChatMicButton } from './MobileNativeChatMicButton'
 import type { MobileDictationPhase } from './native-chat-dictation-toggle'
 
-vi.mock('react-native', () => ({ Pressable: 'Pressable', ActivityIndicator: 'Spinner' }))
+vi.mock('react-native', () => ({ Pressable: 'Pressable' }))
 vi.mock('lucide-react-native', () => ({ Mic: 'Icon', Square: 'Icon' }))
 
 let renderer: ReactTestRenderer | undefined
@@ -14,80 +14,36 @@ afterEach(() => {
   renderer = undefined
 })
 
-function renderButton(
-  disabled: boolean,
-  dictationPhase: MobileDictationPhase = 'idle',
-  dictationMode = 'toggle'
-) {
+function renderButton(dictationPhase: MobileDictationPhase, dictationMode = 'toggle') {
   act(() => {
     renderer = create(
       createElement(MobileNativeChatMicButton, {
         dictationPhase,
         dictationMode,
         onMicPress: vi.fn(),
-        disabled,
+        disabled: false,
         buttonStyle: undefined,
         pressedStyle: undefined
       })
     )
   })
-  const button = renderer?.root.findByProps({ accessibilityRole: 'button' })
-  return {
-    label: button?.props.accessibilityLabel,
-    state: button?.props.accessibilityState,
-    disabled: button?.props.disabled,
-    spinner: (renderer?.root.findAll((node) => String(node.type) === 'Spinner') ?? []).length > 0
-  }
+  const [button] = renderer?.root.findAll((node) => String(node.type) === 'Pressable') ?? []
+  return { label: button?.props.accessibilityLabel, disabled: button?.props.disabled }
 }
 
-describe('MobileNativeChatMicButton accessibility', () => {
-  it('announces a button and its disabled state', () => {
-    expect(renderButton(true).state).toEqual({ disabled: true, busy: false })
-    expect(renderButton(false)).toMatchObject({ label: 'Dictate', disabled: false })
+describe('MobileNativeChatMicButton', () => {
+  it('keeps a failed stream salvage unpressable during its grace period in both modes', () => {
+    for (const mode of ['toggle', 'hold']) {
+      expect(renderButton('salvaging', mode)).toEqual({
+        label: 'Finishing dictation',
+        disabled: true
+      })
+    }
   })
 
-  it('announces what a tap does in each toggle phase', () => {
-    expect(renderButton(false, 'starting')).toMatchObject({
-      label: 'Starting dictation',
-      state: { disabled: true, busy: true },
-      disabled: true
-    })
-    expect(renderButton(false, 'recording')).toMatchObject({
-      label: 'Stop dictation',
-      disabled: false
-    })
-    expect(renderButton(false, 'processing')).toMatchObject({
-      label: 'Cancel transcription',
-      state: { disabled: false, busy: true },
-      disabled: false,
-      spinner: true
-    })
-    expect(renderButton(false, 'salvaging')).toMatchObject({
-      label: 'Finishing dictation',
-      state: { disabled: true, busy: true },
-      disabled: true,
-      spinner: true
-    })
-  })
-
-  it('keeps a hold-mode start pressable so releasing it can cancel', () => {
-    expect(renderButton(false, 'starting', 'hold')).toMatchObject({
-      label: 'Starting dictation',
-      disabled: false
-    })
-  })
-
-  it('lets a hold-mode press cancel an upload but not a salvage in its grace period', () => {
-    expect(renderButton(false, 'processing', 'hold')).toMatchObject({
-      label: 'Cancel transcription',
-      state: { disabled: false, busy: true },
-      disabled: false,
-      spinner: true
-    })
-    expect(renderButton(false, 'salvaging', 'hold')).toMatchObject({
-      label: 'Finishing dictation',
-      state: { disabled: true, busy: true },
-      disabled: true
-    })
+  it('leaves the other phases pressable', () => {
+    expect(renderButton('idle')).toEqual({ label: 'Dictate', disabled: false })
+    expect(renderButton('recording')).toEqual({ label: 'Stop dictation', disabled: false })
+    expect(renderButton('processing')).toEqual({ label: 'Dictate', disabled: false })
   })
 })

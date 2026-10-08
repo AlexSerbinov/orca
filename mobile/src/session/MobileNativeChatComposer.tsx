@@ -304,7 +304,7 @@ export function MobileNativeChatComposer({
             {onMicPress ? (
               <MobileNativeChatMicButton
                 {...{ dictationPhase, dictationMode, onMicPress, onMicPressIn, onMicPressOut }}
-                disabled={disabled && dictationPhase === 'idle'}
+                disabled={disabled && dictationPhase !== 'recording'}
                 buttonStyle={styles.iconButton}
                 pressedStyle={styles.pressed}
               />

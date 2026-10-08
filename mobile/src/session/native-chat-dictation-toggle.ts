@@ -5,8 +5,6 @@ export type MobileDictationPhase = 'idle' | 'starting' | 'recording' | 'processi
 
 export type NativeChatDictationToggleAction = 'start' | 'stop' | 'cancel' | 'ignore'
 
-export type NativeChatDictationHoldPressInAction = 'start' | 'cancel' | 'ignore'
-
 export function nativeChatDictationPhase(
   dictation: Pick<UseMobileDictationResult, 'status' | 'failedStreamFinish'>
 ): MobileDictationPhase {
@@ -35,21 +33,6 @@ export function nativeChatDictationToggleAction(
       return 'cancel'
     default:
       // Why: a start still settling, or a failed stream finishing to keep its text, owns the tap.
-      return 'ignore'
-  }
-}
-
-/** Hold mode: a press starts from idle and cancels an upload; the release stops a recording. */
-export function nativeChatDictationHoldPressInAction(
-  phase: MobileDictationPhase
-): NativeChatDictationHoldPressInAction {
-  switch (phase) {
-    case 'idle':
-      return 'start'
-    case 'processing':
-      return 'cancel'
-    default:
-      // Why: a start or recording already owns this press, and a salvage in grace keeps its text.
       return 'ignore'
   }
 }

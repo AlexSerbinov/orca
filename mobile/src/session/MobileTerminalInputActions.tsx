@@ -10,21 +10,6 @@ type DictationState = Pick<
   'status' | 'failedStreamFinish' | 'isStarting' | 'isRecording' | 'isProcessing'
 >
 
-function dictationButtonLabel(dictation: DictationState): string {
-  switch (nativeChatDictationPhase(dictation)) {
-    case 'recording':
-      return 'Stop voice dictation'
-    case 'processing':
-      return 'Cancel voice dictation'
-    case 'salvaging':
-      return 'Finishing voice dictation'
-    case 'starting':
-      return 'Starting voice dictation'
-    default:
-      return 'Start voice dictation'
-  }
-}
-
 type MobileTerminalInputActionsProps = {
   readonly canSend: boolean
   readonly isAttaching: boolean
@@ -59,13 +44,8 @@ export function MobileTerminalInputActions({
   onDictationCancel
 }: MobileTerminalInputActionsProps) {
   const dictationActive = dictation.isStarting || dictation.isRecording
-  const phase = nativeChatDictationPhase(dictation)
   // Why: a failed stream finishing within its grace keeps its text, so no press may cancel it.
-  const salvaging = phase === 'salvaging'
-  // Why: a toggle tap ignores a start still settling, but a hold press must stay live to release it.
-  const settlingToggleStart = dictationMode === 'toggle' && phase === 'starting'
-  const micDisabled = !canSend || salvaging || settlingToggleStart
-  const micBusy = phase === 'starting' || phase === 'processing' || salvaging
+  const salvaging = nativeChatDictationPhase(dictation) === 'salvaging'
   return (
     <>
       <Pressable
@@ -76,7 +56,6 @@ export function MobileTerminalInputActions({
         onPress={onAttachImage}
         onLongPress={onAttachFile}
         delayLongPress={350}
-        accessibilityRole="button"
         accessibilityLabel={isAttaching ? 'Sending image' : 'Attach a photo'}
         accessibilityHint="Long press to attach a file instead"
       >
@@ -87,12 +66,8 @@ export function MobileTerminalInputActions({
         )}
       </Pressable>
       <Pressable
-        style={[
-          buttonStyle,
-          dictationActive && activeButtonStyle,
-          micDisabled && disabledButtonStyle
-        ]}
-        disabled={micDisabled}
+        style={[buttonStyle, dictationActive && activeButtonStyle, !canSend && disabledButtonStyle]}
+        disabled={!canSend || salvaging}
         onPress={dictationMode === 'toggle' ? onDictationToggle : undefined}
         onPressIn={dictationMode === 'hold' ? onDictationPressIn : undefined}
         onPressOut={dictationMode === 'hold' ? onDictationPressOut : undefined}
@@ -105,9 +80,17 @@ export function MobileTerminalInputActions({
               }
             : keepHeldPressThroughLongPress
         }
-        accessibilityRole="button"
-        accessibilityLabel={dictationButtonLabel(dictation)}
-        accessibilityState={{ disabled: micDisabled, busy: micBusy }}
+        accessibilityLabel={
+          dictation.isRecording
+            ? 'Stop voice dictation'
+            : salvaging
+              ? 'Finishing voice dictation'
+              : dictation.isProcessing
+                ? 'Cancel voice dictation'
+                : dictation.isStarting
+                  ? 'Starting voice dictation'
+                  : 'Start voice dictation'
+        }
       >
         {dictation.isProcessing ? (
           <ActivityIndicator size="small" color={colors.textSecondary} />

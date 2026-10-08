@@ -2,7 +2,6 @@ import { useEffect, useCallback } from 'react'
 import { useFocusEffect } from 'expo-router'
 import { useMobileDictation } from '../hooks/use-mobile-dictation'
 import {
-  nativeChatDictationHoldPressInAction,
   nativeChatDictationPhase,
   nativeChatDictationToggleAction
 } from './native-chat-dictation-toggle'
@@ -191,15 +190,12 @@ export function useMobileSessionNativeChatDictation(
     }
   }, [cancelDictation, dictation, startDictation])
 
-  // Hold mode: press starts, release stops — like a walkie-talkie; a press while uploading cancels.
+  // Hold mode: press starts, release stops — like a walkie-talkie.
   const handleDictationPressIn = useCallback(() => {
-    const action = nativeChatDictationHoldPressInAction(nativeChatDictationPhase(dictation))
-    if (action === 'cancel') {
-      cancelDictation()
-    } else if (action === 'start') {
+    if (!dictation.isStarting && !dictation.isRecording && !dictation.isProcessing) {
       startDictation()
     }
-  }, [cancelDictation, dictation, startDictation])
+  }, [dictation, startDictation])
 
   const handleDictationPressOut = useCallback(() => {
     if (dictation.isRecording) {
