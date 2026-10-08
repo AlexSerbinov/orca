@@ -94,7 +94,7 @@ describe('voice settings controller request fencing', () => {
 
   it('keeps the newer write when an older configure answers last', async () => {
     const first = deferred<MobileSpeechSetup>()
-    const { operations } = voiceOperations({})
+    const { operations, providerOps } = voiceOperations({})
     operations.configure = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValueOnce({
       enabled: true,
       dictationMode: 'hold',
@@ -107,9 +107,12 @@ describe('voice settings controller request fencing', () => {
       void current<SettingsController>(hook.latest).configure({ dictationMode: 'toggle' })
       void current<SettingsController>(hook.latest).configure({ dictationMode: 'hold' })
     })
+    // Why: the superseded snapshot triggers a re-read; the desktop holds the newer write.
+    providerOps.list = vi.fn().mockResolvedValue(cabinetState({ dictationMode: 'hold' }))
     await act(async () =>
       first.resolve({ enabled: true, dictationMode: 'toggle', selectedModelId: '', models: [] })
     )
+    expect(providerOps.list).toHaveBeenCalledOnce()
     expect(current<SettingsController>(hook.latest).cabinet?.dictationMode).toBe('hold')
   })
 
@@ -307,5 +310,23 @@ describe('voice request fence scopes', () => {
     await act(async () => slowSelect.resolve({ ...legacySetup, selectedModelId: 'whisper-tiny' }))
     expect(providerOps.list).toHaveBeenCalledOnce()
     expect(current<SettingsController>(hook.latest).cabinet?.selectedModelId).toBe('whisper-tiny')
+  })
+
+  it('re-reads the desktop when an older write lands after a newer same-scope write failed', async () => {
+    const slowSave = deferred<MobileSpeechProvidersState>()
+    const { operations, providerOps } = voiceOperations({
+      saveKey: vi.fn().mockReturnValue(slowSave.promise),
+      clearKey: vi.fn().mockRejectedValue(new Error('Keychain locked'))
+    })
+    const hook = mountHook((ops) => useVoiceProviderController(ops, true))
+    await hook.render(operations)
+    await act(async () => void current<ProviderController>(hook.latest).saveKey('deepgram', 'k'))
+    await act(async () => current<ProviderController>(hook.latest).removeKey('deepgram'))
+    expect(providerOps.list).toHaveBeenCalledTimes(1)
+
+    providerOps.list = vi.fn().mockResolvedValue(cabinetState({ language: 'host-reread' }))
+    await act(async () => slowSave.resolve(cabinetState({ language: 'stale-snapshot' })))
+    expect(providerOps.list).toHaveBeenCalledOnce()
+    expect(current<ProviderController>(hook.latest).state?.language).toBe('host-reread')
   })
 })
