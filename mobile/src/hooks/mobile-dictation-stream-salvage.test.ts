@@ -34,6 +34,16 @@ describe('mobile dictation stream salvage phases', () => {
     expect(phases).toEqual(['grace', 'none'])
   })
 
+  it('drops a pending salvage when a later error cancels the dictation', () => {
+    const phases: string[] = []
+    const salvage = createMobileDictationStreamSalvage((phase) => phases.push(phase))
+    salvage.claim('d1', STREAM_FAILURE, null)
+    expect(salvage.claim('d1', new Error('Desktop disconnected.'), null)).toBe(false)
+    vi.advanceTimersByTime(FAILED_STREAM_FINISH_GRACE_MS)
+    expect(phases).toEqual(['grace', 'none'])
+    expect(salvage.take('d1')).toBeNull()
+  })
+
   it('reports nothing after dispose', () => {
     const onPhaseChange = vi.fn()
     const salvage = createMobileDictationStreamSalvage(onPhaseChange)

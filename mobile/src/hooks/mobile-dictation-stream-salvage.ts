@@ -8,7 +8,7 @@ export type FailedStreamFinishPhase = 'none' | 'grace' | 'cancellable'
 
 export type MobileDictationStreamSalvage = {
   /** True when the host reported this dictation's stream failed; the first claim runs `finish`
-   *  (null while a stop is already finishing). False keeps the cancel path for any other error. */
+   *  (null while a stop is already finishing). False (after dropping any pending salvage) keeps the cancel path for any other error. */
   claim: (dictationId: string, err: unknown, finish: (() => Promise<void>) | null) => boolean
   /** The provider message to show once the salvaged text is inserted; clears it. */
   take: (dictationId: string) => string | null
@@ -39,6 +39,8 @@ export function createMobileDictationStreamSalvage(
     claim: (dictationId, err, finish) => {
       const message = parseDictationStreamFailure(err instanceof Error ? err.message : String(err))
       if (message === null) {
+        // Why: the caller cancels the dictation next, so a salvage still pending must not keep its phase.
+        clear()
         return false
       }
       if (pending?.dictationId !== dictationId) {
